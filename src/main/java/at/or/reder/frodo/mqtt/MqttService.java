@@ -1,0 +1,44 @@
+package at.or.reder.frodo.mqtt;
+
+import io.smallrye.reactive.messaging.annotations.Broadcast;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+import org.jboss.logging.Logger;
+
+/**
+ * MQTT messaging service for publishing and consuming messages.
+ * Configure MQTT broker connection in application.properties.
+ */
+@ApplicationScoped
+public class MqttService {
+
+    private static final Logger LOG = Logger.getLogger(MqttService.class);
+
+    @Inject
+    @Channel("frodo-out")
+    Emitter<String> emitter;
+
+    /**
+     * Publishes a message to the MQTT topic configured as "frodo-out".
+     *
+     * @param message the message payload to publish
+     */
+    public void publish(String message) {
+        LOG.debugf("Publishing MQTT message: %s", message);
+        emitter.send(message);
+    }
+
+    /**
+     * Consumes messages from the MQTT topic configured as "frodo-in".
+     *
+     * @param message the received message payload
+     */
+    @Incoming("frodo-in")
+    public void onMessage(String message) {
+        LOG.infof("Received MQTT message: %s", message);
+    }
+}
