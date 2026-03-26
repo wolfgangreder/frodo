@@ -1,0 +1,13 @@
+pluginManagement {
+    def quarkusPluginVersion = settings.ext.find('quarkusPluginVersion') ?: '3.34.1'
+    def quarkusPluginId = settings.ext.find('quarkusPluginId') ?: 'io.quarkus'
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+        mavenLocal()
+    }
+    plugins {
+        id "${quarkusPluginId}" version "${quarkusPluginVersion}"
+    }
+}
+rootProject.name = 'frodo'
