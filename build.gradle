@@ -1,0 +1,61 @@
+plugins {
+    id 'java'
+    id 'io.quarkus'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    // REST API with OpenAPI/Swagger support
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+    implementation 'io.quarkus:quarkus-smallrye-openapi'
+
+    // Health checks
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
+    // Monitoring: Micrometer with Prometheus registry (JVM, app, OS metrics)
+    implementation 'io.quarkus:quarkus-micrometer-registry-prometheus'
+
+    // MQTT messaging
+    implementation 'io.quarkus:quarkus-messaging-mqtt'
+
+    // Database: Agroal connection pool + Jaybird FirebirdSQL JDBC driver
+    implementation 'io.quarkus:quarkus-agroal'
+    runtimeOnly 'org.firebirdsql.jdbc:jaybird:6.0.4'
+
+    // Docker container image generation
+    implementation 'io.quarkus:quarkus-container-image-docker'
+
+    // Vert.x for raw TCP/HTTP support (Modbus device access)
+    implementation 'io.quarkus:quarkus-vertx'
+
+    // Modbus protocol library (raw TCP/serial access to Modbus devices)
+    implementation 'com.ghgande:j2mod:3.3.0'
+
+    // React UI via Quinoa (builds and serves the frontend)
+    implementation 'io.quarkiverse.quinoa:quarkus-quinoa:2.7.2'
+
+    implementation 'io.quarkus:quarkus-arc'
+    testImplementation 'io.quarkus:quarkus-junit'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+group = 'at.or.reder.frodo'
+version = '1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}

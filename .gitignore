@@ -1,7 +1,7 @@
-# Compiled class file
+# Compiled class files
 *.class
 
-# Log file
+# Log files
 *.log
 
 # BlueJ files
@@ -10,7 +10,7 @@
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 
-# Package Files #
+# Package Files
 *.jar
 *.war
 *.nar
@@ -19,6 +19,43 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# Virtual machine crash logs
 hs_err_pid*
 replay_pid*
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Quarkus
+.quarkus/
+
+# IDE
+.idea/
+*.iml
+*.iws
+.eclipse/
+.settings/
+.project
+.classpath
+*.vscode/
+
+# React UI (built artifacts)
+src/main/webui/node_modules/
+src/main/webui/build/
+src/main/webui/.env.local
+src/main/webui/.env.development.local
+src/main/webui/.env.test.local
+src/main/webui/.env.production.local
+src/main/webui/npm-debug.log*
+src/main/webui/yarn-debug.log*
+src/main/webui/yarn-error.log*
+
+# macOS
+.DS_Store
+
+# Docker
+*.env
