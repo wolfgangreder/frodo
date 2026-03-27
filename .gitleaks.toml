@@ -1,0 +1,87 @@
+# Gitleaks configuration for Frodo project
+# Scans for secrets, passwords, API keys, tokens, etc.
+
+title = "Frodo Gitleaks Configuration"
+
+[extend]
+# Use default gitleaks rules
+useDefault = true
+
+[allowlist]
+description = "Allowlist for known safe patterns"
+regexes = [
+    # Example database URLs (localhost, documentation)
+    '''jdbc:firebirdsql://localhost:3050''',
+    '''jdbc:firebirdsql://\$\{FIREBIRD_HOST\}''',
+    
+    # Default Firebird credentials in examples/docs (should be changed in production)
+    # Note: Real production passwords should never be committed
+]
+
+paths = [
+    # Allow secrets in test files (mock data)
+    '''.*Test\.java$''',
+    '''.*IT\.java$''',
+    '''.*/test/.*''',
+    
+    # Allow in documentation
+    '''docs/.*\.md$''',
+    '''README\.md$''',
+    '''AGENTS\.md$''',
+    
+    # Gradle cache (contains environment variables)
+    '''.gradle/.*''',
+    '''build/.*''',
+]
+
+[[rules]]
+id = "firebird-password-production"
+description = "Firebird production password detected (not default passwords)"
+regex = '''quarkus\.datasource\.password=[^m\s][^\s]{8,}'''
+tags = ["firebird", "password", "production"]
+# Note: This will catch production passwords but allow 'masterkey' (starts with 'm')
+# Adjust as needed for your security requirements
+
+[[rules]]
+id = "mqtt-password"
+description = "MQTT password in plain text"
+regex = '''mp\.messaging\..*\.password=.+'''
+tags = ["mqtt", "password"]
+
+[[rules]]
+id = "jwt-secret"
+description = "JWT secret key"
+regex = '''(jwt|JWT|secret|SECRET).*=\s*["\']?[A-Za-z0-9+/]{32,}[=]{0,2}["\']?'''
+tags = ["jwt", "secret"]
+
+[[rules]]
+id = "private-key"
+description = "Private key detected"
+regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
+tags = ["private-key", "key"]
+
+[[rules]]
+id = "api-key-generic"
+description = "Generic API key pattern"
+regex = '''(?i)(api[_-]?key|apikey|access[_-]?key)[\s]*[=:]+[\s]*["\']?[A-Za-z0-9\-_]{20,}["\']?'''
+tags = ["api-key", "key"]
+
+[[rules]]
+id = "bearer-token"
+description = "Bearer token in code"
+regex = '''(?i)bearer[\s]+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+'''
+tags = ["token", "jwt", "bearer"]
+
+[[rules]]
+id = "database-connection-string"
+description = "Database connection string with embedded credentials"
+regex = '''(?i)(jdbc|postgresql|mysql|mongodb|redis)://[^:]+:[^@]+@'''
+tags = ["database", "connection-string", "credentials"]
+
+# Entropy-based detection for high-entropy strings (likely secrets)
+[[rules]]
+id = "high-entropy-string"
+description = "High entropy string (possible secret)"
+regex = '''(?i)(secret|password|pwd|passwd|token|key)[\s]*[=:]+[\s]*["\']?([A-Za-z0-9+/]{32,})["\']?'''
+entropy = 4.5
+tags = ["entropy", "secret"]

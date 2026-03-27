@@ -60,6 +60,28 @@ src/main/webui/yarn-error.log*
 # Docker
 *.env
 
+# Sensitive data and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+*-secret.yml
+*-secret.yaml
+*-credentials.json
+.env.production
+application-prod.properties
+application-production.properties
+
+# Database files
+*.fdb
+*.gdb
+
+# Gitleaks reports
+gitleaks-report.json
+
 refdoc/
 /.quinoa/
 /.opencode/

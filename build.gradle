@@ -59,3 +59,28 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs << '-parameters'
 }
+
+// Security: Scan for secrets and sensitive data
+tasks.register('scanSecrets', Exec) {
+    group = 'verification'
+    description = 'Scans for secrets, passwords, and sensitive data using gitleaks'
+    
+    commandLine 'sh', '-c', '''
+        if ! command -v gitleaks &> /dev/null; then
+            echo "❌ Gitleaks is not installed. Please install it:"
+            echo "   macOS: brew install gitleaks"
+            echo "   Linux: https://github.com/gitleaks/gitleaks#installing"
+            exit 1
+        fi
+        echo "🔍 Scanning repository for secrets..."
+        gitleaks detect --config .gitleaks.toml --verbose --report-path build/gitleaks-report.json
+        echo "✅ No secrets detected!"
+    '''
+    
+    ignoreExitValue = false
+}
+
+// Run secret scan before build
+tasks.named('build') {
+    dependsOn scanSecrets
+}

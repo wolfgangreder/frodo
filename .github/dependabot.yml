@@ -1,0 +1,94 @@
+# GitHub Dependabot configuration for Frodo project
+# Monitors dependencies and automatically creates PRs for updates
+
+version: 2
+updates:
+  # Gradle dependencies (Java/Quarkus)
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "rre36"
+    labels:
+      - "dependencies"
+      - "gradle"
+    commit-message:
+      prefix: "build(deps)"
+      include: "scope"
+    groups:
+      quarkus:
+        patterns:
+          - "io.quarkus*"
+        update-types:
+          - "minor"
+          - "patch"
+      vertx:
+        patterns:
+          - "io.vertx*"
+        update-types:
+          - "minor"
+          - "patch"
+      testing:
+        patterns:
+          - "io.rest-assured*"
+          - "org.assertj*"
+          - "org.mockito*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # npm dependencies (React frontend)
+  - package-ecosystem: "npm"
+    directory: "/src/main/webui"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "rre36"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "frontend"
+    commit-message:
+      prefix: "build(deps)"
+      include: "scope"
+    groups:
+      react:
+        patterns:
+          - "react*"
+          - "@types/react*"
+        update-types:
+          - "minor"
+          - "patch"
+      testing-library:
+        patterns:
+          - "@testing-library/*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "rre36"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
