@@ -1,6 +1,6 @@
 # frodo
 
-Frodo is a Quarkus 3.x server application built with Gradle (Kotlin DSL) and Java 21.
+Frodo is a Quarkus 3.x server application built with Gradle (Groovy DSL) and Java 21.
 
 ## Features
 
