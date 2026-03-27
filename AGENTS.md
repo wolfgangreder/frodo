@@ -111,6 +111,31 @@ public class ModbusResource {
 - Use `Uni.onFailure()` for async error handling
 - Log errors: `LOG.errorf(exception, "Message: %s", context);`
 
+## Git Workflow Guidelines
+
+### CRITICAL: Code Review Before Commit
+
+**IMPORTANT:** Before creating any git commit, you MUST:
+
+1. **Perform a self-review:**
+   - Run `git status` and `git diff --stat` to see what changed
+   - Review the changes using `git diff` for key files
+   - Verify all tests pass with `./gradlew test`
+   - Verify build succeeds with `./gradlew build`
+
+2. **Present changes to user for review:**
+   - Show a summary of what was implemented
+   - List all files created, modified, or deleted
+   - Highlight key changes and design decisions
+   - **WAIT for user approval before committing**
+
+3. **Only commit after user approval:**
+   - Use conventional commit format: `type(scope): description`
+   - Include detailed commit body explaining the changes
+   - Reference any issues or plan documents
+
+**Never commit without explicit user approval!**
+
 ## Testing Guidelines
 
 | Type | Suffix | Location |

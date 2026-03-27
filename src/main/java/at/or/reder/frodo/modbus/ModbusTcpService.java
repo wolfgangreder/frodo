@@ -1,15 +1,17 @@
 package at.or.reder.frodo.modbus;
 
-import io.vertx.mutiny.core.Vertx;
-import io.vertx.mutiny.core.net.NetClient;
-import io.vertx.mutiny.core.net.NetSocket;
+import at.or.reder.frodo.modbus.connection.ModbusConnectionPool;
+import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
- * Service for accessing Modbus devices over TCP using raw Vert.x TCP sockets.
+ * Service for accessing Modbus devices over TCP using connection pooling.
  * Supports Modbus TCP protocol (MBAP header + PDU).
  */
 @ApplicationScoped
@@ -18,16 +20,18 @@ public class ModbusTcpService {
     private static final Logger LOG = Logger.getLogger(ModbusTcpService.class);
 
     @Inject
-    Vertx vertx;
-
-    @ConfigProperty(name = "frodo.modbus.host", defaultValue = "localhost")
-    String modbusHost;
-
-    @ConfigProperty(name = "frodo.modbus.port", defaultValue = "502")
-    int modbusPort;
+    ModbusConnectionPool connectionPool;
 
     @ConfigProperty(name = "frodo.modbus.enabled", defaultValue = "false")
     boolean modbusEnabled;
+
+    @ConfigProperty(name = "frodo.modbus.request.max-retries", defaultValue = "3")
+    int maxRetries;
+
+    @ConfigProperty(name = "frodo.modbus.request.retry-delay-seconds", defaultValue = "2")
+    int retryDelaySeconds;
+
+    private final AtomicInteger transactionIdCounter = new AtomicInteger(1);
 
     /**
      * Reads holding registers from a Modbus TCP device.
@@ -37,49 +41,40 @@ public class ModbusTcpService {
      * @param count     number of registers to read
      * @return Uni resolving to an array of register values
      */
-    public io.smallrye.mutiny.Uni<int[]> readHoldingRegisters(int unitId, int startAddr, int count) {
+    public Uni<int[]> readHoldingRegisters(int unitId, int startAddr, int count) {
         if (!modbusEnabled) {
             LOG.debug("Modbus is disabled, returning empty response");
-            return io.smallrye.mutiny.Uni.createFrom().item(new int[0]);
+            return Uni.createFrom().item(new int[0]);
         }
 
-        NetClient client = vertx.createNetClient();
+        int transactionId = getNextTransactionId();
+        byte[] request = buildReadHoldingRegistersRequest(unitId, startAddr, count, transactionId);
 
-        return client.connect(modbusPort, modbusHost)
-                .onItem().transformToUni(socket -> sendReadHoldingRegistersRequest(socket, unitId, startAddr, count))
-                .onFailure().invoke(e -> LOG.errorf(e, "Failed to connect to Modbus device at %s:%d", modbusHost, modbusPort));
+        return connectionPool.executeRequest(request, transactionId)
+                .onItem().transform(response -> parseReadHoldingRegistersResponse(response, count))
+                .onFailure().retry()
+                    .withBackOff(Duration.ofSeconds(retryDelaySeconds))
+                    .atMost(maxRetries)
+                .onFailure().invoke(e -> LOG.errorf(e, "Failed to read holding registers after %d retries", maxRetries));
     }
 
-    private io.smallrye.mutiny.Uni<int[]> sendReadHoldingRegistersRequest(
-            NetSocket socket, int unitId, int startAddr, int count) {
-
-        // Build Modbus TCP request (MBAP header + function code 0x03)
-        byte[] request = buildReadHoldingRegistersRequest(unitId, startAddr, count, 1);
-
-        return io.smallrye.mutiny.Uni.createFrom().<int[]>emitter(emitter -> {
-            socket.handler(buffer -> {
-                try {
-                    int[] registers = parseReadHoldingRegistersResponse(buffer.getBytes(), count);
-                    emitter.complete(registers);
-                } catch (Exception e) {
-                    emitter.fail(e);
-                } finally {
-                    socket.closeAndForget();
-                }
-            });
-            socket.exceptionHandler(e -> {
-                emitter.fail(e);
-                socket.closeAndForget();
-            });
-            socket.write(io.vertx.mutiny.core.buffer.Buffer.buffer(request)).subscribe().with(
-                    v -> LOG.debugf("Modbus request sent: unitId=%d, startAddr=%d, count=%d", unitId, startAddr, count),
-                    emitter::fail
-            );
-        });
+    /**
+     * Gets the next transaction ID (thread-safe, wraps at 0xFFFF).
+     *
+     * @return next transaction ID in range 0-65535
+     */
+    private int getNextTransactionId() {
+        return transactionIdCounter.updateAndGet(x -> (x + 1) & 0xFFFF);
     }
 
     /**
      * Builds a Modbus TCP Read Holding Registers (FC=03) request frame.
+     *
+     * @param unitId        Modbus unit/device ID
+     * @param startAddr     starting register address
+     * @param count         number of registers to read
+     * @param transactionId transaction ID for request
+     * @return complete Modbus TCP frame (MBAP + PDU)
      */
     static byte[] buildReadHoldingRegistersRequest(int unitId, int startAddr, int count, int transactionId) {
         byte[] pdu = {
@@ -95,6 +90,11 @@ public class ModbusTcpService {
     /**
      * Wraps a PDU in a Modbus TCP MBAP header.
      * Frame structure: Transaction ID (2) + Protocol ID (2) + Length (2) + Unit ID (1) + PDU (n)
+     *
+     * @param transactionId transaction ID for request
+     * @param unitId        Modbus unit/device ID
+     * @param pdu           Protocol Data Unit (function code + data)
+     * @return complete Modbus TCP frame with MBAP header
      */
     static byte[] buildMbapFrame(int transactionId, int unitId, byte[] pdu) {
         byte[] frame = new byte[7 + pdu.length]; // 6 (MBAP) + 1 (unitId) + PDU
@@ -112,6 +112,11 @@ public class ModbusTcpService {
 
     /**
      * Parses a Modbus TCP Read Holding Registers response.
+     *
+     * @param response      complete Modbus TCP response frame
+     * @param expectedCount expected number of registers (for validation)
+     * @return array of register values
+     * @throws IllegalArgumentException if response is malformed or incomplete
      */
     static int[] parseReadHoldingRegistersResponse(byte[] response, int expectedCount) {
         if (response.length < 9) {
