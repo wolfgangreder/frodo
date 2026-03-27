@@ -1,5 +1,7 @@
 package at.or.reder.frodo.api;
 
+import at.or.reder.frodo.FrodoVersion;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -11,12 +13,15 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 @Tag(name = "Frodo API", description = "Frodo server endpoints")
 public class FrodoResource {
 
+    @Inject
+    FrodoVersion frodoVersion;
+
     @GET
     @Path("/info")
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(summary = "Get application info", description = "Returns basic application information")
     public ApplicationInfo info() {
-        return new ApplicationInfo("frodo", "1.0-SNAPSHOT", "Frodo Quarkus Server");
+        return new ApplicationInfo("frodo", frodoVersion.getVersion(), "Frodo Quarkus Server");
     }
 
     public record ApplicationInfo(String name, String version, String description) {

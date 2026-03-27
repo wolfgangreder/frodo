@@ -47,7 +47,7 @@ dependencies {
 }
 
 group = 'at.or.reder.frodo'
-version = '1.0-SNAPSHOT'
+version = project.property('projectVersion')
 
 java {
     toolchain {
@@ -58,6 +58,13 @@ java {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs << '-parameters'
+}
+
+// Generate version.properties with project version
+tasks.named('processResources') {
+    filesMatching('**/version.properties') {
+        expand(projectVersion: project.version)
+    }
 }
 
 // Security: Scan for secrets and sensitive data
