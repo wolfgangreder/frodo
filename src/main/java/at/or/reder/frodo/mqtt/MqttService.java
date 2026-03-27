@@ -1,14 +1,11 @@
 package at.or.reder.frodo.mqtt;
 
-import io.smallrye.reactive.messaging.annotations.Broadcast;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.jboss.logging.Logger;
-
 /**
  * MQTT messaging service for publishing and consuming messages.
  * Configure MQTT broker connection in application.properties.

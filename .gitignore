@@ -59,3 +59,8 @@ src/main/webui/yarn-error.log*
 
 # Docker
 *.env
+
+refdoc/
+/.quinoa/
+/.opencode/
+/bin/
