@@ -13,6 +13,7 @@ This plan details the implementation of a robust Modbus TCP infrastructure for c
 
 - Manage persistent connections with queueing to minimize concurrent requests
 - Read standard Modbus Device Identification (vendor, product, version)
+- **Support SunSpec Modbus protocol for PV inverter data (models 1, 101-103, 111-113, 120-132)**
 - Store device configurations in FirebirdSQL 5.0+
 - Use H2 Database for testing
 - Schedule automatic data collection (1 request/minute target)
@@ -21,7 +22,7 @@ This plan details the implementation of a robust Modbus TCP infrastructure for c
 - Keep the service K8s compliant
 - Support multi-device expansion from the start
 
-**Timeline:** 12-16 days | **7 Stages** | **Target:** Single device working, multi-device ready
+**Timeline:** 12-18 days | **7 Stages** | **Target:** Single device working, multi-device ready
 
 ---
 
@@ -31,12 +32,14 @@ This plan details the implementation of a robust Modbus TCP infrastructure for c
 ┌─────────────────────────────────────────────────────────────┐
 │                      REST API Layer                         │
 │  /api/devices, /api/devices/{id}/info, /api/modbus/...    │
+│  /api/devices/{id}/sunspec/* (11 SunSpec endpoints)       │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────────┐
 │              Service Layer                                   │
 │  DeviceInfoCollectorService (Scheduled)                     │
 │  ModbusTcpService (Protocol)                                │
+│  SunSpecService (SunSpec protocol + model registry)        │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────────┐
@@ -48,7 +51,7 @@ This plan details the implementation of a robust Modbus TCP infrastructure for c
 ┌────────────────▼────────────────────────────────────────────┐
 │              Data Layer                                      │
 │  FirebirdSQL: modbus_device, modbus_device_info            │
-│  In-Memory Cache: DeviceInfoCache                           │
+│  In-Memory Cache: DeviceInfoCache, SunSpec Discovery Cache │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -704,11 +707,11 @@ public record ErrorResponse(
 
 ## Stage 6: Health Checks & Monitoring
 
-**Duration:** 1-2 days | **Priority:** MEDIUM | **Dependencies:** Stage 1, 4
+**Duration:** 1-2 days | **Priority:** MEDIUM | **Dependencies:** Stage 1, 4, 5
 
 ### Objectives
-- Modbus-specific health checks
-- Prometheus metrics for monitoring
+- Modbus-specific health checks (basic protocol + SunSpec)
+- Prometheus metrics for monitoring (including SunSpec discovery/reads)
 - Dashboard-ready observability
 
 ### Implementation Details
@@ -731,6 +734,24 @@ public class ModbusHealthCheck implements HealthCheck {
 - DOWN if no successful read in last 15 minutes
 - UP if at least one device readable
 
+#### SunSpecHealthCheck.java (NEW)
+```java
+@Readiness
+@ApplicationScoped
+public class SunSpecHealthCheck implements HealthCheck {
+    // Check: SunSpec discovery successful for at least one device
+    // Check: Common model (ID 1) readable
+    // Check: Inverter model data availability
+    // Check: SunSpec cache status
+}
+```
+
+**SunSpec Health Criteria:**
+- DOWN if no device supports SunSpec
+- DOWN if all SunSpec reads fail
+- WARN if discovery cache expired
+- UP if at least one device has valid SunSpec data
+
 #### ModbusMetrics.java
 ```java
 @ApplicationScoped
@@ -740,54 +761,115 @@ public class ModbusMetrics {
     - frodo.modbus.queue.size
     - frodo.modbus.devices.total
     - frodo.modbus.devices.enabled
+    - frodo.sunspec.discovery.cached{unit_id} (1 if cached, 0 otherwise)
+    - frodo.sunspec.models.total{unit_id} (count of discovered models)
     
     // Counters
     - frodo.modbus.requests.total{status=success|failure}
     - frodo.modbus.device_info.reads.total{status=success|failure}
+    - frodo.sunspec.discovery.total{status=success|failure,unit_id}
+    - frodo.sunspec.model.reads.total{status=success|failure,model_id,unit_id}
+    - frodo.sunspec.cache.invalidations.total{unit_id}
     
     // Timers
     - frodo.modbus.request.duration
     - frodo.modbus.device_info.read.duration
+    - frodo.sunspec.discovery.duration{unit_id}
+    - frodo.sunspec.model.read.duration{model_id,unit_id}
 }
 ```
 
 ### Configuration
 ```properties
 frodo.modbus.health.max-age-minutes=15
+frodo.sunspec.health.discovery-required=false
+frodo.sunspec.health.max-cache-age-hours=24
 ```
 
 ### Deliverables
 - [ ] Modbus-specific health check
-- [ ] Prometheus metrics
+- [ ] SunSpec-specific health check (discovery, model reads)
+- [ ] Prometheus metrics (basic Modbus + SunSpec)
 - [ ] Health endpoint integration
 - [ ] Metrics endpoint ready for scraping
+- [ ] SunSpec discovery/read success/failure tracking
 - [ ] Tests for health checks
 
 ---
 
 ## Stage 7: Documentation & Polish
 
-**Duration:** 1 day | **Priority:** LOW | **Dependencies:** All
+**Duration:** 1-2 days | **Priority:** LOW | **Dependencies:** All
 
 ### Objectives
-- Update README with complete setup guide
-- Document REST API endpoints with examples
+- Update README with complete setup guide (basic Modbus + SunSpec)
+- Document REST API endpoints with examples (Device + SunSpec APIs)
 - Testing tools documentation
 - Database schema reference
+- SunSpec model registry documentation
 
 ### Tasks
-1. Update README.md with Modbus features
-2. Create docs/TESTING.md
-3. Update AGENTS.md
-4. Create example configurations
-5. API usage examples (curl)
+1. Update README.md with Modbus + SunSpec features
+2. Create docs/TESTING.md (include SunSpec endpoint tests)
+3. Update AGENTS.md (add SunSpec package structure)
+4. Create example configurations (include SunSpec settings if any)
+5. API usage examples (curl) for Device + SunSpec endpoints
+6. Create docs/SUNSPEC_MODELS.md (NEW)
+7. Document SunSpec data types and register decoding
+
+### SunSpec-Specific Documentation
+
+#### docs/SUNSPEC_MODELS.md
+Document the SunSpec implementation:
+- Supported models: Common (1), Inverter (101-103, 111-113), Nameplate (120), Settings (121, 122, 123), Status (124, 125, 126), Controls (127, 128, 129, 130, 131, 132)
+- Model discovery process and caching strategy
+- SunSpec data types: uint16, int16, uint32, int32, float32, acc32, acc64, string, enum, bitfield
+- Register address mapping and offsets
+- Scale factors and calculated values
+- Example raw Modbus data → decoded model data
+
+#### API Documentation Enhancements
+- **GET /api/devices/{id}/sunspec/discovery** - Model chain discovery with caching
+- **GET /api/devices/{id}/sunspec/common** - Common model (device ID)
+- **GET /api/devices/{id}/sunspec/inverter** - Auto-detect inverter model
+- **GET /api/devices/{id}/sunspec/nameplate** - Max ratings
+- **GET /api/devices/{id}/sunspec/settings** - Settings (121)
+- **GET /api/devices/{id}/sunspec/extended-settings** - Extended settings (122)
+- **GET /api/devices/{id}/sunspec/voltage-power** - Volt/Watt settings (123)
+- **GET /api/devices/{id}/sunspec/status** - Immediate status (124)
+- **GET /api/devices/{id}/sunspec/controls** - Basic controls (127)
+- **GET /api/devices/{id}/sunspec/models/{modelId}** - Generic model reader
+- **GET /api/devices/{id}/sunspec/models/{modelId}/raw** - Raw register dump
+
+Add curl examples for each endpoint with realistic responses.
+
+#### AGENTS.md Updates
+Add SunSpec package structure to project overview:
+```
+at.or.reder.frodo.modbus/
+├── sunspec/
+│   ├── SunSpecService.java              # Core SunSpec service
+│   ├── SunSpecModelRegistry.java        # Model definitions (all supported models)
+│   ├── SunSpecModelDataDecoder.java     # Model data decoder
+│   ├── SunSpecRegisterDecoder.java      # Data type decoder (float32, acc32, etc.)
+│   ├── SunSpecConstants.java            # Model IDs, base addresses
+│   ├── SunSpecDataType.java             # Enum: all SunSpec data types
+│   ├── SunSpecDiscoveryResult.java      # Discovery result cache model
+│   ├── SunSpecModelBlock.java           # Record: model location (addr, length)
+│   ├── SunSpecModelData.java            # Record: decoded model data
+│   ├── SunSpecModelDefinition.java      # Record: model metadata
+│   └── SunSpecFieldDefinition.java      # Record: field metadata
+```
 
 ### Deliverables
-- [ ] Complete README with examples
-- [ ] Testing documentation
-- [ ] Updated AGENTS.md
+- [ ] Complete README with Modbus + SunSpec examples
+- [ ] Testing documentation (include SunSpec endpoint tests)
+- [ ] Updated AGENTS.md (add SunSpec package structure)
 - [ ] Example configurations
-- [ ] API usage examples
+- [ ] API usage examples (curl) for Device + SunSpec endpoints
+- [ ] docs/SUNSPEC_MODELS.md with model registry reference
+- [ ] SunSpec data types and decoding documentation
+- [ ] Raw Modbus → SunSpec model data examples
 
 ---
 
@@ -846,10 +928,10 @@ quarkus.flyway.locations=classpath:db/migration
 | Stage 3 | 2-3 days | Stage 1 | Database schema + entities |
 | Stage 4 | 2 days | Stage 2, 3 | Scheduled collection |
 | Stage 5 | 2 days | Stage 3, 4 | REST API |
-| Stage 6 | 1-2 days | Stage 1, 4 | Health + Metrics |
-| Stage 7 | 1 day | All | Documentation |
+| Stage 6 | 1-2 days | Stage 1, 4, 5 | Health + Metrics (+ SunSpec) |
+| Stage 7 | 1-2 days | All | Documentation (+ SunSpec) |
 
-**Total Estimated Time:** 12-16 days
+**Total Estimated Time:** 12-18 days
 
 ---
 
@@ -897,3 +979,12 @@ quarkus.flyway.locations=classpath:db/migration
 2. **Multi-Device**: Database schema supports multiple devices; connection pool handles single device initially
 3. **Performance**: With 1 request/minute target, queue size (50) provides adequate buffering
 4. **Firebird 5.0+**: Schema uses sequences and standard SQL syntax compatible with Firebird 5.x
+5. **SunSpec Implementation**: Full SunSpec Modbus protocol support was implemented and merged with Stage 5 (PR #10, commit a097e61):
+   - 11 SunSpec-related source files (SunSpecService, ModelRegistry, DataTypes, etc.)
+   - 10 test files with >90% coverage
+   - SunSpecResource with 11 REST endpoints
+   - Support for models: Common (1), Inverter (101-103, 111-113), Nameplate (120), Settings (121-123), Status (124-126), Controls (127-132)
+   - In-memory discovery cache with invalidation
+   - Full register decoding for all SunSpec data types (float32, uint16, int16, uint32, acc32, acc64, string, enum, bitfield)
+   - Auto-detection of inverter model variants (Float vs Int+SF)
+   - **Stages 6 & 7 have been updated to include SunSpec-specific health checks, metrics, and documentation tasks**
