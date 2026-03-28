@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+  <changeSet id="1" author="frodo">
+    <comment>Create modbus_device table for device configurations</comment>
+    
+    <createTable tableName="modbus_device">
+      <column name="id" type="BIGINT" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="name" type="VARCHAR(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="host" type="VARCHAR(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="port" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+      <column name="unit_id" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+      <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+        <constraints nullable="false"/>
+      </column>
+      <column name="description" type="VARCHAR(1000)"/>
+      <column name="connection_timeout_seconds" type="INTEGER" defaultValueNumeric="30"/>
+      <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <addUniqueConstraint
+        tableName="modbus_device"
+        columnNames="host, port, unit_id"
+        constraintName="uk_device_connection"/>
+
+    <addCheckConstraint
+        tableName="modbus_device"
+        constraintName="ck_port_range"
+        checkCondition="port BETWEEN 1 AND 65535"/>
+
+    <addCheckConstraint
+        tableName="modbus_device"
+        constraintName="ck_unit_id_range"
+        checkCondition="unit_id BETWEEN 1 AND 247"/>
+
+    <createIndex indexName="idx_device_enabled" tableName="modbus_device">
+      <column name="enabled"/>
+    </createIndex>
+  </changeSet>
+
+  <changeSet id="2" author="frodo">
+    <comment>Create modbus_device_info table for device identification cache</comment>
+    
+    <createTable tableName="modbus_device_info">
+      <column name="id" type="BIGINT" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="device_id" type="BIGINT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="vendor_name" type="VARCHAR(255)"/>
+      <column name="product_code" type="VARCHAR(255)"/>
+      <column name="revision" type="VARCHAR(255)"/>
+      <column name="vendor_url" type="VARCHAR(500)"/>
+      <column name="product_name" type="VARCHAR(255)"/>
+      <column name="model_name" type="VARCHAR(255)"/>
+      <column name="user_app_name" type="VARCHAR(255)"/>
+      <column name="conformity_level" type="INTEGER"/>
+      <column name="last_read_at" type="TIMESTAMP"/>
+      <column name="last_read_success" type="BOOLEAN"/>
+      <column name="last_error_message" type="VARCHAR(1000)"/>
+      <column name="read_attempt_count" type="INTEGER" defaultValueNumeric="0"/>
+      <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <addForeignKeyConstraint
+        baseTableName="modbus_device_info"
+        baseColumnNames="device_id"
+        referencedTableName="modbus_device"
+        referencedColumnNames="id"
+        constraintName="fk_device_info_device"
+        onDelete="CASCADE"/>
+
+    <addUniqueConstraint
+        tableName="modbus_device_info"
+        columnNames="device_id"
+        constraintName="uk_device_info_device"/>
+
+    <createIndex indexName="idx_device_info_last_read" tableName="modbus_device_info">
+      <column name="last_read_at"/>
+    </createIndex>
+  </changeSet>
+
+</databaseChangeLog>

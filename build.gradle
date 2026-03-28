@@ -29,6 +29,11 @@ dependencies {
     implementation 'io.quarkus:quarkus-agroal'
     runtimeOnly 'org.firebirdsql.jdbc:jaybird:6.0.4'
 
+    // Hibernate ORM with Panache + Liquibase migrations
+    implementation 'io.quarkus:quarkus-hibernate-orm-panache'
+    implementation 'io.quarkus:quarkus-liquibase'
+    implementation 'io.quarkus:quarkus-hibernate-validator'
+
     // Docker container image generation
     implementation 'io.quarkus:quarkus-container-image-docker'
 
