@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # Firebird 5.0 database server
+  firebird:
+    image: firebirdsql/firebird:5.0
+    container_name: frodo-firebird
+    environment:
+      # SYSDBA password (change in production!)
+      ISC_PASSWORD: masterkey
+      # Don't set FIREBIRD_DATABASE - we create manually with UTF-8 and 32K page size
+      # Timezone (optional)
+      TZ: Europe/Vienna
+    ports:
+      # Expose Firebird port to host
+      - "3050:3050"
+    volumes:
+      # Persist database files
+      - firebird-data:/firebird/data
+      # Optional: Mount database creation script
+      # - ./src/main/resources/db/create-database.sql:/tmp/create-database.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/firebird/bin/isql", "-user", "sysdba", "-password", "masterkey", "-z"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - frodo-network
+
+  # Optional: Frodo application (uncomment to run app in Docker)
+  # frodo:
+  #   image: at.or.reder/frodo:latest
+  #   container_name: frodo-app
+  #   depends_on:
+  #     firebird:
+  #       condition: service_healthy
+  #   environment:
+  #     # Override database connection for Docker network
+  #     QUARKUS_DATASOURCE_JDBC_URL: jdbc:firebirdsql://firebird:3050//firebird/data/frodo.fdb?encoding=UTF8&charSet=utf-8
+  #     QUARKUS_DATASOURCE_USERNAME: sysdba
+  #     QUARKUS_DATASOURCE_PASSWORD: masterkey
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     - frodo-network
+  #   restart: unless-stopped
+
+volumes:
+  # Named volume for Firebird database persistence
+  firebird-data:
+    driver: local
+
+networks:
+  # Custom network for Frodo services
+  frodo-network:
+    driver: bridge

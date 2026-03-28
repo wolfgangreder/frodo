@@ -34,6 +34,9 @@ dependencies {
     implementation 'io.quarkus:quarkus-liquibase'
     implementation 'io.quarkus:quarkus-hibernate-validator'
 
+    // Quarkus Scheduler for background jobs
+    implementation 'io.quarkus:quarkus-scheduler'
+
     // Docker container image generation
     implementation 'io.quarkus:quarkus-container-image-docker'
 

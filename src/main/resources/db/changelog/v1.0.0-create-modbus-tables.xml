@@ -5,6 +5,13 @@
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
     http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
 
+  <!--
+    Prerequisites:
+    - Firebird database must be created with UTF-8 character set and 32K page size
+    - CREATE DATABASE 'frodo.fdb' PAGE_SIZE 32768 DEFAULT CHARACTER SET UTF8
+    - See docs/DATABASE_SETUP.md for complete setup instructions
+  -->
+
   <changeSet id="1" author="frodo">
     <comment>Create modbus_device table for device configurations</comment>
     
