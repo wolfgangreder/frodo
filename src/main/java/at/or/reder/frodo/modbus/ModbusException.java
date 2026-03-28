@@ -17,7 +17,7 @@ package at.or.reder.frodo.modbus;
  *   <li>0x06 - Server Device Busy</li>
  * </ul>
  */
-public class ModbusException extends Exception {
+public class ModbusException extends RuntimeException {
 
   private final int functionCode;
   private final int exceptionCode;
