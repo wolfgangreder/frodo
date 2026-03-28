@@ -3,7 +3,7 @@
     xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
   <!--
     Prerequisites:
@@ -14,9 +14,9 @@
 
   <changeSet id="1" author="frodo">
     <comment>Create modbus_device table for device configurations</comment>
-    
+
     <createTable tableName="modbus_device">
-      <column name="id" type="BIGINT" autoIncrement="true">
+      <column name="id" type="BIGINT">
         <constraints primaryKey="true" nullable="false"/>
       </column>
       <column name="name" type="VARCHAR(255)">
@@ -49,15 +49,8 @@
         columnNames="host, port, unit_id"
         constraintName="uk_device_connection"/>
 
-    <addCheckConstraint
-        tableName="modbus_device"
-        constraintName="ck_port_range"
-        checkCondition="port BETWEEN 1 AND 65535"/>
-
-    <addCheckConstraint
-        tableName="modbus_device"
-        constraintName="ck_unit_id_range"
-        checkCondition="unit_id BETWEEN 1 AND 247"/>
+    <sql>ALTER TABLE modbus_device ADD CONSTRAINT ck_port_range CHECK (port BETWEEN 1 AND 65535)</sql>
+    <sql>ALTER TABLE modbus_device ADD CONSTRAINT ck_unit_id_range CHECK (unit_id BETWEEN 1 AND 247)</sql>
 
     <createIndex indexName="idx_device_enabled" tableName="modbus_device">
       <column name="enabled"/>
@@ -66,9 +59,9 @@
 
   <changeSet id="2" author="frodo">
     <comment>Create modbus_device_info table for device identification cache</comment>
-    
+
     <createTable tableName="modbus_device_info">
-      <column name="id" type="BIGINT" autoIncrement="true">
+      <column name="id" type="BIGINT">
         <constraints primaryKey="true" nullable="false"/>
       </column>
       <column name="device_id" type="BIGINT">
@@ -110,6 +103,13 @@
     <createIndex indexName="idx_device_info_last_read" tableName="modbus_device_info">
       <column name="last_read_at"/>
     </createIndex>
+  </changeSet>
+
+  <changeSet id="3" author="frodo">
+    <comment>Create sequences for Hibernate identity generation (Firebird does not support autoincrement)</comment>
+
+    <sql>CREATE SEQUENCE modbus_device_SEQ START WITH 1 INCREMENT BY 50</sql>
+    <sql>CREATE SEQUENCE modbus_device_info_SEQ START WITH 1 INCREMENT BY 50</sql>
   </changeSet>
 
 </databaseChangeLog>
