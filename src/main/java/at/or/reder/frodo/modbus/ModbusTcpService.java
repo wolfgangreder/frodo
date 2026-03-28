@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
    * <p>Supported function codes:</p>
    * <ul>
    *   <li>FC 0x03 - Read Holding Registers</li>
+   *   <li>FC 0x06 - Write Single Register (guarded by write-enabled config)</li>
+   *   <li>FC 0x10 - Write Multiple Registers (guarded by write-enabled config)</li>
    *   <li>FC 0x2B/0x0E - Read Device Identification (MEI Transport)</li>
    * </ul>
    */
@@ -31,6 +33,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ModbusTcpService {
 
   private static final Logger LOG = Logger.getLogger(ModbusTcpService.class);
+
+  /** Function code for Write Single Register. */
+  static final int FC_WRITE_SINGLE_REGISTER = 0x06;
+
+  /** Function code for Write Multiple Registers. */
+  static final int FC_WRITE_MULTIPLE_REGISTERS = 0x10;
 
   /** Function code for Read Device Identification (Encapsulated Interface Transport). */
   static final int FC_READ_DEVICE_IDENTIFICATION = 0x2B;
@@ -49,6 +57,9 @@ public class ModbusTcpService {
 
     @ConfigProperty(name = "frodo.modbus.enabled", defaultValue = "false")
     boolean modbusEnabled;
+
+    @ConfigProperty(name = "frodo.modbus.write-enabled", defaultValue = "false")
+    boolean writeEnabled;
 
     @ConfigProperty(name = "frodo.modbus.request.max-retries", defaultValue = "3")
     int maxRetries;
@@ -272,7 +283,7 @@ public class ModbusTcpService {
    * @throws ModbusException        if the response is a Modbus exception response
    * @throws IllegalArgumentException if the response is malformed
    */
-  static ParsedDeviceIdResponse parseReadDeviceIdentificationResponse(byte[] response) throws ModbusException {
+  static ParsedDeviceIdResponse parseReadDeviceIdentificationResponse(byte[] response) {
     if (response == null || response.length < 8) {
       throw new IllegalArgumentException("Response too short: " + (response == null ? 0 : response.length));
     }
@@ -380,4 +391,204 @@ public class ModbusTcpService {
     boolean moreFollows,
     int nextObjectId
   ) {}
+
+  // ---- FC 0x06: Write Single Register ----
+
+  /**
+   * Writes a single holding register on a Modbus TCP device.
+   *
+   * <p>This operation is guarded by the {@code frodo.modbus.write-enabled}
+   * configuration property. When disabled, it returns a failed Uni.</p>
+   *
+   * @param unitId  Modbus unit/device ID (1-247)
+   * @param address register address to write
+   * @param value   value to write (0-65535)
+   * @return Uni that completes when the write is acknowledged
+   * @throws IllegalStateException if write operations are disabled
+   */
+  public Uni<Void> writeSingleRegister(int unitId, int address, int value) {
+    if (!writeEnabled) {
+      return Uni.createFrom().failure(
+        new IllegalStateException("Write operations are disabled. Set frodo.modbus.write-enabled=true to enable."));
+    }
+    if (!modbusEnabled) {
+      LOG.debug("Modbus is disabled, skipping write");
+      return Uni.createFrom().voidItem();
+    }
+
+    int transactionId = getNextTransactionId();
+    byte[] request = buildWriteSingleRegisterRequest(unitId, address, value, transactionId);
+
+    return connectionPool.executeRequest(request, transactionId)
+      .onItem().transform(response -> {
+        parseWriteSingleRegisterResponse(response);
+        return null;
+      })
+      .replaceWithVoid()
+      .onFailure().retry()
+        .withBackOff(Duration.ofSeconds(retryDelaySeconds))
+        .atMost(maxRetries)
+      .onFailure().invoke(e -> LOG.errorf(e, "Failed to write single register at address %d", address));
+  }
+
+  /**
+   * Builds a Modbus TCP Write Single Register (FC=06) request frame.
+   *
+   * @param unitId        Modbus unit/device ID
+   * @param address       register address to write
+   * @param value         value to write
+   * @param transactionId transaction ID for request
+   * @return complete Modbus TCP frame (MBAP + PDU)
+   */
+  static byte[] buildWriteSingleRegisterRequest(int unitId, int address, int value, int transactionId) {
+    byte[] pdu = {
+      (byte) FC_WRITE_SINGLE_REGISTER,   // Function code: 0x06
+      (byte) (address >> 8),              // Register address high byte
+      (byte) (address & 0xFF),            // Register address low byte
+      (byte) (value >> 8),                // Register value high byte
+      (byte) (value & 0xFF)               // Register value low byte
+    };
+    return buildMbapFrame(transactionId, unitId, pdu);
+  }
+
+  /**
+   * Parses a Modbus TCP Write Single Register response.
+   * The response is an echo of the request (address + value).
+   *
+   * @param response complete Modbus TCP response frame
+   * @throws ModbusException if the response is an exception
+   * @throws IllegalArgumentException if the response is malformed
+   */
+  static void parseWriteSingleRegisterResponse(byte[] response) {
+    if (response == null || response.length < 8) {
+      throw new IllegalArgumentException("Response too short: " + (response == null ? 0 : response.length));
+    }
+    int fc = response[7] & 0xFF;
+    if ((fc & EXCEPTION_RESPONSE_FLAG) != 0) {
+      int exceptionCode = (response.length > 8) ? (response[8] & 0xFF) : 0;
+      throw new ModbusException(fc & 0x7F, exceptionCode);
+    }
+    if (fc != FC_WRITE_SINGLE_REGISTER) {
+      throw new IllegalArgumentException(
+        String.format("Unexpected function code: 0x%02X, expected 0x%02X", fc, FC_WRITE_SINGLE_REGISTER));
+    }
+    // Response is echo of request: FC + Address(2) + Value(2) = 5 bytes after MBAP
+    if (response.length < 12) {
+      throw new IllegalArgumentException("Write single register response too short: " + response.length);
+    }
+  }
+
+  // ---- FC 0x10: Write Multiple Registers ----
+
+  /**
+   * Writes multiple holding registers on a Modbus TCP device.
+   *
+   * <p>This operation is guarded by the {@code frodo.modbus.write-enabled}
+   * configuration property. When disabled, it returns a failed Uni.</p>
+   *
+   * @param unitId    Modbus unit/device ID (1-247)
+   * @param startAddr starting register address
+   * @param values    values to write (each 0-65535)
+   * @return Uni that completes when the write is acknowledged
+   * @throws IllegalStateException if write operations are disabled
+   */
+  public Uni<Void> writeMultipleRegisters(int unitId, int startAddr, int[] values) {
+    if (!writeEnabled) {
+      return Uni.createFrom().failure(
+        new IllegalStateException("Write operations are disabled. Set frodo.modbus.write-enabled=true to enable."));
+    }
+    if (!modbusEnabled) {
+      LOG.debug("Modbus is disabled, skipping write");
+      return Uni.createFrom().voidItem();
+    }
+    if (values == null || values.length == 0) {
+      return Uni.createFrom().failure(
+        new IllegalArgumentException("Values array must not be empty"));
+    }
+    if (values.length > 123) {
+      return Uni.createFrom().failure(
+        new IllegalArgumentException("Cannot write more than 123 registers at once"));
+    }
+
+    int transactionId = getNextTransactionId();
+    byte[] request = buildWriteMultipleRegistersRequest(unitId, startAddr, values, transactionId);
+
+    return connectionPool.executeRequest(request, transactionId)
+      .onItem().transform(response -> {
+        parseWriteMultipleRegistersResponse(response, values.length);
+        return null;
+      })
+      .replaceWithVoid()
+      .onFailure().retry()
+        .withBackOff(Duration.ofSeconds(retryDelaySeconds))
+        .atMost(maxRetries)
+      .onFailure().invoke(e -> LOG.errorf(e, "Failed to write %d registers at address %d",
+        values.length, startAddr));
+  }
+
+  /**
+   * Builds a Modbus TCP Write Multiple Registers (FC=10) request frame.
+   *
+   * @param unitId        Modbus unit/device ID
+   * @param startAddr     starting register address
+   * @param values        register values to write
+   * @param transactionId transaction ID for request
+   * @return complete Modbus TCP frame (MBAP + PDU)
+   */
+  static byte[] buildWriteMultipleRegistersRequest(int unitId, int startAddr, int[] values, int transactionId) {
+    int byteCount = values.length * 2;
+    byte[] pdu = new byte[6 + byteCount];
+    pdu[0] = (byte) FC_WRITE_MULTIPLE_REGISTERS;  // Function code: 0x10
+    pdu[1] = (byte) (startAddr >> 8);              // Starting address high byte
+    pdu[2] = (byte) (startAddr & 0xFF);            // Starting address low byte
+    pdu[3] = (byte) (values.length >> 8);          // Quantity high byte
+    pdu[4] = (byte) (values.length & 0xFF);        // Quantity low byte
+    pdu[5] = (byte) byteCount;                     // Byte count
+    for (int i = 0; i < values.length; i++) {
+      pdu[6 + i * 2] = (byte) (values[i] >> 8);
+      pdu[7 + i * 2] = (byte) (values[i] & 0xFF);
+    }
+    return buildMbapFrame(transactionId, unitId, pdu);
+  }
+
+  /**
+   * Parses a Modbus TCP Write Multiple Registers response.
+   *
+   * @param response      complete Modbus TCP response frame
+   * @param expectedCount expected number of registers written
+   * @throws ModbusException if the response is an exception
+   * @throws IllegalArgumentException if the response is malformed
+   */
+  static void parseWriteMultipleRegistersResponse(byte[] response, int expectedCount) {
+    if (response == null || response.length < 8) {
+      throw new IllegalArgumentException("Response too short: " + (response == null ? 0 : response.length));
+    }
+    int fc = response[7] & 0xFF;
+    if ((fc & EXCEPTION_RESPONSE_FLAG) != 0) {
+      int exceptionCode = (response.length > 8) ? (response[8] & 0xFF) : 0;
+      throw new ModbusException(fc & 0x7F, exceptionCode);
+    }
+    if (fc != FC_WRITE_MULTIPLE_REGISTERS) {
+      throw new IllegalArgumentException(
+        String.format("Unexpected function code: 0x%02X, expected 0x%02X", fc, FC_WRITE_MULTIPLE_REGISTERS));
+    }
+    // Response: FC + Address(2) + Quantity(2) = 5 bytes after MBAP
+    if (response.length < 12) {
+      throw new IllegalArgumentException("Write multiple registers response too short: " + response.length);
+    }
+    int writtenCount = ((response[10] & 0xFF) << 8) | (response[11] & 0xFF);
+    if (writtenCount != expectedCount) {
+      throw new IllegalArgumentException(
+        String.format("Expected %d registers written, but device reported %d", expectedCount, writtenCount));
+    }
+  }
+
+  /**
+   * Checks whether write operations are enabled.
+   *
+   * @return true if write operations are allowed
+   */
+  public boolean isWriteEnabled() {
+    return writeEnabled;
+  }
 }

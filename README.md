@@ -57,12 +57,34 @@ isql -user sysdba -password masterkey -input src/main/resources/db/create-databa
 - Backup/restore procedures
 - Troubleshooting
 
-**Note**: Dev and test modes do not require a database (Hibernate and datasource are disabled).
+**Database Migrations**: Liquibase migrations run automatically on server startup in both development and production modes. Ensure the database is created before starting the application.
+
+**Test Mode**: Unit tests do not require a database (Hibernate and datasource are disabled in test profile).
 
 ## Running in Development Mode
 
+### With Database (Recommended)
+
+1. **Start Firebird database**:
+   ```bash
+   ./scripts/setup-firebird-docker.sh
+   # Or use docker-compose
+   docker-compose up -d firebird
+   ```
+
+2. **Start Quarkus in dev mode**:
+   ```bash
+   ./gradlew quarkusDev
+   ```
+
+   Database migrations will run automatically on startup.
+
+### Without Database (Legacy)
+
+To run without database (disables scheduled collection and device management):
+
 ```bash
-./gradlew quarkusDev
+./gradlew quarkusDev -Dquarkus.datasource.active=false
 ```
 
 The application starts on <http://localhost:8080>.
