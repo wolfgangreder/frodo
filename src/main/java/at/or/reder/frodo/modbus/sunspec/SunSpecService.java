@@ -235,6 +235,34 @@ public class SunSpecService {
     LOG.info("Cleared SunSpec discovery cache");
   }
 
+  /**
+   * Returns the number of cached discovery results.
+   *
+   * @return cache size
+   */
+  public int getDiscoveryCacheSize() {
+    return discoveryCache.size();
+  }
+
+  /**
+   * Returns the set of unit IDs that have cached discovery results.
+   *
+   * @return unmodifiable set of cached unit IDs
+   */
+  public java.util.Set<Integer> getCachedUnitIds() {
+    return java.util.Set.copyOf(discoveryCache.keySet());
+  }
+
+  /**
+   * Returns the cached discovery result for a specific unit, without triggering discovery.
+   *
+   * @param unitId Modbus unit ID
+   * @return Optional containing the cached result, or empty if not cached
+   */
+  public Optional<SunSpecDiscoveryResult> getCachedDiscovery(int unitId) {
+    return Optional.ofNullable(discoveryCache.get(unitId));
+  }
+
   // ---- Internal methods ----
 
   /**
