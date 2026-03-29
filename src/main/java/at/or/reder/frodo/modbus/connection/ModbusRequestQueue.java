@@ -60,9 +60,11 @@ public class ModbusRequestQueue {
       LOG.info("Stopping Modbus request queue processor");
       
       // Fail remaining queued requests
-      QueuedRequest req;
-      while ((req = queue.poll()) != null) {
-        req.emitter().fail(new IllegalStateException("Queue stopped"));
+      if (queue != null) {
+        QueuedRequest req;
+        while ((req = queue.poll()) != null) {
+          req.emitter().fail(new IllegalStateException("Queue stopped"));
+        }
       }
     }
   }
@@ -100,10 +102,10 @@ public class ModbusRequestQueue {
   /**
    * Returns current queue size.
    *
-   * @return number of requests waiting in queue
+   * @return number of requests waiting in queue, or 0 if queue not initialized
    */
   public int getQueueSize() {
-    return queue.size();
+    return queue != null ? queue.size() : 0;
   }
 
   /**
