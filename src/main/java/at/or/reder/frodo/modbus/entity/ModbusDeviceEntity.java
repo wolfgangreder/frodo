@@ -26,9 +26,9 @@ import java.time.Instant;
  */
 @Entity
 @Table(
-  name = "modbus_device",
+  name = "FroModbusDevice",
   uniqueConstraints = @UniqueConstraint(
-    name = "uk_device_connection",
+    name = "uk_FroDevice_connection",
     columnNames = {"host", "port", "unit_id"}
   )
 )
