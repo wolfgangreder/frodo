@@ -13,9 +13,9 @@
   -->
 
   <changeSet id="1" author="frodo">
-    <comment>Create modbus_device table for device configurations</comment>
+    <comment>Create FroModbusDevice table for device configurations</comment>
 
-    <createTable tableName="modbus_device">
+    <createTable tableName="FroModbusDevice">
       <column name="id" type="BIGINT">
         <constraints primaryKey="true" nullable="false"/>
       </column>
@@ -45,22 +45,22 @@
     </createTable>
 
     <addUniqueConstraint
-        tableName="modbus_device"
+        tableName="FroModbusDevice"
         columnNames="host, port, unit_id"
-        constraintName="uk_device_connection"/>
+        constraintName="uk_FroDevice_connection"/>
 
-    <sql>ALTER TABLE modbus_device ADD CONSTRAINT ck_port_range CHECK (port BETWEEN 1 AND 65535)</sql>
-    <sql>ALTER TABLE modbus_device ADD CONSTRAINT ck_unit_id_range CHECK (unit_id BETWEEN 1 AND 247)</sql>
+    <sql>ALTER TABLE FroModbusDevice ADD CONSTRAINT ck_FroDevice_port_range CHECK (port BETWEEN 1 AND 65535)</sql>
+    <sql>ALTER TABLE FroModbusDevice ADD CONSTRAINT ck_FroDevice_unit_id_range CHECK (unit_id BETWEEN 1 AND 247)</sql>
 
-    <createIndex indexName="idx_device_enabled" tableName="modbus_device">
+    <createIndex indexName="idx_FroModbusDevice_enabled" tableName="FroModbusDevice">
       <column name="enabled"/>
     </createIndex>
   </changeSet>
 
   <changeSet id="2" author="frodo">
-    <comment>Create modbus_device_info table for device identification cache</comment>
+    <comment>Create FroModbusDeviceInfo table for device identification cache</comment>
 
-    <createTable tableName="modbus_device_info">
+    <createTable tableName="FroModbusDeviceInfo">
       <column name="id" type="BIGINT">
         <constraints primaryKey="true" nullable="false"/>
       </column>
@@ -88,19 +88,19 @@
     </createTable>
 
     <addForeignKeyConstraint
-        baseTableName="modbus_device_info"
+        baseTableName="FroModbusDeviceInfo"
         baseColumnNames="device_id"
-        referencedTableName="modbus_device"
+        referencedTableName="FroModbusDevice"
         referencedColumnNames="id"
-        constraintName="fk_device_info_device"
+        constraintName="fk_FroDeviceInfo_device"
         onDelete="CASCADE"/>
 
     <addUniqueConstraint
-        tableName="modbus_device_info"
+        tableName="FroModbusDeviceInfo"
         columnNames="device_id"
-        constraintName="uk_device_info_device"/>
+        constraintName="uk_FroDeviceInfo_device"/>
 
-    <createIndex indexName="idx_device_info_last_read" tableName="modbus_device_info">
+    <createIndex indexName="idx_FroModbusDeviceInfo_last_read" tableName="FroModbusDeviceInfo">
       <column name="last_read_at"/>
     </createIndex>
   </changeSet>
@@ -108,8 +108,8 @@
   <changeSet id="3" author="frodo">
     <comment>Create sequences for Hibernate identity generation (Firebird does not support autoincrement)</comment>
 
-    <sql>CREATE SEQUENCE modbus_device_SEQ START WITH 1 INCREMENT BY 50</sql>
-    <sql>CREATE SEQUENCE modbus_device_info_SEQ START WITH 1 INCREMENT BY 50</sql>
+    <sql>CREATE SEQUENCE FroModbusDevice_SEQ START WITH 1 INCREMENT BY 50</sql>
+    <sql>CREATE SEQUENCE FroModbusDeviceInfo_SEQ START WITH 1 INCREMENT BY 50</sql>
   </changeSet>
 
 </databaseChangeLog>
