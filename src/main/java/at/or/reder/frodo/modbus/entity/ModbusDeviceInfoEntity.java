@@ -26,9 +26,9 @@ import java.util.Map;
  */
 @Entity
 @Table(
-  name = "modbus_device_info",
+  name = "FroModbusDeviceInfo",
   uniqueConstraints = @UniqueConstraint(
-    name = "uk_device_info_device",
+    name = "uk_FroDeviceInfo_device",
     columnNames = {"device_id"}
   )
 )

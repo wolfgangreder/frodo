@@ -158,6 +158,26 @@ public class ModbusResource {
 - Use `Uni.onFailure()` for async error handling
 - Log errors: `LOG.errorf(exception, "Message: %s", context);`
 
+### Database Naming Convention
+
+To support integration into pre-existing databases without schema support, **all database objects use "Fro" prefix**:
+
+| Object Type | Naming Convention | Example |
+|-------------|-------------------|---------|
+| Tables | `Fro<EntityName>` | `FroModbusDevice`, `FroModbusDeviceInfo` |
+| Sequences | `Fro<EntityName>_SEQ` | `FroModbusDevice_SEQ`, `FroModbusDeviceInfo_SEQ` |
+| Indexes | `idx_Fro<EntityName>_<column>` | `idx_FroModbusDevice_enabled` |
+| Unique constraints | `uk_Fro<Short>_<purpose>` | `uk_FroDevice_connection` |
+| Foreign keys | `fk_Fro<Short>_<reference>` | `fk_FroDeviceInfo_device` |
+| Check constraints | `ck_Fro<Short>_<purpose>` | `ck_FroDevice_port_range` |
+
+**Rationale:** FirebirdSQL versions before 3.0 do not support database schemas. The "Fro" prefix allows Frodo tables to coexist safely with other application data in shared databases, preventing name collisions.
+
+**Implementation:**
+- Entity classes use `@Table(name = "Fro...")` annotations
+- Liquibase changesets use prefixed table/constraint names
+- See `src/main/resources/db/changelog/v1.0.1-rename-tables-fro-prefix.xml` for migration from legacy names
+
 ## Git Workflow Guidelines
 
 ### CRITICAL: Code Review Before Commit
