@@ -41,10 +41,57 @@ In Quarkus dev mode, press `r` to re-run tests.
 ### Package Structure
 ```
 at.or.reder.frodo/
-├── api/        # REST endpoints (JAX-RS resources)
-├── health/     # MicroProfile Health checks
-├── modbus/     # Modbus TCP service & REST resource
-└── mqtt/       # MQTT messaging service
+├── api/                        # REST endpoints (JAX-RS resources)
+│   ├── FrodoResource            # /api/info
+│   ├── DeviceResource           # /api/devices CRUD + info
+│   ├── SunSpecResource          # /api/devices/{id}/sunspec/*
+│   ├── dto/                     # Request/response DTOs (records)
+│   └── exception/               # Exception mappers
+├── health/                     # Health & monitoring
+│   ├── FrodoHealthCheck         # Application readiness
+│   ├── ModbusHealthCheck        # Modbus connection pool health
+│   ├── SunSpecHealthCheck       # SunSpec discovery cache health
+│   └── ModbusMetrics            # Micrometer gauges, counters, timers
+├── modbus/                     # Modbus TCP protocol core
+│   ├── ModbusTcpService         # Core Modbus service (FC 0x03/0x06/0x10/0x2B)
+│   ├── ModbusResource           # Raw register access endpoint
+│   ├── ModbusException          # Protocol error exceptions
+│   ├── connection/              # Connection pool & request queue
+│   │   ├── ModbusConnectionPool  # Pool lifecycle, health, stats
+│   │   ├── ModbusConnection      # Single TCP connection
+│   │   ├── ModbusRequestQueue    # Bounded request queue
+│   │   ├── ModbusRequest         # Request envelope
+│   │   ├── QueuedRequest         # Queued request wrapper
+│   │   ├── ConnectionStats       # Pool statistics record
+│   │   └── ConnectionState       # Connection state enum
+│   ├── service/                 # Device info collection
+│   │   ├── DeviceInfoCollectorService  # Scheduled collection
+│   │   └── DeviceInfoCacheService      # In-memory cache
+│   ├── entity/                  # JPA entities
+│   │   ├── ModbusDeviceEntity    # Device configuration
+│   │   └── ModbusDeviceInfoEntity # Device identification cache
+│   ├── repository/              # Panache repositories
+│   ├── config/                  # Device config initializer
+│   ├── model/                   # Domain models
+│   │   ├── DeviceIdentification  # FC 0x2B result
+│   │   ├── ReadDeviceIdCode      # Read Device ID codes enum
+│   │   └── ModbusObjectId        # Modbus object ID enum
+│   ├── cache/                   # Cache models
+│   │   └── CachedDeviceInfo      # Cached device info record
+│   └── sunspec/                 # SunSpec protocol support
+│       ├── SunSpecService         # Discovery, model reading, caching
+│       ├── SunSpecModelRegistry   # Model definitions (all supported)
+│       ├── SunSpecModelDataDecoder # Model data decoder
+│       ├── SunSpecRegisterDecoder  # Data type decoder
+│       ├── SunSpecConstants       # Model IDs, base addresses
+│       ├── SunSpecDataType        # Data type enum
+│       ├── SunSpecDiscoveryResult  # Discovery result record
+│       ├── SunSpecModelBlock      # Model location record
+│       ├── SunSpecModelData       # Decoded model data record
+│       ├── SunSpecModelDefinition  # Model metadata record
+│       └── SunSpecFieldDefinition  # Field metadata record
+└── mqtt/                       # MQTT messaging service
+    └── MqttService              # Publish/subscribe
 ```
 
 ### Import Order
@@ -173,8 +220,17 @@ class FrodoResourceTest {
 
 ### Modbus Protocol
 - MBAP header: Transaction ID (2) + Protocol ID (2) + Length (2) + Unit ID (1)
-- Function codes: 0x03 (read holding), 0x06 (write single), 0x10 (write multiple)
+- Function codes: 0x03 (read holding), 0x06 (write single), 0x10 (write multiple), 0x2B/0x0E (read device identification)
 - Use static helper methods for frame building/parsing (testable without Vert.x)
+- Protocol reference: `refdoc/modbus.pdf` (Modbus Application Protocol V1.1b3)
+
+### SunSpec Protocol
+- SunSpec "SunS" signature at register 40000 (0x53756e53)
+- Model chain discovery: scan sequentially from base address
+- Supported models: Common (1), Inverter (101-103, 111-113), Nameplate (120), Settings (121), Status (122), Controls (123), Storage (124), MPPT (160)
+- Float and Int+SF register map variants supported
+- Register maps: `refdoc/gen24-modbus-api-external-docs/` (Fronius Gen24 Excel files)
+- See `docs/SUNSPEC_MODELS.md` for detailed model documentation
 
 ### Async/Reactive
 - Use Vert.x Mutiny APIs (`io.vertx.mutiny.*`)
@@ -192,7 +248,25 @@ class FrodoResourceTest {
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/info` | Application info |
-| `GET /api/modbus/{unitId}/holding-registers` | Read Modbus registers |
+| `GET /api/devices` | List all devices |
+| `POST /api/devices` | Create a device |
+| `GET /api/devices/{id}` | Get device details |
+| `PUT /api/devices/{id}` | Update a device |
+| `DELETE /api/devices/{id}` | Delete a device |
+| `GET /api/devices/{id}/info` | Cached device identification (FC 0x2B) |
+| `POST /api/devices/{id}/info/refresh` | Force refresh device identification |
+| `GET /api/devices/{id}/sunspec/discovery` | SunSpec model chain discovery |
+| `GET /api/devices/{id}/sunspec/common` | SunSpec Common model (1) |
+| `GET /api/devices/{id}/sunspec/inverter` | Auto-detect inverter model |
+| `GET /api/devices/{id}/sunspec/nameplate` | Nameplate ratings (120) |
+| `GET /api/devices/{id}/sunspec/settings` | Basic settings (121) |
+| `GET /api/devices/{id}/sunspec/status` | Extended measurements & status (122) |
+| `GET /api/devices/{id}/sunspec/controls` | Immediate controls (123) |
+| `GET /api/devices/{id}/sunspec/storage` | Basic storage controls (124) |
+| `GET /api/devices/{id}/sunspec/mppt` | Multiple MPPT extension (160) |
+| `GET /api/devices/{id}/sunspec/model/{modelId}` | Read any model by ID |
+| `GET /api/devices/{id}/sunspec/models` | List all available models |
+| `GET /api/modbus/{unitId}/holding-registers` | Read Modbus registers (FC 0x03) |
 | `GET /q/health` | Health check |
 | `GET /q/metrics` | Prometheus metrics |
 | `GET /swagger-ui` | Swagger UI |
