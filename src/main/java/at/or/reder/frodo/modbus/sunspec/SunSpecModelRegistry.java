@@ -17,6 +17,17 @@ import static at.or.reder.frodo.modbus.sunspec.SunSpecFieldDefinition.*;
  * <p>Model field layouts are derived from the Fronius Gen24 Modbus register
  * maps (version 1.2.7-2). Both Float and Int&amp;SF formats are supported.</p>
  *
+ * <p><b>Protocol References:</b></p>
+ * <ul>
+ *   <li>Common Model (1): {@code refdoc/gen24-modbus-api-external-docs/Gen24_Primo_Symo_Inverter_Register_Map_Float_ROW.xlsx}</li>
+ *   <li>Inverter Float (111-113): Same Excel, sheets "Float"</li>
+ *   <li>Inverter Int+SF (101-103): {@code refdoc/gen24-modbus-api-external-docs/Gen24_Primo_Symo_Inverter_Register_Map_Int&SF_ROW.xlsx}</li>
+ *   <li>Nameplate (120): Both register maps, sheet "Nameplate"</li>
+ *   <li>Settings (121-123): Both register maps, sheets "Settings"</li>
+ *   <li>Status (124-126): Both register maps, sheets "Status"</li>
+ *   <li>Controls (127-132): Both register maps, sheets "Controls"</li>
+ * </ul>
+ *
  * <p>Usage:</p>
  * <pre>
  * SunSpecModelDefinition commonModel = SunSpecModelRegistry.get(1);

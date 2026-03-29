@@ -7,6 +7,14 @@ package at.or.reder.frodo.modbus.sunspec;
  * and storage devices. The map starts with a "SunS" signature at
  * a well-known base address, followed by a chain of model blocks.</p>
  *
+ * <p><b>Protocol References:</b></p>
+ * <ul>
+ *   <li>Fronius Gen24 Register Maps: {@code refdoc/gen24-modbus-api-external-docs/}</li>
+ *   <li>Float Models: Gen24_Primo_Symo_Inverter_Register_Map_Float_ROW.xlsx</li>
+ *   <li>Int+SF Models: Gen24_Primo_Symo_Inverter_Register_Map_Int&SF_ROW.xlsx</li>
+ *   <li>SunSpec Base Address: Register 40000 (SunS signature 0x53756e53)</li>
+ * </ul>
+ *
  * @see <a href="https://sunspec.org/">SunSpec Alliance</a>
  */
 public final class SunSpecConstants {

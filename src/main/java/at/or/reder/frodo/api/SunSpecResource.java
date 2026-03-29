@@ -35,6 +35,15 @@ import java.util.List;
  *
  * <p>Provides endpoints for SunSpec model chain discovery and reading
  * individual model data from Fronius Gen24 PV inverters.</p>
+ *
+ * <p><b>Protocol References:</b></p>
+ * <ul>
+ *   <li>Fronius Gen24 Register Maps: {@code refdoc/gen24-modbus-api-external-docs/}</li>
+ *   <li>Float Models: Gen24_Primo_Symo_Inverter_Register_Map_Float_ROW.xlsx</li>
+ *   <li>Int+SF Models: Gen24_Primo_Symo_Inverter_Register_Map_Int&SF_ROW.xlsx</li>
+ *   <li>Supported models: Common (1), Inverter (101-103, 111-113), Nameplate (120),
+ *       Settings (121-123), Status (124-126), Controls (127-132)</li>
+ * </ul>
  */
 @Path("/api/devices/{id}/sunspec")
 @Produces(MediaType.APPLICATION_JSON)

@@ -10,6 +10,13 @@ import java.nio.charset.StandardCharsets;
  * first), as specified by the Modbus and SunSpec protocols.</p>
  *
  * <p>This class contains only static utility methods and is thread-safe.</p>
+ *
+ * <p><b>Protocol References:</b></p>
+ * <ul>
+ *   <li>SunSpec Data Types: {@code refdoc/gen24-modbus-api-external-docs/Gen24_Primo_Symo_Inverter_Register_Map_Float_ROW.xlsx}</li>
+ *   <li>Data types covered: uint16, int16, uint32, int32, float32, acc32, acc64, string, enum, bitfield, sunssf</li>
+ *   <li>Not Implemented values: 0xFFFF (uint16), 0x8000 (int16), NaN (float32)</li>
+ * </ul>
  */
 public final class SunSpecRegisterDecoder {
 

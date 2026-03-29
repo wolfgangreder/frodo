@@ -816,6 +816,10 @@ frodo.sunspec.health.max-cache-age-hours=24
 5. API usage examples (curl) for Device + SunSpec endpoints
 6. Create docs/SUNSPEC_MODELS.md (NEW)
 7. Document SunSpec data types and register decoding
+8. **Add protocol documentation references to all JavaDoc (NEW):**
+   - Reference `refdoc/modbus.pdf` for Modbus function codes (FC 0x03, 0x06, 0x10, 0x2B/0x0E)
+   - Reference Excel files in `refdoc/gen24-modbus-api-external-docs/` for SunSpec models
+   - Add section/page references where applicable for easy lookup
 
 ### SunSpec-Specific Documentation
 
@@ -870,6 +874,7 @@ at.or.reder.frodo.modbus/
 - [ ] docs/SUNSPEC_MODELS.md with model registry reference
 - [ ] SunSpec data types and decoding documentation
 - [ ] Raw Modbus → SunSpec model data examples
+- [ ] **Protocol documentation references in JavaDoc (refdoc/modbus.pdf + Excel files)**
 
 ---
 

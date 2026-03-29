@@ -18,17 +18,25 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
-   * Service for accessing Modbus devices over TCP using connection pooling.
-   * Supports Modbus TCP protocol (MBAP header + PDU).
-   *
-   * <p>Supported function codes:</p>
-   * <ul>
-   *   <li>FC 0x03 - Read Holding Registers</li>
-   *   <li>FC 0x06 - Write Single Register (guarded by write-enabled config)</li>
-   *   <li>FC 0x10 - Write Multiple Registers (guarded by write-enabled config)</li>
-   *   <li>FC 0x2B/0x0E - Read Device Identification (MEI Transport)</li>
-   * </ul>
-   */
+ * Service for accessing Modbus devices over TCP using connection pooling.
+ * Supports Modbus TCP protocol (MBAP header + PDU).
+ *
+ * <p>Supported function codes:</p>
+ * <ul>
+ *   <li>FC 0x03 - Read Holding Registers (see {@code refdoc/modbus.pdf} Section 6.3)</li>
+ *   <li>FC 0x06 - Write Single Register (see {@code refdoc/modbus.pdf} Section 6.6, guarded by write-enabled config)</li>
+ *   <li>FC 0x10 - Write Multiple Registers (see {@code refdoc/modbus.pdf} Section 6.16, guarded by write-enabled config)</li>
+ *   <li>FC 0x2B/0x0E - Read Device Identification (see {@code refdoc/modbus.pdf} Section 6.21, MEI Transport)</li>
+ * </ul>
+ *
+ * <p><b>Protocol References:</b></p>
+ * <ul>
+ *   <li>Modbus Application Protocol V1.1b3: {@code refdoc/modbus.pdf}</li>
+ *   <li>MBAP Header: Section 4.1 (Transaction ID, Protocol ID, Length, Unit ID)</li>
+ *   <li>Function Codes: Section 5 (public codes), Section 6 (detailed specifications)</li>
+ *   <li>Exception Responses: Section 7 (exception codes 0x01-0x0B)</li>
+ * </ul>
+ */
 @ApplicationScoped
 public class ModbusTcpService {
 
@@ -72,6 +80,8 @@ public class ModbusTcpService {
     /**
      * Reads holding registers from a Modbus TCP device.
      *
+     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3 (FC 0x03)</p>
+     *
      * @param unitId    Modbus unit/device ID (1-247)
      * @param startAddr starting register address (0-based)
      * @param count     number of registers to read
@@ -106,6 +116,9 @@ public class ModbusTcpService {
     /**
      * Builds a Modbus TCP Read Holding Registers (FC=03) request frame.
      *
+     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3</p>
+     * <p>Request PDU: Function code (1 byte) + Starting Address (2 bytes) + Quantity (2 bytes)</p>
+     *
      * @param unitId        Modbus unit/device ID
      * @param startAddr     starting register address
      * @param count         number of registers to read
@@ -126,6 +139,8 @@ public class ModbusTcpService {
     /**
      * Wraps a PDU in a Modbus TCP MBAP header.
      * Frame structure: Transaction ID (2) + Protocol ID (2) + Length (2) + Unit ID (1) + PDU (n)
+     *
+     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 4.1 (MBAP Header)</p>
      *
      * @param transactionId transaction ID for request
      * @param unitId        Modbus unit/device ID
@@ -148,6 +163,9 @@ public class ModbusTcpService {
 
     /**
      * Parses a Modbus TCP Read Holding Registers response.
+     *
+     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3</p>
+     * <p>Response PDU: Function code (1 byte) + Byte count (1 byte) + Register values (N*2 bytes)</p>
      *
      * @param response      complete Modbus TCP response frame
      * @param expectedCount expected number of registers (for validation)
@@ -179,6 +197,9 @@ public class ModbusTcpService {
    * continuation requests when the "More Follows" flag is set in the
    * response. All objects from all segments are merged into a single
    * {@link DeviceIdentification} result.</p>
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.21
+   * (Encapsulated Interface Transport, MEI Type 0x0E)</p>
    *
    * @param unitId   Modbus unit/device ID (1-247)
    * @param readCode the identification level to request
@@ -250,6 +271,9 @@ public class ModbusTcpService {
    * MBAP Header (7 bytes) + Function Code (0x2B) + MEI Type (0x0E)
    *   + Read Device ID Code (1 byte) + Object ID (1 byte)
    * </pre>
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.21</p>
+   * <p>Read Device ID Codes: 0x01 (Basic), 0x02 (Regular), 0x03 (Extended), 0x04 (Specific)</p>
    *
    * @param unitId        Modbus unit/device ID
    * @param readCode      the identification level to request
@@ -400,6 +424,8 @@ public class ModbusTcpService {
    * <p>This operation is guarded by the {@code frodo.modbus.write-enabled}
    * configuration property. When disabled, it returns a failed Uni.</p>
    *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.6 (FC 0x06)</p>
+   *
    * @param unitId  Modbus unit/device ID (1-247)
    * @param address register address to write
    * @param value   value to write (0-65535)
@@ -433,6 +459,9 @@ public class ModbusTcpService {
 
   /**
    * Builds a Modbus TCP Write Single Register (FC=06) request frame.
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.6</p>
+   * <p>Request PDU: Function code (1 byte) + Register Address (2 bytes) + Register Value (2 bytes)</p>
    *
    * @param unitId        Modbus unit/device ID
    * @param address       register address to write
@@ -486,6 +515,8 @@ public class ModbusTcpService {
    * <p>This operation is guarded by the {@code frodo.modbus.write-enabled}
    * configuration property. When disabled, it returns a failed Uni.</p>
    *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.16 (FC 0x10)</p>
+   *
    * @param unitId    Modbus unit/device ID (1-247)
    * @param startAddr starting register address
    * @param values    values to write (each 0-65535)
@@ -528,6 +559,10 @@ public class ModbusTcpService {
 
   /**
    * Builds a Modbus TCP Write Multiple Registers (FC=10) request frame.
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.16</p>
+   * <p>Request PDU: Function code (1 byte) + Starting Address (2 bytes) + Quantity (2 bytes)
+   * + Byte count (1 byte) + Register values (N*2 bytes)</p>
    *
    * @param unitId        Modbus unit/device ID
    * @param startAddr     starting register address

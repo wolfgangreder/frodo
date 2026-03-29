@@ -22,6 +22,15 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Discovery results are cached per unit ID to avoid repeated
  * model chain scans.</p>
+ *
+ * <p><b>SunSpec Protocol References:</b></p>
+ * <ul>
+ *   <li>Fronius Gen24 Register Maps: {@code refdoc/gen24-modbus-api-external-docs/}</li>
+ *   <li>Float Models: Gen24_Primo_Symo_Inverter_Register_Map_Float_ROW.xlsx</li>
+ *   <li>Int+SF Models: Gen24_Primo_Symo_Inverter_Register_Map_Int&SF_ROW.xlsx</li>
+ *   <li>Storage Float: Gen24_Primo_Symo_Inverter_Register_Map_Float_storage_ROW.xlsx</li>
+ *   <li>Storage Int+SF: Gen24_Primo_Symo_Inverter_Register_Map_Int&SF_storage_ROW.xlsx</li>
+ * </ul>
  */
 @ApplicationScoped
 public class SunSpecService {
@@ -43,6 +52,10 @@ public class SunSpecService {
    * <p>Reads the "SunS" signature at the default base address (40000),
    * then walks the model chain by reading model ID and length until
    * an end block (0xFFFF) is encountered.</p>
+   *
+   * <p><b>Protocol Reference:</b> Fronius Gen24 register maps in
+   * {@code refdoc/gen24-modbus-api-external-docs/}, SunS signature at
+   * register 40000 (or alternates 40100, 50000).</p>
    *
    * @param unitId Modbus unit ID (1-247)
    * @return Uni resolving to the discovery result
@@ -85,6 +98,10 @@ public class SunSpecService {
    *
    * <p>Performs discovery if needed, finds the model block, reads the
    * registers, and decodes them using the model definition.</p>
+   *
+   * <p><b>Protocol Reference:</b> Model register maps in
+   * {@code refdoc/gen24-modbus-api-external-docs/Gen24_Primo_Symo_Inverter_Register_Map_Float_ROW.xlsx}
+   * and {@code Gen24_Primo_Symo_Inverter_Register_Map_Int&SF_ROW.xlsx}</p>
    *
    * @param unitId  Modbus unit ID
    * @param modelId SunSpec model ID to read
