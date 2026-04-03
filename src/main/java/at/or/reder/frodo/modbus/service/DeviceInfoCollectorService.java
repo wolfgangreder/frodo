@@ -11,6 +11,7 @@ import io.quarkus.scheduler.Scheduled;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -65,6 +66,7 @@ public class DeviceInfoCollectorService {
     every = "${frodo.modbus.device-info.refresh-interval:5m}",
     identity = "device-info-collector"
   )
+  @Transactional
   void collectAllDeviceInfo() {
     // Skip if Hibernate is disabled (dev/test modes)
     if (!hibernateEnabled) {
@@ -114,6 +116,7 @@ public class DeviceInfoCollectorService {
    * @param device the device entity
    * @return Uni that completes when collection is done
    */
+  @Transactional
   public Uni<Void> collectForDevice(ModbusDeviceEntity device) {
     LOG.debugf("Collecting device info for device %d: %s",
       device.id, device.getConnectionString());
@@ -159,6 +162,7 @@ public class DeviceInfoCollectorService {
    * @return Uni with the device identification
    * @throws IllegalArgumentException if device not found or disabled
    */
+  @Transactional
   public Uni<DeviceIdentification> refreshDevice(Long deviceId) {
     ModbusDeviceEntity device = deviceRepository.findByIdOptional(deviceId)
       .orElseThrow(() -> new IllegalArgumentException("Device not found: " + deviceId));

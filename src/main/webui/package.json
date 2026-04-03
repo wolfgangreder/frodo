@@ -3,9 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "react-dom": "^19.2.4",
-    "react": "^19.2.4",
-    "react-scripts": "5.0.1"
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^6.4.0",
+    "@mui/material": "^6.4.0",
+    "@tanstack/react-query": "^5.64.0",
+    "axios": "^1.7.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.0",
+    "react-scripts": "5.0.1",
+    "zustand": "^5.0.3"
   },
   "scripts": {
     "start": "HOST=localhost PORT=3001 react-scripts start",

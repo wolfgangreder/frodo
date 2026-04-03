@@ -45,7 +45,7 @@ import java.util.List;
  *       Settings (121-123), Status (124-126), Controls (127-132)</li>
  * </ul>
  */
-@Path("/api/devices/{id}/sunspec")
+@Path("/devices/{id}/sunspec")
 @Produces(MediaType.APPLICATION_JSON)
 @Tag(name = "SunSpec", description = "SunSpec Modbus protocol endpoints for PV device data")
 public class SunSpecResource {

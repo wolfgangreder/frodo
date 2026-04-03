@@ -1,0 +1,264 @@
+import React, { useMemo, useState, useCallback } from 'react';
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  FormControlLabel,
+  TextField,
+  Typography,
+  InputAdornment,
+  Stack,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SearchIcon from '@mui/icons-material/Search';
+import SelectAllIcon from '@mui/icons-material/SelectAll';
+import DeselectIcon from '@mui/icons-material/Deselect';
+
+/**
+ * ParameterSelector - grouped parameter selection with search and select all/deselect all
+ *
+ * @param {Object} props
+ * @param {Array} props.availableParameters - Available parameters from discovery
+ * @param {Array} props.selectedParameters - Currently selected parameter keys (modelId_fieldName)
+ * @param {Function} props.onSelectionChange - Callback when selection changes
+ * @param {boolean} props.disabled - Whether the selector is disabled
+ */
+function ParameterSelector({ availableParameters = [], selectedParameters = [], onSelectionChange, disabled = false }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedModels, setExpandedModels] = useState({});
+
+  // Group parameters by model
+  const paramsByModel = useMemo(() => {
+    const groups = {};
+    for (const param of availableParameters) {
+      const key = param.modelId;
+      if (!groups[key]) {
+        groups[key] = {
+          modelId: param.modelId,
+          modelName: param.modelName,
+          fields: [],
+        };
+      }
+      groups[key].fields.push(param);
+    }
+    return Object.values(groups).sort((a, b) => a.modelId - b.modelId);
+  }, [availableParameters]);
+
+  // Filter by search term
+  const filteredGroups = useMemo(() => {
+    if (!searchTerm.trim()) return paramsByModel;
+
+    const term = searchTerm.toLowerCase();
+    return paramsByModel
+      .map((group) => ({
+        ...group,
+        fields: group.fields.filter(
+          (f) =>
+            f.fieldName.toLowerCase().includes(term) ||
+            (f.description && f.description.toLowerCase().includes(term)) ||
+            (f.units && f.units.toLowerCase().includes(term)) ||
+            group.modelName.toLowerCase().includes(term)
+        ),
+      }))
+      .filter((group) => group.fields.length > 0);
+  }, [paramsByModel, searchTerm]);
+
+  // Create a set for fast lookup
+  const selectedSet = useMemo(() => new Set(selectedParameters), [selectedParameters]);
+
+  const makeKey = (modelId, fieldName) => `${modelId}_${fieldName}`;
+
+  const handleToggle = useCallback(
+    (modelId, fieldName) => {
+      const key = makeKey(modelId, fieldName);
+      const newSelection = selectedSet.has(key)
+        ? selectedParameters.filter((k) => k !== key)
+        : [...selectedParameters, key];
+      onSelectionChange(newSelection);
+    },
+    [selectedParameters, selectedSet, onSelectionChange]
+  );
+
+  const handleSelectAllModel = useCallback(
+    (group) => {
+      const modelKeys = group.fields.map((f) => makeKey(group.modelId, f.fieldName));
+      const allSelected = modelKeys.every((k) => selectedSet.has(k));
+
+      let newSelection;
+      if (allSelected) {
+        // Deselect all in this model
+        const modelKeySet = new Set(modelKeys);
+        newSelection = selectedParameters.filter((k) => !modelKeySet.has(k));
+      } else {
+        // Select all in this model
+        const existing = new Set(selectedParameters);
+        modelKeys.forEach((k) => existing.add(k));
+        newSelection = [...existing];
+      }
+      onSelectionChange(newSelection);
+    },
+    [selectedParameters, selectedSet, onSelectionChange]
+  );
+
+  const handleSelectAll = useCallback(() => {
+    const allKeys = availableParameters.map((p) => makeKey(p.modelId, p.fieldName));
+    onSelectionChange(allKeys);
+  }, [availableParameters, onSelectionChange]);
+
+  const handleDeselectAll = useCallback(() => {
+    onSelectionChange([]);
+  }, [onSelectionChange]);
+
+  const handleAccordionChange = useCallback(
+    (modelId) => (_, isExpanded) => {
+      setExpandedModels((prev) => ({ ...prev, [modelId]: isExpanded }));
+    },
+    []
+  );
+
+  const totalSelected = selectedParameters.length;
+  const totalAvailable = availableParameters.length;
+
+  return (
+    <Box>
+      {/* Search and bulk actions */}
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }} alignItems="center">
+        <TextField
+          size="small"
+          placeholder="Search parameters..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          disabled={disabled}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{ flexGrow: 1 }}
+        />
+        <Stack direction="row" spacing={1}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<SelectAllIcon />}
+            onClick={handleSelectAll}
+            disabled={disabled || totalSelected === totalAvailable}
+          >
+            All
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<DeselectIcon />}
+            onClick={handleDeselectAll}
+            disabled={disabled || totalSelected === 0}
+          >
+            None
+          </Button>
+        </Stack>
+      </Stack>
+
+      {/* Selection summary */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        {totalSelected} of {totalAvailable} parameters selected
+      </Typography>
+
+      {/* Grouped parameter list */}
+      {filteredGroups.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+          {searchTerm ? 'No parameters match your search' : 'No parameters available'}
+        </Typography>
+      ) : (
+        filteredGroups.map((group) => {
+          const modelKeys = group.fields.map((f) => makeKey(group.modelId, f.fieldName));
+          const selectedInModel = modelKeys.filter((k) => selectedSet.has(k)).length;
+          const allSelected = selectedInModel === group.fields.length;
+
+          return (
+            <Accordion
+              key={group.modelId}
+              expanded={expandedModels[group.modelId] ?? false}
+              onChange={handleAccordionChange(group.modelId)}
+              disabled={disabled}
+              disableGutters
+              sx={{ '&:before': { display: 'none' } }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%', mr: 1 }}>
+                  <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+                    {group.modelName} (Model {group.modelId})
+                  </Typography>
+                  <Chip
+                    label={`${selectedInModel}/${group.fields.length}`}
+                    size="small"
+                    color={selectedInModel > 0 ? 'primary' : 'default'}
+                    variant={allSelected ? 'filled' : 'outlined'}
+                  />
+                </Stack>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
+                {/* Model-level select all */}
+                <Box sx={{ mb: 1, borderBottom: 1, borderColor: 'divider', pb: 1 }}>
+                  <Button
+                    size="small"
+                    onClick={() => handleSelectAllModel(group)}
+                    disabled={disabled}
+                  >
+                    {allSelected ? 'Deselect All' : 'Select All'} in {group.modelName}
+                  </Button>
+                </Box>
+
+                {/* Field checkboxes */}
+                {group.fields.map((field) => {
+                  const key = makeKey(group.modelId, field.fieldName);
+                  const isChecked = selectedSet.has(key);
+
+                  return (
+                    <Box key={key} sx={{ pl: 1 }}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={isChecked}
+                            onChange={() => handleToggle(group.modelId, field.fieldName)}
+                            disabled={disabled}
+                            size="small"
+                          />
+                        }
+                        label={
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {field.fieldName}
+                            </Typography>
+                            {field.units && (
+                              <Chip label={field.units} size="small" variant="outlined" sx={{ height: 20 }} />
+                            )}
+                            {field.description && (
+                              <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: { xs: 150, sm: 300 } }}>
+                                {field.description}
+                              </Typography>
+                            )}
+                          </Stack>
+                        }
+                        sx={{ width: '100%' }}
+                      />
+                    </Box>
+                  );
+                })}
+              </AccordionDetails>
+            </Accordion>
+          );
+        })
+      )}
+    </Box>
+  );
+}
+
+export default ParameterSelector;

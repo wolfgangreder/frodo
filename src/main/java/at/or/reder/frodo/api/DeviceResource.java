@@ -4,15 +4,13 @@ import at.or.reder.frodo.api.dto.*;
 import at.or.reder.frodo.api.exception.DeviceConnectionException;
 import at.or.reder.frodo.api.exception.DeviceNotFoundException;
 import at.or.reder.frodo.modbus.ModbusException;
-import at.or.reder.frodo.modbus.ModbusTcpService;
-import at.or.reder.frodo.modbus.cache.CachedDeviceInfo;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
-import at.or.reder.frodo.modbus.entity.ModbusDeviceInfoEntity;
 import at.or.reder.frodo.modbus.model.DeviceIdentification;
-import at.or.reder.frodo.modbus.model.ReadDeviceIdCode;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
+import at.or.reder.frodo.modbus.service.ConnectionTestService;
 import at.or.reder.frodo.modbus.service.DeviceInfoCacheService;
 import at.or.reder.frodo.modbus.service.DeviceInfoCollectorService;
+import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -38,7 +36,7 @@ import java.util.Optional;
  *
  * <p>Provides CRUD operations for devices and device identification retrieval.</p>
  */
-@Path("/api/devices")
+@Path("/devices")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Devices", description = "Modbus device management endpoints")
@@ -50,13 +48,13 @@ public class DeviceResource {
   ModbusDeviceRepository deviceRepository;
 
   @Inject
-  ModbusTcpService modbusTcpService;
-
-  @Inject
   DeviceInfoCacheService cacheService;
 
   @Inject
   DeviceInfoCollectorService collectorService;
+
+  @Inject
+  ConnectionTestService connectionTestService;
 
   /**
    * Lists all Modbus devices.
@@ -64,6 +62,7 @@ public class DeviceResource {
    * @return list of all devices
    */
   @GET
+  @Transactional
   @Operation(summary = "List all devices", description = "Returns a list of all configured Modbus devices")
   @APIResponses({
     @APIResponse(
@@ -91,6 +90,7 @@ public class DeviceResource {
    */
   @GET
   @Path("/{id}")
+  @Transactional
   @Operation(summary = "Get device details", description = "Returns detailed information for a specific device including cached device identification")
   @APIResponses({
     @APIResponse(
@@ -146,6 +146,58 @@ public class DeviceResource {
 
     DeviceDetailResponse response = toDeviceDetailResponse(device, true);
     return Response.status(Response.Status.CREATED).entity(response).build();
+  }
+
+  /**
+   * Tests connection to a Modbus device without saving.
+   *
+   * @param request connection test request
+   * @return connection test result
+   */
+  @POST
+  @Path("/test")
+  @Operation(
+    summary = "Test device connection",
+    description = "Tests connectivity to a Modbus device without saving the configuration. " +
+      "Attempts to establish a TCP connection and read device identification (FC 0x2B)."
+  )
+  @APIResponses({
+    @APIResponse(
+      responseCode = "200",
+      description = "Connection test completed",
+      content = @Content(schema = @Schema(implementation = ConnectionTestResponse.class))
+    ),
+    @APIResponse(
+      responseCode = "400",
+      description = "Validation error",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+  })
+  public Uni<ConnectionTestResponse> testConnection(@Valid ConnectionTestRequest request) {
+    LOG.infof("Testing connection: host=%s, port=%d, unitId=%d",
+      request.host(), request.port(), request.unitId());
+
+    return connectionTestService.testConnection(request.host(), request.port(), request.unitId())
+      .onItem().transform(result -> {
+        if (result.success() && result.hasIdentification()) {
+          var id = result.identification();
+          return ConnectionTestResponse.success(
+            id.vendorName(),
+            id.productCode(),
+            id.modelName(),
+            id.majorMinorRevision(),
+            result.responseTimeMs(),
+            result.detectionMethod()
+          );
+        } else if (result.success()) {
+          return ConnectionTestResponse.successWithoutIdentification(
+            result.responseTimeMs(),
+            result.detectionMethod()
+          );
+        } else {
+          return ConnectionTestResponse.failure(result.errorMessage(), result.responseTimeMs());
+        }
+      });
   }
 
   /**
@@ -235,6 +287,7 @@ public class DeviceResource {
    */
   @GET
   @Path("/{id}/info")
+  @Blocking
   @Operation(
     summary = "Get device identification",
     description = "Returns device identification data. By default, returns cached data if available. Use ?refresh=true to force a fresh read from the device."
@@ -264,25 +317,26 @@ public class DeviceResource {
   ) {
     LOG.debugf("Getting device info: id=%d, refresh=%b", id, Boolean.valueOf(refresh));
 
-    ModbusDeviceEntity device = deviceRepository.findByIdOptional(id)
-      .orElseThrow(() -> DeviceNotFoundException.forId(id));
+    return Uni.createFrom().item(() -> deviceRepository.findByIdOptional(id)
+      .orElseThrow(() -> DeviceNotFoundException.forId(id)))
+      .flatMap(device -> {
+        if (refresh) {
+          // Force fresh read from device
+          return refreshDeviceInfo(device);
+        } else {
+          // Try cache first
+          Optional<DeviceIdentification> cached = cacheService.get(id);
+          if (cached.isPresent()) {
+            LOG.debugf("Returning cached device info: id=%d", id);
+            DeviceIdentificationDto dto = DeviceIdentificationDto.fromModel(cached.get(), cached.get().readTime());
+            return Uni.createFrom().item(buildDeviceDetailWithIdentification(device, dto, cached.get().readTime(), true));
+          }
 
-    if (refresh) {
-      // Force fresh read from device
-      return refreshDeviceInfo(device);
-    } else {
-      // Try cache first
-      Optional<DeviceIdentification> cached = cacheService.get(id);
-      if (cached.isPresent()) {
-        LOG.debugf("Returning cached device info: id=%d", id);
-        DeviceIdentificationDto dto = DeviceIdentificationDto.fromModel(cached.get(), cached.get().readTime());
-        return Uni.createFrom().item(buildDeviceDetailWithIdentification(device, dto, cached.get().readTime(), true));
-      }
-
-      // Cache miss or expired, fetch from device
-      LOG.debugf("Cache miss or expired, fetching fresh device info: id=%d", id);
-      return refreshDeviceInfo(device);
-    }
+          // Cache miss or expired, fetch from device
+          LOG.debugf("Cache miss or expired, fetching fresh device info: id=%d", id);
+          return refreshDeviceInfo(device);
+        }
+      });
   }
 
   /**
@@ -293,6 +347,7 @@ public class DeviceResource {
    */
   @POST
   @Path("/{id}/info/refresh")
+  @Blocking
   @Operation(
     summary = "Refresh device identification",
     description = "Manually triggers a fresh read of device identification data from the Modbus device"
@@ -319,10 +374,9 @@ public class DeviceResource {
     @PathParam("id") Long id
   ) {
     LOG.infof("Manual refresh requested: id=%d", id);
-    ModbusDeviceEntity device = deviceRepository.findByIdOptional(id)
-      .orElseThrow(() -> DeviceNotFoundException.forId(id));
-
-    return refreshDeviceInfo(device);
+    return Uni.createFrom().item(() -> deviceRepository.findByIdOptional(id)
+      .orElseThrow(() -> DeviceNotFoundException.forId(id)))
+      .flatMap(this::refreshDeviceInfo);
   }
 
   // ========== Private Helper Methods ==========

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    Phase 3: Server-Side Metrics Collection
+    Adds tables for per-device metrics scraping configuration, parameter selection,
+    and long-term metrics data storage.
+  -->
+
+  <changeSet id="4" author="frodo">
+    <comment>Create FroMetricsConfig table for per-device metrics scraping configuration</comment>
+
+    <createTable tableName="FroMetricsConfig">
+      <column name="id" type="BIGINT">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="device_id" type="BIGINT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="scrape_interval_seconds" type="INTEGER" defaultValueNumeric="30">
+        <constraints nullable="false"/>
+      </column>
+      <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+        <constraints nullable="false"/>
+      </column>
+      <column name="store_to_database" type="BOOLEAN" defaultValueBoolean="true">
+        <constraints nullable="false"/>
+      </column>
+      <column name="retention_days" type="INTEGER" defaultValueNumeric="365">
+        <constraints nullable="false"/>
+      </column>
+      <column name="last_scrape_time" type="TIMESTAMP"/>
+      <column name="last_scrape_status" type="VARCHAR(20)"/>
+      <column name="last_error_message" type="VARCHAR(500)"/>
+      <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <addForeignKeyConstraint
+        baseTableName="FroMetricsConfig"
+        baseColumnNames="device_id"
+        referencedTableName="FroModbusDevice"
+        referencedColumnNames="id"
+        constraintName="fk_FroMetricsConfig_device"
+        onDelete="CASCADE"/>
+
+    <addUniqueConstraint
+        tableName="FroMetricsConfig"
+        columnNames="device_id"
+        constraintName="uk_FroMetricsConfig_device"/>
+
+    <sql>ALTER TABLE FroMetricsConfig ADD CONSTRAINT ck_FroMetricsConfig_interval CHECK (scrape_interval_seconds BETWEEN 5 AND 300)</sql>
+    <sql>ALTER TABLE FroMetricsConfig ADD CONSTRAINT ck_FroMetricsConfig_retention CHECK (retention_days BETWEEN 1 AND 3650)</sql>
+  </changeSet>
+
+  <changeSet id="5" author="frodo">
+    <comment>Create FroMetricsParameter table for per-device parameter selection</comment>
+
+    <createTable tableName="FroMetricsParameter">
+      <column name="id" type="BIGINT">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="config_id" type="BIGINT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="sunspec_model_id" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+      <column name="field_name" type="VARCHAR(100)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+        <constraints nullable="false"/>
+      </column>
+      <column name="custom_metric_name" type="VARCHAR(100)"/>
+    </createTable>
+
+    <addForeignKeyConstraint
+        baseTableName="FroMetricsParameter"
+        baseColumnNames="config_id"
+        referencedTableName="FroMetricsConfig"
+        referencedColumnNames="id"
+        constraintName="fk_FroMetricsParam_config"
+        onDelete="CASCADE"/>
+
+    <createIndex tableName="FroMetricsParameter" indexName="idx_FroMetricsParam_config">
+      <column name="config_id"/>
+    </createIndex>
+  </changeSet>
+
+  <changeSet id="6" author="frodo">
+    <comment>Create FroMetricsData table for long-term metrics storage</comment>
+
+    <createTable tableName="FroMetricsData">
+      <column name="id" type="BIGINT">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="device_id" type="BIGINT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="parameter_id" type="BIGINT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="recorded_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="value_numeric" type="DOUBLE"/>
+      <column name="value_string" type="VARCHAR(255)"/>
+      <column name="sunspec_model_id" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+      <column name="field_name" type="VARCHAR(100)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <addForeignKeyConstraint
+        baseTableName="FroMetricsData"
+        baseColumnNames="device_id"
+        referencedTableName="FroModbusDevice"
+        referencedColumnNames="id"
+        constraintName="fk_FroMetricsData_device"
+        onDelete="CASCADE"/>
+
+    <addForeignKeyConstraint
+        baseTableName="FroMetricsData"
+        baseColumnNames="parameter_id"
+        referencedTableName="FroMetricsParameter"
+        referencedColumnNames="id"
+        constraintName="fk_FroMetricsData_param"
+        onDelete="CASCADE"/>
+
+    <!-- Firebird cannot create indexes with mixed ASC/DESC columns,
+         so composite indexes use all-ASC. Firebird can still scan them in reverse
+         for ORDER BY recorded_at DESC queries. -->
+    <createIndex tableName="FroMetricsData" indexName="idx_FroMetricsData_device_time">
+      <column name="device_id"/>
+      <column name="recorded_at"/>
+    </createIndex>
+
+    <createIndex tableName="FroMetricsData" indexName="idx_FroMetricsData_param_time">
+      <column name="parameter_id"/>
+      <column name="recorded_at"/>
+    </createIndex>
+
+    <!-- Single-column DESC index for global time-range queries -->
+    <sql>CREATE DESC INDEX idx_FroMetricsData_time ON FroMetricsData (recorded_at)</sql>
+  </changeSet>
+
+  <changeSet id="7" author="frodo">
+    <comment>Create sequences for metrics entities (Firebird does not support autoincrement)</comment>
+
+    <sql>CREATE SEQUENCE FroMetricsConfig_SEQ START WITH 1 INCREMENT BY 50</sql>
+    <sql>CREATE SEQUENCE FroMetricsParameter_SEQ START WITH 1 INCREMENT BY 50</sql>
+    <sql>CREATE SEQUENCE FroMetricsData_SEQ START WITH 1 INCREMENT BY 50</sql>
+  </changeSet>
+
+</databaseChangeLog>

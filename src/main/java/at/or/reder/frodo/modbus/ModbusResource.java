@@ -16,7 +16,7 @@ import java.util.List;
 /**
  * REST endpoint for reading Modbus device registers via TCP.
  */
-@Path("/api/modbus")
+@Path("/modbus")
 @Tag(name = "Modbus", description = "Modbus TCP device access endpoints")
 public class ModbusResource {
 
