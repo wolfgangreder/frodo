@@ -22,3 +22,14 @@ export {
   useUpdateMetricsConfig,
   metricsKeys,
 } from './useMetricsConfig';
+
+export {
+  useSunSpecDiscovery,
+  useSunSpecCommon,
+  useSunSpecInverter,
+  useSunSpecStorage,
+  useSunSpecStatus,
+  useSunSpecNameplate,
+  useSunSpecMppt,
+  sunspecKeys,
+} from './useSunSpec';

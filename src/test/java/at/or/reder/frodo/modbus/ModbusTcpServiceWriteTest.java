@@ -279,6 +279,6 @@ class ModbusTcpServiceWriteTest {
   void testModbusExceptionIsRuntimeException() {
     ModbusException ex = new ModbusException(0x03, 0x01);
     assertTrue(ex instanceof RuntimeException,
-      "ModbusException should extend RuntimeException for Mutiny compatibility");
+      "ModbusException should extend RuntimeException for transparent propagation");
   }
 }

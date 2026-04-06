@@ -15,6 +15,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import InfoIcon from '@mui/icons-material/Info';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import TimelineIcon from '@mui/icons-material/Timeline';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import RouterIcon from '@mui/icons-material/Router';
 
 /**
@@ -50,6 +51,7 @@ function StatusChip({ status }) {
  * @param {Function} props.onViewInfo - Callback when view info is clicked
  * @param {Function} props.onRefreshInfo - Callback when refresh info is clicked
  * @param {Function} props.onMetrics - Callback when metrics is clicked
+ * @param {Function} props.onDashboard - Callback when dashboard is clicked
  * @param {boolean} props.isRefreshing - Whether info is being refreshed
  */
 function DeviceCard({
@@ -59,6 +61,7 @@ function DeviceCard({
   onViewInfo,
   onRefreshInfo,
   onMetrics,
+  onDashboard,
   isRefreshing = false,
 }) {
   return (
@@ -109,6 +112,15 @@ function DeviceCard({
       <Divider />
 
       <CardActions sx={{ justifyContent: 'flex-end' }}>
+        <Tooltip title="Device Dashboard">
+          <IconButton
+            size="small"
+            onClick={() => onDashboard?.(device)}
+            color="success"
+          >
+            <DashboardIcon />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Metrics Configuration">
           <IconButton
             size="small"

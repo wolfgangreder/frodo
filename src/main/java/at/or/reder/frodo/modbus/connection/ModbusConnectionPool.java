@@ -1,41 +1,36 @@
 package at.or.reder.frodo.modbus.connection;
 
 import io.quarkus.runtime.ShutdownEvent;
-import io.quarkus.runtime.Startup;
-import io.quarkus.runtime.StartupEvent;
-import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.io.IOException;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 
 /**
- * Manages the lifecycle of Modbus connection and request queue.
- * Integrates connection establishment, request serialization, and statistics.
+ * Manages Modbus TCP connections keyed by host:port.
+ *
+ * <p>Multiple unit IDs on the same host:port share a single
+ * {@link ModbusConnection}, since the unit ID is encoded in the
+ * MBAP frame header. Connections are created lazily on the first
+ * request to a given host:port and reused for subsequent requests.</p>
+ *
+ * <p>Each {@link ModbusConnection} internally serializes requests
+ * via a fair lock with inter-request delay.</p>
  */
 @ApplicationScoped
-@Startup
 public class ModbusConnectionPool {
 
   private static final Logger LOG = Logger.getLogger(ModbusConnectionPool.class);
 
-  @Inject
-  ModbusConnection connection;
-
-  @Inject
-  ModbusRequestQueue requestQueue;
-
   @ConfigProperty(name = "frodo.modbus.enabled", defaultValue = "false")
   boolean modbusEnabled;
-
-  @ConfigProperty(name = "frodo.modbus.device.host", defaultValue = "localhost")
-  String deviceHost;
-
-  @ConfigProperty(name = "frodo.modbus.device.port", defaultValue = "502")
-  int devicePort;
 
   @ConfigProperty(name = "frodo.modbus.connection.timeout-seconds", defaultValue = "30")
   int connectionTimeoutSeconds;
@@ -46,102 +41,176 @@ public class ModbusConnectionPool {
   @ConfigProperty(name = "frodo.modbus.connection.reconnect-max-delay-seconds", defaultValue = "60")
   int reconnectMaxDelaySeconds;
 
-  @ConfigProperty(name = "frodo.modbus.request.queue-capacity", defaultValue = "50")
-  int queueCapacity;
-
   @ConfigProperty(name = "frodo.modbus.request.timeout-seconds", defaultValue = "10")
   int requestTimeoutSeconds;
 
-  void onStart(@Observes StartupEvent event) {
-    if (!modbusEnabled) {
-      LOG.info("Modbus connection pool disabled");
-      return;
-    }
-
-    LOG.infof("Initializing Modbus connection pool (host=%s, port=%d)", deviceHost, devicePort);
-
-    // Initialize connection
-    connection.initialize(
-      deviceHost,
-      devicePort,
-      Duration.ofSeconds(connectionTimeoutSeconds),
-      reconnectInitialDelaySeconds,
-      reconnectMaxDelaySeconds
-    );
-
-    // Initialize and start queue
-    requestQueue.initialize(queueCapacity);
-    requestQueue.start();
-
-    // Establish initial connection
-    connection.connect()
-      .subscribe()
-      .with(
-        v -> LOG.info("Modbus connection pool started successfully"),
-        ex -> LOG.errorf(ex, "Failed to establish initial connection, will retry automatically")
-      );
-  }
+  /** Active connections keyed by "host:port". */
+  private final Map<String, ModbusConnection> connections = new ConcurrentHashMap<>();
 
   void onStop(@Observes ShutdownEvent event) {
-    if (!modbusEnabled) {
-      return;
-    }
-
     LOG.info("Shutting down Modbus connection pool");
-
-    requestQueue.stop();
-    connection.disconnect()
-      .subscribe()
-      .with(
-        v -> LOG.info("Modbus connection pool stopped"),
-        ex -> LOG.warnf(ex, "Error during connection pool shutdown")
-      );
+    for (Map.Entry<String, ModbusConnection> entry : connections.entrySet()) {
+      entry.getValue().disconnect();
+      LOG.debugf("Disconnected connection to %s", entry.getKey());
+    }
+    connections.clear();
+    LOG.info("Modbus connection pool stopped");
   }
 
   /**
-   * Executes a Modbus request through the connection pool.
+   * Executes a Modbus request routed to the correct device.
    *
-   * @param requestFrame    raw Modbus TCP frame (MBAP + PDU)
-   * @param transactionId   transaction ID for response correlation
-   * @return Uni resolving to response bytes
+   * <p>Looks up (or creates) a connection for the device's host:port,
+   * then delegates request execution to that connection. The connection
+   * handles serialization, reconnection, and timeout internally.</p>
+   *
+   * @param address        target device address (host, port, unitId)
+   * @param requestFrame   raw Modbus TCP frame (MBAP + PDU)
+   * @param transactionId  transaction ID for response correlation
+   * @return response bytes
+   * @throws IOException          if an I/O error occurs
+   * @throws TimeoutException     if the request times out
+   * @throws IllegalStateException if Modbus is disabled
    */
-  public Uni<byte[]> executeRequest(byte[] requestFrame, int transactionId) {
+  public byte[] executeRequest(DeviceAddress address, byte[] requestFrame, int transactionId)
+    throws IOException, TimeoutException {
+
     if (!modbusEnabled) {
-      return Uni.createFrom().failure(
-        new IllegalStateException("Modbus is disabled")
-      );
+      throw new IllegalStateException("Modbus is disabled");
     }
 
+    ModbusConnection connection = getOrCreateConnection(address);
     ModbusRequest request = new ModbusRequest(
       requestFrame,
       transactionId,
       Duration.ofSeconds(requestTimeoutSeconds)
     );
 
-    return requestQueue.enqueue(request);
+    return connection.executeRequest(request);
   }
 
   /**
-   * Returns current connection statistics.
+   * Gets an existing connection for the host:port, or creates a new one.
    *
-   * @return ConnectionStats with current state, queue size, and counters
+   * @param address device address (host and port are used as the key)
+   * @return the connection for this host:port
    */
-  public ConnectionStats getStats() {
-    return new ConnectionStats(
-      connection.getState(),
-      requestQueue.getQueueSize(),
-      connection.getLastSuccessTime(),
-      connection.getTotalRequests(),
-      connection.getFailedRequests()
-    );
+  private ModbusConnection getOrCreateConnection(DeviceAddress address) {
+    String key = address.connectionKey();
+    return connections.computeIfAbsent(key, k -> {
+      LOG.infof("Creating new Modbus connection for %s", key);
+      return new ModbusConnection(
+        address.host(),
+        address.port(),
+        Duration.ofSeconds(connectionTimeoutSeconds),
+        reconnectInitialDelaySeconds,
+        reconnectMaxDelaySeconds
+      );
+    });
   }
 
   /**
-   * Checks if the connection pool is healthy.
+   * Returns current connection statistics for a specific host:port.
    *
-   * @return true if Modbus is enabled and connection is healthy
+   * @param connectionKey the connection key ("host:port")
+   * @return ConnectionStats, or stats with DISCONNECTED state if no connection exists
+   */
+  public ConnectionStats getStats(String connectionKey) {
+    ModbusConnection connection = connections.get(connectionKey);
+    if (connection == null) {
+      return new ConnectionStats(ConnectionState.DISCONNECTED, 0, null, 0, 0);
+    }
+    return connection.getStats();
+  }
+
+  /**
+   * Returns aggregated connection statistics across all connections.
+   *
+   * <p>Used by health checks and metrics. The state is CONNECTED if any
+   * connection is connected, FAILED if any failed, DISCONNECTED otherwise.</p>
+   *
+   * @return aggregated ConnectionStats
+   */
+  public ConnectionStats getAggregatedStats() {
+    if (connections.isEmpty()) {
+      return new ConnectionStats(ConnectionState.DISCONNECTED, 0, null, 0, 0);
+    }
+
+    ConnectionState worstState = ConnectionState.DISCONNECTED;
+    int totalQueueSize = 0;
+    long totalRequests = 0;
+    long totalFailed = 0;
+    java.time.Instant latestSuccess = null;
+
+    for (ModbusConnection conn : connections.values()) {
+      ConnectionStats stats = conn.getStats();
+      totalQueueSize += stats.queueSize();
+      totalRequests += stats.totalRequests();
+      totalFailed += stats.failedRequests();
+
+      if (stats.lastSuccessTime() != null) {
+        if (latestSuccess == null || stats.lastSuccessTime().isAfter(latestSuccess)) {
+          latestSuccess = stats.lastSuccessTime();
+        }
+      }
+
+      // Determine worst state: FAILED > CONNECTING > CONNECTED > DISCONNECTED
+      if (stats.state() == ConnectionState.CONNECTED && worstState == ConnectionState.DISCONNECTED) {
+        worstState = ConnectionState.CONNECTED;
+      } else if (stats.state() == ConnectionState.FAILED) {
+        worstState = ConnectionState.FAILED;
+      }
+    }
+
+    return new ConnectionStats(worstState, totalQueueSize, latestSuccess, totalRequests, totalFailed);
+  }
+
+  /**
+   * Checks if Modbus is enabled and at least one connection is healthy.
+   *
+   * @return true if Modbus is enabled and at least one connection is healthy
    */
   public boolean isHealthy() {
-    return modbusEnabled && connection.isHealthy();
+    if (!modbusEnabled) {
+      return false;
+    }
+    if (connections.isEmpty()) {
+      // No connections yet is OK (lazy creation)
+      return true;
+    }
+    return connections.values().stream().anyMatch(ModbusConnection::isHealthy);
+  }
+
+  /**
+   * Returns the number of active connections.
+   *
+   * @return number of host:port connections currently managed
+   */
+  public int getConnectionCount() {
+    return connections.size();
+  }
+
+  /**
+   * Returns all active connection keys.
+   *
+   * @return collection of "host:port" keys
+   */
+  public Collection<String> getConnectionKeys() {
+    return connections.keySet();
+  }
+
+  /**
+   * Removes and disconnects the connection for a specific host:port.
+   *
+   * <p>Useful when a device is deleted or its connection settings change.</p>
+   *
+   * @param connectionKey the connection key ("host:port")
+   */
+  public void removeConnection(String connectionKey) {
+    ModbusConnection connection = connections.remove(connectionKey);
+    if (connection != null) {
+      connection.disconnect();
+      LOG.infof("Removed connection for %s", connectionKey);
+    }
   }
 }

@@ -56,7 +56,7 @@ class SunSpecHealthCheckTest {
     healthCheck.modbusEnabled = true;
     healthCheck.discoveryRequired = false;
     when(sunSpecService.getDiscoveryCacheSize()).thenReturn(0);
-    when(sunSpecService.getCachedUnitIds()).thenReturn(Set.of());
+    when(sunSpecService.getCachedDeviceKeys()).thenReturn(Set.of());
 
     HealthCheckResponse response = healthCheck.call();
 
@@ -68,7 +68,7 @@ class SunSpecHealthCheckTest {
     healthCheck.modbusEnabled = true;
     healthCheck.discoveryRequired = true;
     when(sunSpecService.getDiscoveryCacheSize()).thenReturn(0);
-    when(sunSpecService.getCachedUnitIds()).thenReturn(Set.of());
+    when(sunSpecService.getCachedDeviceKeys()).thenReturn(Set.of());
 
     HealthCheckResponse response = healthCheck.call();
 
@@ -82,6 +82,7 @@ class SunSpecHealthCheckTest {
     healthCheck.modbusEnabled = true;
     healthCheck.discoveryRequired = true;
 
+    String deviceKey = "localhost:502/1";
     List<SunSpecModelBlock> models = List.of(
       new SunSpecModelBlock(1, 40002, 66),
       new SunSpecModelBlock(113, 40070, 60)
@@ -90,8 +91,8 @@ class SunSpecHealthCheckTest {
       40000, models, Instant.now().minus(1, ChronoUnit.HOURS));
 
     when(sunSpecService.getDiscoveryCacheSize()).thenReturn(1);
-    when(sunSpecService.getCachedUnitIds()).thenReturn(Set.of(1));
-    when(sunSpecService.getCachedDiscovery(1)).thenReturn(Optional.of(recent));
+    when(sunSpecService.getCachedDeviceKeys()).thenReturn(Set.of(deviceKey));
+    when(sunSpecService.getCachedDiscovery(deviceKey)).thenReturn(Optional.of(recent));
 
     HealthCheckResponse response = healthCheck.call();
 
@@ -105,6 +106,7 @@ class SunSpecHealthCheckTest {
     healthCheck.modbusEnabled = true;
     healthCheck.discoveryRequired = true;
 
+    String deviceKey = "localhost:502/1";
     List<SunSpecModelBlock> models = List.of(
       new SunSpecModelBlock(1, 40002, 66)
     );
@@ -112,8 +114,8 @@ class SunSpecHealthCheckTest {
       40000, models, Instant.now().minus(48, ChronoUnit.HOURS));
 
     when(sunSpecService.getDiscoveryCacheSize()).thenReturn(1);
-    when(sunSpecService.getCachedUnitIds()).thenReturn(Set.of(1));
-    when(sunSpecService.getCachedDiscovery(1)).thenReturn(Optional.of(expired));
+    when(sunSpecService.getCachedDeviceKeys()).thenReturn(Set.of(deviceKey));
+    when(sunSpecService.getCachedDiscovery(deviceKey)).thenReturn(Optional.of(expired));
 
     HealthCheckResponse response = healthCheck.call();
 
@@ -127,6 +129,8 @@ class SunSpecHealthCheckTest {
     healthCheck.modbusEnabled = true;
     healthCheck.discoveryRequired = true;
 
+    String deviceKey1 = "localhost:502/1";
+    String deviceKey2 = "localhost:502/2";
     List<SunSpecModelBlock> models = List.of(
       new SunSpecModelBlock(1, 40002, 66)
     );
@@ -137,9 +141,9 @@ class SunSpecHealthCheckTest {
       40000, models, Instant.now().minus(2, ChronoUnit.HOURS));
 
     when(sunSpecService.getDiscoveryCacheSize()).thenReturn(2);
-    when(sunSpecService.getCachedUnitIds()).thenReturn(Set.of(1, 2));
-    when(sunSpecService.getCachedDiscovery(1)).thenReturn(Optional.of(expired));
-    when(sunSpecService.getCachedDiscovery(2)).thenReturn(Optional.of(valid));
+    when(sunSpecService.getCachedDeviceKeys()).thenReturn(Set.of(deviceKey1, deviceKey2));
+    when(sunSpecService.getCachedDiscovery(deviceKey1)).thenReturn(Optional.of(expired));
+    when(sunSpecService.getCachedDiscovery(deviceKey2)).thenReturn(Optional.of(valid));
 
     HealthCheckResponse response = healthCheck.call();
 
@@ -153,6 +157,7 @@ class SunSpecHealthCheckTest {
     healthCheck.modbusEnabled = true;
     healthCheck.discoveryRequired = false;
 
+    String deviceKey = "localhost:502/1";
     List<SunSpecModelBlock> models = List.of(
       new SunSpecModelBlock(1, 40002, 66),
       new SunSpecModelBlock(113, 40070, 60),
@@ -162,12 +167,12 @@ class SunSpecHealthCheckTest {
       40000, models, Instant.now());
 
     when(sunSpecService.getDiscoveryCacheSize()).thenReturn(1);
-    when(sunSpecService.getCachedUnitIds()).thenReturn(Set.of(1));
-    when(sunSpecService.getCachedDiscovery(1)).thenReturn(Optional.of(result));
+    when(sunSpecService.getCachedDeviceKeys()).thenReturn(Set.of(deviceKey));
+    when(sunSpecService.getCachedDiscovery(deviceKey)).thenReturn(Optional.of(result));
 
     HealthCheckResponse response = healthCheck.call();
 
     assertEquals(HealthCheckResponse.Status.UP, response.getStatus());
-    assertEquals(3L, response.getData().get().get("unit.1.models"));
+    assertEquals(3L, response.getData().get().get("device." + deviceKey + ".models"));
   }
 }

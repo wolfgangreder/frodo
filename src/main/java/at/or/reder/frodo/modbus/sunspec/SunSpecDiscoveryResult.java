@@ -60,6 +60,28 @@ public record SunSpecDiscoveryResult(
   }
 
   /**
+   * Finds an inverter model block matching the preferred format.
+   *
+   * <p>First searches for an inverter model matching the given format
+   * (e.g. Int&amp;SF models 101-103, or Float models 111-113). If no
+   * match is found for the preferred format, falls back to any
+   * inverter model present in the chain.</p>
+   *
+   * @param preferredFormat the preferred model format (INT_SF or FLOAT)
+   * @return Optional containing the matching inverter model block
+   */
+  public Optional<SunSpecModelBlock> findInverterModel(SunSpecModelFormat preferredFormat) {
+    Optional<SunSpecModelBlock> preferred = models.stream()
+      .filter(m -> preferredFormat.matchesInverterModel(m.modelId()))
+      .findFirst();
+    if (preferred.isPresent()) {
+      return preferred;
+    }
+    // Fall back to any inverter model
+    return findInverterModel();
+  }
+
+  /**
    * Checks whether a specific model is present.
    *
    * @param modelId SunSpec model ID

@@ -61,7 +61,7 @@ public class ModbusHealthCheck implements HealthCheck {
         .build();
     }
 
-    ConnectionStats stats = connectionPool.getStats();
+    ConnectionStats stats = connectionPool.getAggregatedStats();
     boolean poolHealthy = connectionPool.isHealthy();
 
     builder.withData("modbus.enabled", true)

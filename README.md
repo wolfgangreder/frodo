@@ -8,7 +8,7 @@ Frodo is a Quarkus 3.x server application for Modbus TCP communication with PV (
 |---------|-----------|
 | REST API | Quarkus REST + Jackson |
 | API Documentation | SmallRye OpenAPI / Swagger UI |
-| Modbus TCP | Vert.x NetClient with connection pooling & request queue |
+| Modbus TCP | java.net.Socket with connection pooling & fair-lock request queue |
 | SunSpec Protocol | Model chain discovery, typed register decoding (Float & Int+SF) |
 | Device Management | CRUD API, database-backed config, scheduled info collection |
 | Monitoring | Micrometer Prometheus metrics (JVM, Modbus, SunSpec) |

@@ -36,7 +36,6 @@ function DevicesPage() {
     deleteDevice,
     isDeleting,
     testConnection,
-    isTesting,
   } = useDevices();
 
   // Dialog states
@@ -138,6 +137,15 @@ function DevicesPage() {
    */
   const handleMetrics = useCallback((device) => {
     navigate(`/devices/${device.id}/metrics`);
+  }, [navigate]);
+
+  /**
+   * Navigate to dashboard for a device
+   */
+  const handleDashboard = useCallback((device) => {
+    // Set the device in sessionStorage so the dashboard page picks it up
+    sessionStorage.setItem('dashboard.selectedDeviceId', String(device.id));
+    navigate('/');
   }, [navigate]);
 
   /**
@@ -277,6 +285,7 @@ function DevicesPage() {
         onViewInfo={handleViewInfo}
         onRefreshInfo={(device) => handleRefreshInfo(device.id)}
         onMetrics={handleMetrics}
+        onDashboard={handleDashboard}
         isRefreshing={refreshDeviceInfo.isPending}
       />
 

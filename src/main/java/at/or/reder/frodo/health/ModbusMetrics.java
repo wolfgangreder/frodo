@@ -157,12 +157,12 @@ public class ModbusMetrics {
   // --- Gauge value suppliers ---
 
   private double connectionActive() {
-    ConnectionStats stats = connectionPool.getStats();
+    ConnectionStats stats = connectionPool.getAggregatedStats();
     return stats.state() == ConnectionState.CONNECTED ? 1.0 : 0.0;
   }
 
   private double queueSize() {
-    return connectionPool.getStats().queueSize();
+    return connectionPool.getAggregatedStats().queueSize();
   }
 
   private double deviceCacheTotal() {

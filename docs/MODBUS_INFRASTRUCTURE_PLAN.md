@@ -1,9 +1,17 @@
 # Modbus Basic Infrastructure Implementation Plan
 ## Frodo PV Device Connection System
 
-**Version:** 1.0  
-**Date:** March 2026  
-**Status:** Ready for Implementation
+**Version:** 1.1  
+**Date:** April 2026  
+**Status:** Implemented
+
+> **Note (April 2026):** The implementation was refactored from a reactive programming
+> model (Mutiny `Uni<T>`, Vert.x Mutiny sockets) to a traditional blocking/imperative
+> model. All `Uni<T>` return types were replaced with direct synchronous returns, Vert.x
+> `NetClient`/`NetSocket` was replaced with `java.net.Socket`, and reactive retry chains
+> were replaced with simple for-loops and `Thread.sleep()`. The `quarkus-vertx` dependency
+> was removed. The plan below retains the original reactive API signatures for historical
+> reference, but the actual implementation uses blocking I/O throughout.
 
 ---
 
@@ -44,8 +52,8 @@ This plan details the implementation of a robust Modbus TCP infrastructure for c
                  │
 ┌────────────────▼────────────────────────────────────────────┐
 │         Connection Infrastructure                            │
-│  ModbusConnectionPool → ModbusConnection → Vert.x Socket   │
-│  ModbusRequestQueue (Serialization)                         │
+│  ModbusConnectionPool → ModbusConnection → java.net.Socket  │
+│  ModbusRequestQueue (Fair-Lock Serialization)                │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────▼────────────────────────────────────────────┐

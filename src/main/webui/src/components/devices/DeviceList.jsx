@@ -19,6 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import InfoIcon from '@mui/icons-material/Info';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import TimelineIcon from '@mui/icons-material/Timeline';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import DeviceCard from './DeviceCard';
 
 /**
@@ -68,6 +69,7 @@ function EnabledChip({ enabled }) {
  * @param {Function} props.onViewInfo - Callback when view info is clicked
  * @param {Function} props.onRefreshInfo - Callback when refresh info is clicked
  * @param {Function} props.onMetrics - Callback when metrics is clicked
+ * @param {Function} props.onDashboard - Callback when dashboard is clicked
  * @param {boolean} props.isRefreshing - Whether info is being refreshed
  */
 function DeviceList({
@@ -77,6 +79,7 @@ function DeviceList({
   onViewInfo,
   onRefreshInfo,
   onMetrics,
+  onDashboard,
   isRefreshing = false,
 }) {
   const theme = useTheme();
@@ -95,6 +98,7 @@ function DeviceList({
             onViewInfo={onViewInfo}
             onRefreshInfo={onRefreshInfo}
             onMetrics={onMetrics}
+            onDashboard={onDashboard}
             isRefreshing={isRefreshing}
           />
         ))}
@@ -138,6 +142,15 @@ function DeviceList({
               </TableCell>
               <TableCell align="right">
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                  <Tooltip title="Device Dashboard">
+                    <IconButton
+                      size="small"
+                      onClick={() => onDashboard?.(device)}
+                      color="success"
+                    >
+                      <DashboardIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="Metrics Configuration">
                     <IconButton
                       size="small"

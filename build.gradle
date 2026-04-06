@@ -42,9 +42,6 @@ dependencies {
     // Docker container image generation
     implementation 'io.quarkus:quarkus-container-image-docker'
 
-    // Vert.x for raw TCP/HTTP support (Modbus device access)
-    implementation 'io.quarkus:quarkus-vertx'
-
     // Modbus protocol library (raw TCP/serial access to Modbus devices)
     implementation 'com.ghgande:j2mod:3.3.0'
 
