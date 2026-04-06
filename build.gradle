@@ -49,7 +49,7 @@ dependencies {
     implementation 'com.ghgande:j2mod:3.3.0'
 
     // React UI via Quinoa (builds and serves the frontend)
-    implementation 'io.quarkiverse.quinoa:quarkus-quinoa:2.7.2'
+    implementation 'io.quarkiverse.quinoa:quarkus-quinoa:2.8.0'
 
     implementation 'io.quarkus:quarkus-arc'
     testImplementation 'io.quarkus:quarkus-junit'
