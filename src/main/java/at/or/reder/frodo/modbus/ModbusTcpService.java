@@ -1,25 +1,31 @@
 package at.or.reder.frodo.modbus;
 
+import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.connection.ModbusConnectionPool;
 import at.or.reder.frodo.modbus.model.DeviceIdentification;
 import at.or.reder.frodo.modbus.model.ModbusObjectId;
 import at.or.reder.frodo.modbus.model.ReadDeviceIdCode;
-import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Service for accessing Modbus devices over TCP using connection pooling.
  * Supports Modbus TCP protocol (MBAP header + PDU).
+ *
+ * <p>All public methods accept a {@link DeviceAddress} that identifies
+ * the target device by host, port, and unit ID. The connection pool
+ * routes requests to the correct TCP connection based on host:port.</p>
  *
  * <p>Supported function codes:</p>
  * <ul>
@@ -63,124 +69,125 @@ public class ModbusTcpService {
   @Inject
   ModbusConnectionPool connectionPool;
 
-    @ConfigProperty(name = "frodo.modbus.enabled", defaultValue = "false")
-    boolean modbusEnabled;
+  @ConfigProperty(name = "frodo.modbus.enabled", defaultValue = "false")
+  boolean modbusEnabled;
 
-    @ConfigProperty(name = "frodo.modbus.write-enabled", defaultValue = "false")
-    boolean writeEnabled;
+  @ConfigProperty(name = "frodo.modbus.write-enabled", defaultValue = "false")
+  boolean writeEnabled;
 
-    @ConfigProperty(name = "frodo.modbus.request.max-retries", defaultValue = "3")
-    int maxRetries;
+  @ConfigProperty(name = "frodo.modbus.request.max-retries", defaultValue = "3")
+  int maxRetries;
 
-    @ConfigProperty(name = "frodo.modbus.request.retry-delay-seconds", defaultValue = "2")
-    int retryDelaySeconds;
+  @ConfigProperty(name = "frodo.modbus.request.retry-delay-seconds", defaultValue = "2")
+  int retryDelaySeconds;
 
-    private final AtomicInteger transactionIdCounter = new AtomicInteger(1);
+  private final AtomicInteger transactionIdCounter = new AtomicInteger(1);
 
-    /**
-     * Reads holding registers from a Modbus TCP device.
-     *
-     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3 (FC 0x03)</p>
-     *
-     * @param unitId    Modbus unit/device ID (1-247)
-     * @param startAddr starting register address (0-based)
-     * @param count     number of registers to read
-     * @return Uni resolving to an array of register values
-     */
-    public Uni<int[]> readHoldingRegisters(int unitId, int startAddr, int count) {
-        if (!modbusEnabled) {
-            LOG.debug("Modbus is disabled, returning empty response");
-            return Uni.createFrom().item(new int[0]);
-        }
+  /**
+   * Reads holding registers from a Modbus TCP device.
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3 (FC 0x03)</p>
+   *
+   * @param address   target device address (host, port, unitId)
+   * @param startAddr starting register address (0-based)
+   * @param count     number of registers to read
+   * @return array of register values
+   * @throws IOException      if communication fails after retries
+   * @throws TimeoutException if the request times out
+   */
+  public int[] readHoldingRegisters(DeviceAddress address, int startAddr, int count)
+    throws IOException, TimeoutException {
 
-        int transactionId = getNextTransactionId();
-        byte[] request = buildReadHoldingRegistersRequest(unitId, startAddr, count, transactionId);
-
-        return connectionPool.executeRequest(request, transactionId)
-                .onItem().transform(response -> parseReadHoldingRegistersResponse(response, count))
-                .onFailure().retry()
-                    .withBackOff(Duration.ofSeconds(retryDelaySeconds))
-                    .atMost(maxRetries)
-                .onFailure().invoke(e -> LOG.errorf(e, "Failed to read holding registers after %d retries", maxRetries));
+    if (!modbusEnabled) {
+      LOG.debug("Modbus is disabled, returning empty response");
+      return new int[0];
     }
 
-    /**
-     * Gets the next transaction ID (thread-safe, wraps at 0xFFFF).
-     *
-     * @return next transaction ID in range 0-65535
-     */
-    private int getNextTransactionId() {
-        return transactionIdCounter.updateAndGet(x -> (x + 1) & 0xFFFF);
-    }
+    return executeWithRetry(() -> {
+      int transactionId = getNextTransactionId();
+      byte[] request = buildReadHoldingRegistersRequest(address.unitId(), startAddr, count, transactionId);
+      byte[] response = connectionPool.executeRequest(address, request, transactionId);
+      return parseReadHoldingRegistersResponse(response, count);
+    }, "read holding registers from " + address);
+  }
 
-    /**
-     * Builds a Modbus TCP Read Holding Registers (FC=03) request frame.
-     *
-     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3</p>
-     * <p>Request PDU: Function code (1 byte) + Starting Address (2 bytes) + Quantity (2 bytes)</p>
-     *
-     * @param unitId        Modbus unit/device ID
-     * @param startAddr     starting register address
-     * @param count         number of registers to read
-     * @param transactionId transaction ID for request
-     * @return complete Modbus TCP frame (MBAP + PDU)
-     */
-    static byte[] buildReadHoldingRegistersRequest(int unitId, int startAddr, int count, int transactionId) {
-        byte[] pdu = {
-                0x03,                       // Function code: Read Holding Registers
-                (byte) (startAddr >> 8),    // Starting address high byte
-                (byte) (startAddr & 0xFF),  // Starting address low byte
-                (byte) (count >> 8),        // Quantity high byte
-                (byte) (count & 0xFF)       // Quantity low byte
-        };
-        return buildMbapFrame(transactionId, unitId, pdu);
-    }
+  /**
+   * Gets the next transaction ID (thread-safe, wraps at 0xFFFF).
+   *
+   * @return next transaction ID in range 0-65535
+   */
+  private int getNextTransactionId() {
+    return transactionIdCounter.updateAndGet(x -> (x + 1) & 0xFFFF);
+  }
 
-    /**
-     * Wraps a PDU in a Modbus TCP MBAP header.
-     * Frame structure: Transaction ID (2) + Protocol ID (2) + Length (2) + Unit ID (1) + PDU (n)
-     *
-     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 4.1 (MBAP Header)</p>
-     *
-     * @param transactionId transaction ID for request
-     * @param unitId        Modbus unit/device ID
-     * @param pdu           Protocol Data Unit (function code + data)
-     * @return complete Modbus TCP frame with MBAP header
-     */
-    static byte[] buildMbapFrame(int transactionId, int unitId, byte[] pdu) {
-        byte[] frame = new byte[7 + pdu.length]; // 6 (MBAP) + 1 (unitId) + PDU
-        frame[0] = (byte) (transactionId >> 8);   // Transaction ID high
-        frame[1] = (byte) (transactionId & 0xFF); // Transaction ID low
-        frame[2] = 0x00;                           // Protocol ID high (always 0)
-        frame[3] = 0x00;                           // Protocol ID low (always 0)
-        int length = 1 + pdu.length;               // Unit ID byte + PDU length
-        frame[4] = (byte) (length >> 8);           // Length high
-        frame[5] = (byte) (length & 0xFF);         // Length low
-        frame[6] = (byte) unitId;                  // Unit identifier
-        System.arraycopy(pdu, 0, frame, 7, pdu.length);
-        return frame;
-    }
+  /**
+   * Builds a Modbus TCP Read Holding Registers (FC=03) request frame.
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3</p>
+   * <p>Request PDU: Function code (1 byte) + Starting Address (2 bytes) + Quantity (2 bytes)</p>
+   *
+   * @param unitId        Modbus unit/device ID
+   * @param startAddr     starting register address
+   * @param count         number of registers to read
+   * @param transactionId transaction ID for request
+   * @return complete Modbus TCP frame (MBAP + PDU)
+   */
+  public static byte[] buildReadHoldingRegistersRequest(int unitId, int startAddr, int count, int transactionId) {
+    byte[] pdu = {
+      0x03,                       // Function code: Read Holding Registers
+      (byte) (startAddr >> 8),    // Starting address high byte
+      (byte) (startAddr & 0xFF),  // Starting address low byte
+      (byte) (count >> 8),        // Quantity high byte
+      (byte) (count & 0xFF)       // Quantity low byte
+    };
+    return buildMbapFrame(transactionId, unitId, pdu);
+  }
 
-    /**
-     * Parses a Modbus TCP Read Holding Registers response.
-     *
-     * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3</p>
-     * <p>Response PDU: Function code (1 byte) + Byte count (1 byte) + Register values (N*2 bytes)</p>
-     *
-     * @param response      complete Modbus TCP response frame
-     * @param expectedCount expected number of registers (for validation)
-     * @return array of register values
-     * @throws IllegalArgumentException if response is malformed or incomplete
-     */
-    static int[] parseReadHoldingRegistersResponse(byte[] response, int expectedCount) {
-        if (response.length < 9) {
-            throw new IllegalArgumentException("Response too short: " + response.length);
-        }
-        int byteCount = response[8] & 0xFF;
-        if (response.length < 9 + byteCount) {
-            throw new IllegalArgumentException("Incomplete response");
-        }
-        int regCount = byteCount / 2;
+  /**
+   * Wraps a PDU in a Modbus TCP MBAP header.
+   * Frame structure: Transaction ID (2) + Protocol ID (2) + Length (2) + Unit ID (1) + PDU (n)
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 4.1 (MBAP Header)</p>
+   *
+   * @param transactionId transaction ID for request
+   * @param unitId        Modbus unit/device ID
+   * @param pdu           Protocol Data Unit (function code + data)
+   * @return complete Modbus TCP frame with MBAP header
+   */
+  public static byte[] buildMbapFrame(int transactionId, int unitId, byte[] pdu) {
+    byte[] frame = new byte[7 + pdu.length]; // 6 (MBAP) + 1 (unitId) + PDU
+    frame[0] = (byte) (transactionId >> 8);   // Transaction ID high
+    frame[1] = (byte) (transactionId & 0xFF); // Transaction ID low
+    frame[2] = 0x00;                           // Protocol ID high (always 0)
+    frame[3] = 0x00;                           // Protocol ID low (always 0)
+    int length = 1 + pdu.length;               // Unit ID byte + PDU length
+    frame[4] = (byte) (length >> 8);           // Length high
+    frame[5] = (byte) (length & 0xFF);         // Length low
+    frame[6] = (byte) unitId;                  // Unit identifier
+    System.arraycopy(pdu, 0, frame, 7, pdu.length);
+    return frame;
+  }
+
+  /**
+   * Parses a Modbus TCP Read Holding Registers response.
+   *
+   * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.3</p>
+   * <p>Response PDU: Function code (1 byte) + Byte count (1 byte) + Register values (N*2 bytes)</p>
+   *
+   * @param response      complete Modbus TCP response frame
+   * @param expectedCount expected number of registers (for validation)
+   * @return array of register values
+   * @throws IllegalArgumentException if response is malformed or incomplete
+   */
+  static int[] parseReadHoldingRegistersResponse(byte[] response, int expectedCount) {
+    if (response.length < 9) {
+      throw new IllegalArgumentException("Response too short: " + response.length);
+    }
+    int byteCount = response[8] & 0xFF;
+    if (response.length < 9 + byteCount) {
+      throw new IllegalArgumentException("Incomplete response");
+    }
+    int regCount = byteCount / 2;
     int[] registers = new int[regCount];
     for (int i = 0; i < regCount; i++) {
       registers[i] = ((response[9 + i * 2] & 0xFF) << 8) | (response[10 + i * 2] & 0xFF);
@@ -201,66 +208,50 @@ public class ModbusTcpService {
    * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.21
    * (Encapsulated Interface Transport, MEI Type 0x0E)</p>
    *
-   * @param unitId   Modbus unit/device ID (1-247)
+   * @param address  target device address (host, port, unitId)
    * @param readCode the identification level to request
-   * @return Uni resolving to the device identification data
+   * @return the device identification data
+   * @throws IOException      if communication fails after retries
+   * @throws TimeoutException if the request times out
    */
-  public Uni<DeviceIdentification> readDeviceIdentification(int unitId, ReadDeviceIdCode readCode) {
+  public DeviceIdentification readDeviceIdentification(DeviceAddress address, ReadDeviceIdCode readCode)
+    throws IOException, TimeoutException {
+
     if (!modbusEnabled) {
       LOG.debug("Modbus is disabled, returning empty device identification");
-      return Uni.createFrom().item(DeviceIdentification.basic("", "", "", Instant.now()));
+      return DeviceIdentification.basic("", "", "", Instant.now());
     }
 
-    Map<Integer, String> collectedObjects = new HashMap<>();
-    return readDeviceIdSegment(unitId, readCode, ModbusObjectId.VENDOR_NAME, collectedObjects, 0)
-      .onFailure().retry()
-        .withBackOff(Duration.ofSeconds(retryDelaySeconds))
-        .atMost(maxRetries)
-      .onFailure().invoke(e -> LOG.errorf(e, "Failed to read device identification after %d retries", maxRetries));
-  }
+    return executeWithRetry(() -> {
+      Map<Integer, String> collectedObjects = new HashMap<>();
+      int startObjectId = ModbusObjectId.VENDOR_NAME;
+      int segmentCount = 0;
 
-  /**
-   * Reads a single segment of a device identification response, recursively
-   * issuing continuation requests if "More Follows" is indicated.
-   *
-   * @param unitId           Modbus unit/device ID
-   * @param readCode         the identification level to request
-   * @param startObjectId    the object ID to start from (0x00 for first, or continuation ID)
-   * @param collectedObjects accumulated objects from previous segments
-   * @param segmentCount     number of continuation requests made so far (safety limit)
-   * @return Uni resolving to the merged DeviceIdentification
-   */
-  private Uni<DeviceIdentification> readDeviceIdSegment(int unitId, ReadDeviceIdCode readCode,
-                                                        int startObjectId,
-                                                        Map<Integer, String> collectedObjects,
-                                                        int segmentCount) {
-    if (segmentCount >= MAX_CONTINUATION_REQUESTS) {
-      LOG.warnf("Exceeded maximum continuation requests (%d) for device identification on unit %d",
-        MAX_CONTINUATION_REQUESTS, unitId);
-      return Uni.createFrom().item(buildDeviceIdentification(collectedObjects));
-    }
+      while (segmentCount < MAX_CONTINUATION_REQUESTS) {
+        int transactionId = getNextTransactionId();
+        byte[] request = buildReadDeviceIdentificationRequest(
+          address.unitId(), readCode, startObjectId, transactionId);
+        byte[] response = connectionPool.executeRequest(address, request, transactionId);
+        ParsedDeviceIdResponse parsed = parseReadDeviceIdentificationResponse(response);
+        collectedObjects.putAll(parsed.objects());
 
-    int transactionId = getNextTransactionId();
-    byte[] request = buildReadDeviceIdentificationRequest(unitId, readCode, startObjectId, transactionId);
-
-    return connectionPool.executeRequest(request, transactionId)
-      .onItem().transformToUni(response -> {
-        try {
-          ParsedDeviceIdResponse parsed = parseReadDeviceIdentificationResponse(response);
-          collectedObjects.putAll(parsed.objects());
-
-          if (parsed.moreFollows() && parsed.nextObjectId() >= 0) {
-            LOG.debugf("More follows for device identification on unit %d, next object ID: 0x%02X",
-              unitId, parsed.nextObjectId());
-            return readDeviceIdSegment(unitId, readCode, parsed.nextObjectId(),
-              collectedObjects, segmentCount + 1);
-          }
-
-          return Uni.createFrom().item(buildDeviceIdentification(collectedObjects));
-        } catch (ModbusException e) {
-          return Uni.createFrom().failure(e);
+        if (!parsed.moreFollows() || parsed.nextObjectId() < 0) {
+          break;
         }
-      });
+
+        LOG.debugf("More follows for device identification on %s, next object ID: 0x%02X",
+          address, parsed.nextObjectId());
+        startObjectId = parsed.nextObjectId();
+        segmentCount++;
+      }
+
+      if (segmentCount >= MAX_CONTINUATION_REQUESTS) {
+        LOG.warnf("Exceeded maximum continuation requests (%d) for device identification on %s",
+          MAX_CONTINUATION_REQUESTS, address);
+      }
+
+      return buildDeviceIdentification(collectedObjects);
+    }, "read device identification from " + address);
   }
 
   /**
@@ -281,8 +272,8 @@ public class ModbusTcpService {
    * @param transactionId transaction ID for request
    * @return complete Modbus TCP frame (MBAP + PDU)
    */
-  static byte[] buildReadDeviceIdentificationRequest(int unitId, ReadDeviceIdCode readCode,
-                                                     int objectId, int transactionId) {
+  public static byte[] buildReadDeviceIdentificationRequest(int unitId, ReadDeviceIdCode readCode,
+                                                              int objectId, int transactionId) {
     byte[] pdu = {
       (byte) FC_READ_DEVICE_IDENTIFICATION,  // Function code: 0x2B
       (byte) MEI_TYPE_READ_DEVICE_ID,        // MEI Type: 0x0E
@@ -422,39 +413,35 @@ public class ModbusTcpService {
    * Writes a single holding register on a Modbus TCP device.
    *
    * <p>This operation is guarded by the {@code frodo.modbus.write-enabled}
-   * configuration property. When disabled, it returns a failed Uni.</p>
+   * configuration property. When disabled, it throws an exception.</p>
    *
    * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.6 (FC 0x06)</p>
    *
-   * @param unitId  Modbus unit/device ID (1-247)
-   * @param address register address to write
+   * @param address target device address (host, port, unitId)
+   * @param regAddr register address to write
    * @param value   value to write (0-65535)
-   * @return Uni that completes when the write is acknowledged
    * @throws IllegalStateException if write operations are disabled
+   * @throws IOException           if communication fails after retries
+   * @throws TimeoutException      if the request times out
    */
-  public Uni<Void> writeSingleRegister(int unitId, int address, int value) {
+  public void writeSingleRegister(DeviceAddress address, int regAddr, int value)
+    throws IOException, TimeoutException {
+
     if (!writeEnabled) {
-      return Uni.createFrom().failure(
-        new IllegalStateException("Write operations are disabled. Set frodo.modbus.write-enabled=true to enable."));
+      throw new IllegalStateException("Write operations are disabled. Set frodo.modbus.write-enabled=true to enable.");
     }
     if (!modbusEnabled) {
       LOG.debug("Modbus is disabled, skipping write");
-      return Uni.createFrom().voidItem();
+      return;
     }
 
-    int transactionId = getNextTransactionId();
-    byte[] request = buildWriteSingleRegisterRequest(unitId, address, value, transactionId);
-
-    return connectionPool.executeRequest(request, transactionId)
-      .onItem().transform(response -> {
-        parseWriteSingleRegisterResponse(response);
-        return null;
-      })
-      .replaceWithVoid()
-      .onFailure().retry()
-        .withBackOff(Duration.ofSeconds(retryDelaySeconds))
-        .atMost(maxRetries)
-      .onFailure().invoke(e -> LOG.errorf(e, "Failed to write single register at address %d", address));
+    executeWithRetry(() -> {
+      int transactionId = getNextTransactionId();
+      byte[] request = buildWriteSingleRegisterRequest(address.unitId(), regAddr, value, transactionId);
+      byte[] response = connectionPool.executeRequest(address, request, transactionId);
+      parseWriteSingleRegisterResponse(response);
+      return null;
+    }, "write single register at address " + regAddr + " on " + address);
   }
 
   /**
@@ -513,48 +500,41 @@ public class ModbusTcpService {
    * Writes multiple holding registers on a Modbus TCP device.
    *
    * <p>This operation is guarded by the {@code frodo.modbus.write-enabled}
-   * configuration property. When disabled, it returns a failed Uni.</p>
+   * configuration property. When disabled, it throws an exception.</p>
    *
    * <p><b>Protocol Reference:</b> {@code refdoc/modbus.pdf} Section 6.16 (FC 0x10)</p>
    *
-   * @param unitId    Modbus unit/device ID (1-247)
+   * @param address   target device address (host, port, unitId)
    * @param startAddr starting register address
    * @param values    values to write (each 0-65535)
-   * @return Uni that completes when the write is acknowledged
    * @throws IllegalStateException if write operations are disabled
+   * @throws IOException           if communication fails after retries
+   * @throws TimeoutException      if the request times out
    */
-  public Uni<Void> writeMultipleRegisters(int unitId, int startAddr, int[] values) {
+  public void writeMultipleRegisters(DeviceAddress address, int startAddr, int[] values)
+    throws IOException, TimeoutException {
+
     if (!writeEnabled) {
-      return Uni.createFrom().failure(
-        new IllegalStateException("Write operations are disabled. Set frodo.modbus.write-enabled=true to enable."));
+      throw new IllegalStateException("Write operations are disabled. Set frodo.modbus.write-enabled=true to enable.");
     }
     if (!modbusEnabled) {
       LOG.debug("Modbus is disabled, skipping write");
-      return Uni.createFrom().voidItem();
+      return;
     }
     if (values == null || values.length == 0) {
-      return Uni.createFrom().failure(
-        new IllegalArgumentException("Values array must not be empty"));
+      throw new IllegalArgumentException("Values array must not be empty");
     }
     if (values.length > 123) {
-      return Uni.createFrom().failure(
-        new IllegalArgumentException("Cannot write more than 123 registers at once"));
+      throw new IllegalArgumentException("Cannot write more than 123 registers at once");
     }
 
-    int transactionId = getNextTransactionId();
-    byte[] request = buildWriteMultipleRegistersRequest(unitId, startAddr, values, transactionId);
-
-    return connectionPool.executeRequest(request, transactionId)
-      .onItem().transform(response -> {
-        parseWriteMultipleRegistersResponse(response, values.length);
-        return null;
-      })
-      .replaceWithVoid()
-      .onFailure().retry()
-        .withBackOff(Duration.ofSeconds(retryDelaySeconds))
-        .atMost(maxRetries)
-      .onFailure().invoke(e -> LOG.errorf(e, "Failed to write %d registers at address %d",
-        values.length, startAddr));
+    executeWithRetry(() -> {
+      int transactionId = getNextTransactionId();
+      byte[] request = buildWriteMultipleRegistersRequest(address.unitId(), startAddr, values, transactionId);
+      byte[] response = connectionPool.executeRequest(address, request, transactionId);
+      parseWriteMultipleRegistersResponse(response, values.length);
+      return null;
+    }, "write " + values.length + " registers at address " + startAddr + " on " + address);
   }
 
   /**
@@ -625,5 +605,60 @@ public class ModbusTcpService {
    */
   public boolean isWriteEnabled() {
     return writeEnabled;
+  }
+
+  // ---- Retry logic ----
+
+  /**
+   * Executes a Modbus operation with retry logic and exponential backoff.
+   *
+   * @param operation    the operation to execute
+   * @param description  description for logging
+   * @param <T>          return type
+   * @return the operation result
+   * @throws IOException      if all retries fail due to I/O errors
+   * @throws TimeoutException if all retries fail due to timeouts
+   */
+  private <T> T executeWithRetry(ModbusOperation<T> operation, String description)
+    throws IOException, TimeoutException {
+
+    Exception lastException = null;
+    long delayMs = Duration.ofSeconds(retryDelaySeconds).toMillis();
+
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return operation.execute();
+      } catch (Exception e) {
+        lastException = e;
+        if (attempt < maxRetries) {
+          LOG.warnf("Attempt %d/%d failed for %s: %s, retrying in %d ms",
+            attempt + 1, maxRetries + 1, description, e.getMessage(), delayMs);
+          try {
+            Thread.sleep(delayMs);
+          } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Retry interrupted for " + description, ie);
+          }
+          delayMs = Math.min(delayMs * 2, Duration.ofSeconds(retryDelaySeconds * 4).toMillis());
+        }
+      }
+    }
+
+    LOG.errorf(lastException, "Failed to %s after %d retries", description, maxRetries);
+    if (lastException instanceof IOException ioe) {
+      throw ioe;
+    }
+    if (lastException instanceof TimeoutException te) {
+      throw te;
+    }
+    throw new IOException("Failed to " + description + " after " + maxRetries + " retries", lastException);
+  }
+
+  /**
+   * Functional interface for a Modbus operation that can throw checked exceptions.
+   */
+  @FunctionalInterface
+  interface ModbusOperation<T> {
+    T execute() throws Exception;
   }
 }

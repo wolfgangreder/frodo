@@ -1,5 +1,6 @@
 package at.or.reder.frodo.modbus.service;
 
+import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.entity.MetricsDataEntity;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
@@ -12,7 +13,6 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
-import io.vertx.mutiny.core.Vertx;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -24,6 +24,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -31,8 +35,8 @@ import java.util.stream.Collectors;
  * Service that manages periodic metrics scraping for configured devices.
  *
  * <p>For each device with an enabled metrics config, this service schedules
- * a Vert.x periodic timer that reads SunSpec model data at the configured
- * interval. Scraped values are:</p>
+ * a periodic task that reads SunSpec model data at the configured interval.
+ * Scraped values are:</p>
  * <ul>
  *   <li>Published as Prometheus gauges via Micrometer (for Grafana dashboards)</li>
  *   <li>Optionally persisted to the database for long-term storage</li>
@@ -58,13 +62,19 @@ public class MetricsScrapingService {
   @Inject
   MeterRegistry meterRegistry;
 
-  @Inject
-  Vertx vertx;
+  /**
+   * Thread pool for scheduled scraping tasks.
+   */
+  private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
+    Thread t = new Thread(r, "metrics-scraper");
+    t.setDaemon(true);
+    return t;
+  });
 
   /**
-   * Map of device ID to Vert.x periodic timer ID.
+   * Map of device ID to scheduled future handle.
    */
-  private final Map<Long, Long> scheduledTimers = new ConcurrentHashMap<>();
+  private final Map<Long, ScheduledFuture<?>> scheduledTimers = new ConcurrentHashMap<>();
 
   /**
    * Gauge value cache: deviceId -> fieldKey -> current value.
@@ -94,15 +104,16 @@ public class MetricsScrapingService {
   }
 
   /**
-   * On application shutdown, cancel all scheduled timers.
+   * On application shutdown, cancel all scheduled timers and shut down the executor.
    */
   void onStop(@Observes ShutdownEvent event) {
     LOG.info("Shutting down metrics scraping service");
-    scheduledTimers.forEach((deviceId, timerId) -> {
-      vertx.cancelTimer(timerId);
+    scheduledTimers.forEach((deviceId, future) -> {
+      future.cancel(false);
       LOG.debugf("Cancelled scraping timer for device %d", deviceId);
     });
     scheduledTimers.clear();
+    scheduler.shutdownNow();
   }
 
   /**
@@ -134,11 +145,13 @@ public class MetricsScrapingService {
     // Register Prometheus gauges for enabled parameters
     registerGauges(config);
 
-    // Schedule periodic scraping via Vert.x timer
-    long intervalMs = config.scrapeIntervalSeconds * 1000L;
-    long timerId = vertx.setPeriodic(intervalMs, id -> scrapeDevice(config));
+    // Schedule periodic scraping
+    long intervalSeconds = config.scrapeIntervalSeconds;
+    ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
+      () -> scrapeDevice(config),
+      intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
 
-    scheduledTimers.put(deviceId, timerId);
+    scheduledTimers.put(deviceId, future);
     LOG.infof("Scheduled metrics scraping for device %d (%s) every %d seconds (%d parameters)",
       deviceId, config.device.name, config.scrapeIntervalSeconds, enabledParams);
   }
@@ -149,9 +162,9 @@ public class MetricsScrapingService {
    * @param deviceId device ID
    */
   public void cancelDeviceScraping(Long deviceId) {
-    Long existingTimerId = scheduledTimers.remove(deviceId);
-    if (existingTimerId != null) {
-      vertx.cancelTimer(existingTimerId);
+    ScheduledFuture<?> existing = scheduledTimers.remove(deviceId);
+    if (existing != null) {
+      existing.cancel(false);
       LOG.debugf("Cancelled scraping timer for device %d", deviceId);
     }
   }
@@ -231,10 +244,13 @@ public class MetricsScrapingService {
    * <p>Groups enabled parameters by SunSpec model ID for efficient reads,
    * then reads each model and updates gauge values. Optionally persists
    * data points to the database.</p>
+   *
+   * <p>All model reads are performed sequentially on the scraping thread.
+   * Status is updated once after all models have been read.</p>
    */
   private void scrapeDevice(MetricsConfigEntity config) {
     Long deviceId = config.device.id;
-    int unitId = config.device.unitId;
+    DeviceAddress address = DeviceAddress.fromEntity(config.device);
     Instant scrapeTime = Instant.now();
 
     // Group enabled parameters by model ID
@@ -242,24 +258,48 @@ public class MetricsScrapingService {
       .filter(p -> p.enabled)
       .collect(Collectors.groupingBy(p -> p.sunspecModelId));
 
+    if (paramsByModel.isEmpty()) {
+      return;
+    }
+
+    boolean anyFailed = false;
+    String firstError = null;
+
     for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : paramsByModel.entrySet()) {
       int modelId = entry.getKey();
       List<MetricsParameterEntity> params = entry.getValue();
 
-      sunSpecService.readModel(unitId, modelId)
-        .subscribe().with(
-          modelData -> onModelReadSuccess(config, deviceId, modelId, params, modelData, scrapeTime),
-          error -> onModelReadFailure(config, deviceId, modelId, error)
-        );
+      try {
+        SunSpecModelData modelData = sunSpecService.readModel(address, modelId);
+        processModelReadSuccess(config, deviceId, modelId, params, modelData, scrapeTime);
+      } catch (Exception error) {
+        LOG.warnf("Failed to scrape model %d from device %d: %s",
+          modelId, deviceId, error.getMessage());
+        anyFailed = true;
+        if (firstError == null) {
+          firstError = error.getMessage();
+        }
+      }
+    }
+
+    // Update scrape status once after all models are done
+    try {
+      if (anyFailed) {
+        updateScrapeStatus(config.id, ScrapeStatus.FAILED, firstError);
+      } else {
+        updateScrapeStatus(config.id, ScrapeStatus.SUCCESS, null);
+      }
+    } catch (Exception e) {
+      LOG.warnf(e, "Failed to update scrape status for device %d", deviceId);
     }
   }
 
   /**
-   * Handles a successful model read: updates gauges and optionally persists data.
+   * Processes a successful model read: updates gauges and optionally persists data.
    */
-  private void onModelReadSuccess(MetricsConfigEntity config, Long deviceId, int modelId,
-                                   List<MetricsParameterEntity> params,
-                                   SunSpecModelData modelData, Instant scrapeTime) {
+  private void processModelReadSuccess(MetricsConfigEntity config, Long deviceId, int modelId,
+                                        List<MetricsParameterEntity> params,
+                                        SunSpecModelData modelData, Instant scrapeTime) {
     List<MetricsDataEntity> dataPoints = new ArrayList<>();
 
     for (MetricsParameterEntity param : params) {
@@ -304,17 +344,6 @@ public class MetricsScrapingService {
         LOG.warnf(e, "Failed to persist metrics data for device %d model %d", deviceId, modelId);
       }
     }
-
-    updateScrapeStatus(config, ScrapeStatus.SUCCESS, null);
-  }
-
-  /**
-   * Handles a failed model read.
-   */
-  private void onModelReadFailure(MetricsConfigEntity config, Long deviceId, int modelId, Throwable error) {
-    LOG.warnf("Failed to scrape model %d from device %d: %s",
-      modelId, deviceId, error.getMessage());
-    updateScrapeStatus(config, ScrapeStatus.FAILED, error.getMessage());
   }
 
   /**
@@ -326,13 +355,20 @@ public class MetricsScrapingService {
   }
 
   /**
-   * Updates the scrape status on the config entity.
+   * Updates the scrape status using a direct JPQL UPDATE query.
+   *
+   * <p>This avoids loading/attaching the entity and reduces lock duration.
+   * The query updates only the status columns for the specific config ID,
+   * so concurrent updates to different configs cannot deadlock each other.</p>
+   *
+   * @param configId the metrics config entity ID
+   * @param status the new scrape status
+   * @param errorMessage optional error message (null on success)
    */
   @Transactional
-  void updateScrapeStatus(MetricsConfigEntity config, ScrapeStatus status, String errorMessage) {
-    config.lastScrapeTime = Instant.now();
-    config.lastScrapeStatus = status;
-    config.lastErrorMessage = errorMessage;
-    configRepository.persist(config);
+  void updateScrapeStatus(Long configId, ScrapeStatus status, String errorMessage) {
+    configRepository.update(
+      "lastScrapeTime = ?1, lastScrapeStatus = ?2, lastErrorMessage = ?3 where id = ?4",
+      Instant.now(), status, errorMessage, configId);
   }
 }

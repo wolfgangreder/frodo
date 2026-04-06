@@ -1,20 +1,19 @@
 package at.or.reder.frodo.modbus.service;
 
+import at.or.reder.frodo.modbus.ModbusTcpService;
 import at.or.reder.frodo.modbus.model.DeviceIdentification;
 import at.or.reder.frodo.modbus.model.ModbusObjectId;
 import at.or.reder.frodo.modbus.model.ReadDeviceIdCode;
-import io.smallrye.mutiny.Uni;
-import io.vertx.mutiny.core.Vertx;
-import io.vertx.mutiny.core.buffer.Buffer;
-import io.vertx.mutiny.core.net.NetClient;
-import io.vertx.mutiny.core.net.NetSocket;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -44,26 +43,20 @@ public class ConnectionTestService {
 
   private static final Logger LOG = Logger.getLogger(ConnectionTestService.class);
 
+  /** Exception response flag: high bit set on function code. */
+  private static final int EXCEPTION_RESPONSE_FLAG = 0x80;
+
   /** Function code for Read Holding Registers. */
   private static final int FC_READ_HOLDING_REGISTERS = 0x03;
 
   /** Function code for Read Device Identification (Encapsulated Interface Transport). */
   private static final int FC_READ_DEVICE_IDENTIFICATION = 0x2B;
 
-  /** MEI type for Read Device Identification. */
-  private static final int MEI_TYPE_READ_DEVICE_ID = 0x0E;
-
-  /** Exception response flag: high bit set on function code. */
-  private static final int EXCEPTION_RESPONSE_FLAG = 0x80;
-
   /** SunSpec base register address (40001 in Modbus addressing = 40000 in protocol). */
   private static final int SUNSPEC_BASE_ADDRESS = 40000;
 
   /** SunSpec "SunS" signature: 0x53756e53. */
   private static final String SUNSPEC_SIGNATURE = "SunS";
-
-  @Inject
-  Vertx vertx;
 
   @ConfigProperty(name = "frodo.modbus.connection.test-timeout-seconds", defaultValue = "10")
   int testTimeoutSeconds;
@@ -77,187 +70,141 @@ public class ConnectionTestService {
    * @param host   hostname or IP address
    * @param port   Modbus TCP port
    * @param unitId Modbus unit ID
-   * @return Uni with test result
+   * @return test result
    */
-  public Uni<TestResult> testConnection(String host, int port, int unitId) {
+  public TestResult testConnection(String host, int port, int unitId) {
     LOG.infof("Testing connection to %s:%d (unit %d)", host, port, unitId);
     long startTime = System.currentTimeMillis();
 
     // Step 1: Read SunSpec signature via FC 0x03 (primary test)
-    return readSunSpecSignature(host, port, unitId)
-      .onItem().transformToUni(signature -> {
-        long elapsed = System.currentTimeMillis() - startTime;
-        boolean isSunSpec = SUNSPEC_SIGNATURE.equals(signature);
-        LOG.infof("SunSpec signature read: '%s' (isSunSpec=%b, %dms)", signature, isSunSpec, elapsed);
+    String signature;
+    try {
+      signature = readSunSpecSignature(host, port, unitId);
+    } catch (Exception ex) {
+      long elapsed = System.currentTimeMillis() - startTime;
+      LOG.warnf("Connection test failed for %s:%d (unit %d): %s", host, port, unitId, ex.getMessage());
+      return new TestResult(false, elapsed, null, ex.getMessage(), null);
+    }
 
-        // Step 2: Try to get device identification on a separate connection (optional enrichment)
-        return readDeviceIdentification(host, port, unitId)
-          .onItem().transform(identification -> {
-            String method = isSunSpec ? "SunSpec" : "Modbus";
-            return new TestResult(true, System.currentTimeMillis() - startTime,
-              identification, null, method);
-          })
-          .onFailure().recoverWithItem(ex -> {
-            LOG.debugf("Device identification enrichment failed (non-critical): %s", ex.getMessage());
-            String method = isSunSpec ? "SunSpec" : "Modbus";
-            return new TestResult(true, elapsed, null, null, method);
-          });
-      })
-      .onFailure().recoverWithItem(ex -> {
-        long elapsed = System.currentTimeMillis() - startTime;
-        LOG.warnf("Connection test failed for %s:%d (unit %d): %s", host, port, unitId, ex.getMessage());
-        return new TestResult(false, elapsed, null, ex.getMessage(), null);
-      });
+    long elapsed = System.currentTimeMillis() - startTime;
+    boolean isSunSpec = SUNSPEC_SIGNATURE.equals(signature);
+    LOG.infof("SunSpec signature read: '%s' (isSunSpec=%b, %dms)", signature, isSunSpec, elapsed);
+
+    // Step 2: Try to get device identification on a separate connection (optional enrichment)
+    String method = isSunSpec ? "SunSpec" : "Modbus";
+    try {
+      DeviceIdentification identification = readDeviceIdentification(host, port, unitId);
+      return new TestResult(true, System.currentTimeMillis() - startTime,
+        identification, null, method);
+    } catch (Exception ex) {
+      LOG.debugf("Device identification enrichment failed (non-critical): %s", ex.getMessage());
+      return new TestResult(true, elapsed, null, null, method);
+    }
   }
 
   /**
    * Opens a fresh TCP connection and reads the SunSpec signature at register 40000.
    *
-   * @return Uni containing the 4-character ASCII string read from registers 40000-40001
+   * @return the 4-character ASCII string read from registers 40000-40001
+   * @throws IOException if connection or read fails
    */
-  private Uni<String> readSunSpecSignature(String host, int port, int unitId) {
+  private String readSunSpecSignature(String host, int port, int unitId) throws IOException {
     int transactionId = transactionIdCounter.getAndIncrement() & 0xFFFF;
-    byte[] request = buildReadHoldingRegistersRequest(unitId, SUNSPEC_BASE_ADDRESS, 2, transactionId);
-    NetClient netClient = vertx.createNetClient();
+    byte[] request = ModbusTcpService.buildReadHoldingRegistersRequest(unitId, SUNSPEC_BASE_ADDRESS, 2, transactionId);
 
-    return netClient.connect(port, host)
-      .ifNoItem().after(Duration.ofSeconds(testTimeoutSeconds))
-      .failWith(() -> new RuntimeException("TCP connection timeout"))
-      .onItem().transformToUni(socket ->
-        sendAndReceive(socket, request, "SunSpec signature", transactionId, unitId)
-          .onItem().transform(response -> parseSunSpecSignatureResponse(response))
-          .onTermination().invoke(() -> {
-            socket.closeAndForget();
-            netClient.close();
-          })
-      )
-      .onFailure().invoke(ex -> netClient.close());
+    byte[] response = sendAndReceive(host, port, request, "SunSpec signature", transactionId, unitId);
+    return parseSunSpecSignatureResponse(response);
   }
 
   /**
    * Opens a fresh TCP connection and reads device identification via FC 0x2B.
    *
-   * @return Uni containing device identification, or failure if not supported
+   * @return device identification
+   * @throws IOException if connection or read fails
    */
-  private Uni<DeviceIdentification> readDeviceIdentification(String host, int port, int unitId) {
+  private DeviceIdentification readDeviceIdentification(String host, int port, int unitId) throws IOException {
     int transactionId = transactionIdCounter.getAndIncrement() & 0xFFFF;
-    byte[] request = buildReadDeviceIdRequest(unitId, ReadDeviceIdCode.BASIC, transactionId, (byte) 0);
-    NetClient netClient = vertx.createNetClient();
+    byte[] request = ModbusTcpService.buildReadDeviceIdentificationRequest(
+      unitId, ReadDeviceIdCode.BASIC, ModbusObjectId.VENDOR_NAME, transactionId);
 
-    return netClient.connect(port, host)
-      .ifNoItem().after(Duration.ofSeconds(testTimeoutSeconds))
-      .failWith(() -> new RuntimeException("TCP connection timeout"))
-      .onItem().transformToUni(socket ->
-        sendAndReceive(socket, request, "Device ID", transactionId, unitId)
-          .onItem().transform(response -> parseDeviceIdentificationResponse(response))
-          .onTermination().invoke(() -> {
-            socket.closeAndForget();
-            netClient.close();
-          })
-      )
-      .onFailure().invoke(ex -> netClient.close());
+    byte[] response = sendAndReceive(host, port, request, "Device ID", transactionId, unitId);
+    return parseDeviceIdentificationResponse(response);
   }
 
   /**
-   * Sends a Modbus request and waits for a complete MBAP response frame.
-   * This is the shared send/receive logic for all Modbus function codes.
+   * Opens a TCP connection, sends a Modbus request, and reads the complete MBAP response.
    *
-   * @param socket        connected socket
+   * @param host          hostname or IP address
+   * @param port          TCP port
    * @param request       raw MBAP frame to send
    * @param label         descriptive label for logging
    * @param transactionId transaction ID for logging
    * @param unitId        unit ID for logging
-   * @return Uni containing the raw response bytes
+   * @return raw response bytes
+   * @throws IOException if connection, send, or read fails
    */
-  private Uni<byte[]> sendAndReceive(NetSocket socket, byte[] request, String label,
-                                     int transactionId, int unitId) {
-    return Uni.createFrom().<byte[]>emitter(emitter -> {
-      Buffer frameBuffer = Buffer.buffer();
+  private byte[] sendAndReceive(String host, int port, byte[] request, String label,
+                                int transactionId, int unitId) throws IOException {
+    int timeoutMs = testTimeoutSeconds * 1000;
 
-      socket.handler(buffer -> {
-        frameBuffer.appendBuffer(buffer);
+    try (Socket socket = new Socket()) {
+      socket.connect(new InetSocketAddress(host, port), timeoutMs);
+      socket.setSoTimeout(timeoutMs);
 
-        // Try to parse complete MBAP frame (header is 6 bytes: TxID + Protocol + Length)
-        if (frameBuffer.length() >= 6) {
-          int length = ((frameBuffer.getByte(4) & 0xFF) << 8) | (frameBuffer.getByte(5) & 0xFF);
-          int totalLength = 6 + length;
+      OutputStream out = socket.getOutputStream();
+      InputStream in = socket.getInputStream();
 
-          if (frameBuffer.length() >= totalLength) {
-            byte[] response = new byte[totalLength];
-            for (int i = 0; i < totalLength; i++) {
-              response[i] = frameBuffer.getByte(i);
-            }
-            LOG.debugf("%s response received (%d bytes, txId=%d, unitId=%d)",
-              label, totalLength, transactionId, unitId);
-            emitter.complete(response);
-          }
-        }
-      });
+      out.write(request);
+      out.flush();
+      LOG.debugf("%s request sent (txId=%d, unitId=%d)", label, transactionId, unitId);
 
-      socket.exceptionHandler(emitter::fail);
+      // Read MBAP header (6 bytes: TxID + Protocol + Length)
+      byte[] header = readExactly(in, 6, label);
+      int length = ((header[4] & 0xFF) << 8) | (header[5] & 0xFF);
 
-      socket.write(Buffer.buffer(request))
-        .subscribe().with(
-          v -> LOG.debugf("%s request sent (txId=%d, unitId=%d)", label, transactionId, unitId),
-          emitter::fail
-        );
-    })
-    .ifNoItem().after(Duration.ofSeconds(testTimeoutSeconds))
-    .failWith(() -> new RuntimeException(label + " read timeout"));
-  }
+      // Read remaining payload (Unit ID + PDU)
+      byte[] payload = readExactly(in, length, label);
 
-  // ── Frame builders ──────────────────────────────────────────────────────
+      // Assemble complete frame
+      byte[] response = new byte[6 + length];
+      System.arraycopy(header, 0, response, 0, 6);
+      System.arraycopy(payload, 0, response, 6, length);
 
-  /**
-   * Builds FC 0x03 (Read Holding Registers) request frame.
-   */
-  private byte[] buildReadHoldingRegistersRequest(int unitId, int startAddr, int numRegisters, int transactionId) {
-    byte[] frame = new byte[12]; // MBAP(7) + PDU(5)
-    frame[0] = (byte) ((transactionId >> 8) & 0xFF);
-    frame[1] = (byte) (transactionId & 0xFF);
-    frame[2] = 0; // Protocol ID high
-    frame[3] = 0; // Protocol ID low
-    frame[4] = 0; // Length high
-    frame[5] = 6; // Length low (UnitID + PDU = 1 + 5)
-    frame[6] = (byte) unitId;
-    frame[7] = (byte) FC_READ_HOLDING_REGISTERS;
-    frame[8] = (byte) ((startAddr >> 8) & 0xFF);
-    frame[9] = (byte) (startAddr & 0xFF);
-    frame[10] = (byte) ((numRegisters >> 8) & 0xFF);
-    frame[11] = (byte) (numRegisters & 0xFF);
-    return frame;
+      LOG.debugf("%s response received (%d bytes, txId=%d, unitId=%d)",
+        label, response.length, transactionId, unitId);
+      return response;
+    }
   }
 
   /**
-   * Builds FC 0x2B/0x0E (Read Device Identification) request frame.
+   * Reads exactly {@code count} bytes from the input stream.
+   *
+   * @throws IOException if the stream ends before all bytes are read
    */
-  private byte[] buildReadDeviceIdRequest(int unitId, ReadDeviceIdCode readCode, int transactionId, byte objectId) {
-    byte[] frame = new byte[11]; // MBAP(7) + PDU(4)
-    frame[0] = (byte) ((transactionId >> 8) & 0xFF);
-    frame[1] = (byte) (transactionId & 0xFF);
-    frame[2] = 0; // Protocol ID high
-    frame[3] = 0; // Protocol ID low
-    frame[4] = 0; // Length high
-    frame[5] = 5; // Length low (UnitID + PDU = 1 + 4)
-    frame[6] = (byte) unitId;
-    frame[7] = (byte) FC_READ_DEVICE_IDENTIFICATION;
-    frame[8] = (byte) MEI_TYPE_READ_DEVICE_ID;
-    frame[9] = (byte) readCode.getCode();
-    frame[10] = objectId;
-    return frame;
+  private byte[] readExactly(InputStream in, int count, String label) throws IOException {
+    byte[] buf = new byte[count];
+    int offset = 0;
+    while (offset < count) {
+      int read = in.read(buf, offset, count - offset);
+      if (read < 0) {
+        throw new IOException(label + ": stream closed after " + offset + " of " + count + " bytes");
+      }
+      offset += read;
+    }
+    return buf;
   }
 
-  // ── Response parsers ────────────────────────────────────────────────────
+  // -- Response parsers -----------------------------------------------------
 
   /**
    * Parses FC 0x03 response and extracts 4-char ASCII string from 2 registers.
    *
-   * @throws RuntimeException if response is an error or malformed
+   * @throws IOException if response is an error or malformed
    */
-  private String parseSunSpecSignatureResponse(byte[] response) {
+  private String parseSunSpecSignatureResponse(byte[] response) throws IOException {
     // Minimum: MBAP(7) + FC(1) + ExceptionCode(1) = 9 bytes for exception
     if (response.length < 9) {
-      throw new RuntimeException("Response too short (got " + response.length + " bytes)");
+      throw new IOException("Response too short (got " + response.length + " bytes)");
     }
 
     int offset = 7;
@@ -265,21 +212,21 @@ public class ConnectionTestService {
 
     if ((functionCode & EXCEPTION_RESPONSE_FLAG) != 0) {
       int exceptionCode = response[offset + 1] & 0xFF;
-      throw new RuntimeException("Modbus exception 0x%02X reading SunSpec signature".formatted(exceptionCode));
+      throw new IOException("Modbus exception 0x%02X reading SunSpec signature".formatted(exceptionCode));
     }
 
     if (functionCode != FC_READ_HOLDING_REGISTERS) {
-      throw new RuntimeException("Unexpected function code: 0x%02X".formatted(functionCode));
+      throw new IOException("Unexpected function code: 0x%02X".formatted(functionCode));
     }
 
     // Successful FC 0x03: MBAP(7) + FC(1) + ByteCount(1) + Data(N)
     if (response.length < 13) {
-      throw new RuntimeException("Response too short for register data (got " + response.length + " bytes)");
+      throw new IOException("Response too short for register data (got " + response.length + " bytes)");
     }
 
     int byteCount = response[offset + 1] & 0xFF;
     if (byteCount < 4 || offset + 2 + byteCount > response.length) {
-      throw new RuntimeException("Invalid byte count: " + byteCount);
+      throw new IOException("Invalid byte count: " + byteCount);
     }
 
     byte[] signatureBytes = new byte[4];
@@ -290,11 +237,11 @@ public class ConnectionTestService {
   /**
    * Parses FC 0x2B response into DeviceIdentification.
    *
-   * @throws RuntimeException if response is an error or malformed
+   * @throws IOException if response is an error or malformed
    */
-  private DeviceIdentification parseDeviceIdentificationResponse(byte[] response) {
+  private DeviceIdentification parseDeviceIdentificationResponse(byte[] response) throws IOException {
     if (response.length < 9) {
-      throw new RuntimeException("Response too short (got " + response.length + " bytes)");
+      throw new IOException("Response too short (got " + response.length + " bytes)");
     }
 
     int offset = 7;
@@ -302,15 +249,15 @@ public class ConnectionTestService {
 
     if ((functionCode & EXCEPTION_RESPONSE_FLAG) != 0) {
       int exceptionCode = response[offset + 1] & 0xFF;
-      throw new RuntimeException("Modbus exception 0x%02X reading device identification".formatted(exceptionCode));
+      throw new IOException("Modbus exception 0x%02X reading device identification".formatted(exceptionCode));
     }
 
     if (functionCode != FC_READ_DEVICE_IDENTIFICATION) {
-      throw new RuntimeException("Unexpected function code: 0x%02X".formatted(functionCode));
+      throw new IOException("Unexpected function code: 0x%02X".formatted(functionCode));
     }
 
     if (response.length < 14) {
-      throw new RuntimeException("Response too short for device identification (got " + response.length + " bytes)");
+      throw new IOException("Response too short for device identification (got " + response.length + " bytes)");
     }
 
     // offset+6: Number of Objects

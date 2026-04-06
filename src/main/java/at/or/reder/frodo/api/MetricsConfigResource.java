@@ -1,7 +1,15 @@
 package at.or.reder.frodo.api;
 
-import at.or.reder.frodo.api.dto.*;
+import at.or.reder.frodo.api.dto.AvailableParameter;
+import at.or.reder.frodo.api.dto.AvailableParametersResponse;
+import at.or.reder.frodo.api.dto.LatestMetricsResponse;
+import at.or.reder.frodo.api.dto.MetricsConfigRequest;
+import at.or.reder.frodo.api.dto.MetricsConfigResponse;
+import at.or.reder.frodo.api.dto.MetricsDataResponse;
+import at.or.reder.frodo.api.dto.MetricsStatusResponse;
+import at.or.reder.frodo.api.dto.ParameterConfigRequest;
 import at.or.reder.frodo.api.exception.DeviceNotFoundException;
+import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
@@ -11,17 +19,24 @@ import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.service.MetricsScrapingService;
 import at.or.reder.frodo.modbus.sunspec.SunSpecConstants;
 import at.or.reder.frodo.modbus.sunspec.SunSpecDataType;
+import at.or.reder.frodo.modbus.sunspec.SunSpecDiscoveryResult;
 import at.or.reder.frodo.modbus.sunspec.SunSpecFieldDefinition;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelBlock;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelDefinition;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelRegistry;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
 import io.smallrye.common.annotation.Blocking;
-import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
-import jakarta.ws.rs.*;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
@@ -154,7 +169,7 @@ public class MetricsConfigResource {
   @Blocking
   @Transactional
   @Operation(summary = "Get available SunSpec parameters for metrics collection")
-  public Uni<AvailableParametersResponse> getAvailableParameters(
+  public AvailableParametersResponse getAvailableParameters(
     @Parameter(description = "Device ID", required = true)
     @PathParam("deviceId") Long deviceId
   ) {
@@ -163,36 +178,36 @@ public class MetricsConfigResource {
     ModbusDeviceEntity device = deviceRepository.findByIdOptional(deviceId)
       .orElseThrow(() -> DeviceNotFoundException.forId(deviceId));
 
-    return sunSpecService.discover(device.unitId)
-      .onItem().transform(discovery -> {
-        List<AvailableParameter> params = new ArrayList<>();
+    DeviceAddress address = DeviceAddress.fromEntity(device);
+    try {
+      SunSpecDiscoveryResult discovery = sunSpecService.discover(address);
+      List<AvailableParameter> params = new ArrayList<>();
 
-        for (SunSpecModelBlock model : discovery.models()) {
-          if (SunSpecModelRegistry.isKnown(model.modelId())) {
-            SunSpecModelDefinition def = SunSpecModelRegistry.require(model.modelId());
-            String modelName = def.name();
+      for (SunSpecModelBlock model : discovery.models()) {
+        if (SunSpecModelRegistry.isKnown(model.modelId())) {
+          SunSpecModelDefinition def = SunSpecModelRegistry.require(model.modelId());
+          String modelName = def.name();
 
-            for (SunSpecFieldDefinition field : def.fields()) {
-              if (isScrapableField(field)) {
-                params.add(new AvailableParameter(
-                  model.modelId(),
-                  modelName,
-                  field.name(),
-                  field.units(),
-                  field.description()
-                ));
-              }
+          for (SunSpecFieldDefinition field : def.fields()) {
+            if (isScrapableField(field)) {
+              params.add(new AvailableParameter(
+                model.modelId(),
+                modelName,
+                field.name(),
+                field.units(),
+                field.description()
+              ));
             }
           }
         }
+      }
 
-        return new AvailableParametersResponse(deviceId, params);
-      })
-      .onFailure().recoverWithItem(error -> {
-        LOG.warnf("SunSpec discovery failed for device %d, falling back to static registry: %s",
-          deviceId, error.getMessage());
-        return buildAvailableParametersFromRegistry(deviceId);
-      });
+      return new AvailableParametersResponse(deviceId, params);
+    } catch (Exception error) {
+      LOG.warnf("SunSpec discovery failed for device %d, falling back to static registry: %s",
+        deviceId, error.getMessage());
+      return buildAvailableParametersFromRegistry(deviceId);
+    }
   }
 
   /**

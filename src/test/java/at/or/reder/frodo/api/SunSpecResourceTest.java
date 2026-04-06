@@ -1,5 +1,6 @@
 package at.or.reder.frodo.api;
 
+import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.sunspec.SunSpecConstants;
@@ -9,7 +10,6 @@ import at.or.reder.frodo.modbus.sunspec.SunSpecModelData;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
-import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -21,6 +21,8 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 /**
  * Integration tests for {@link SunSpecResource} REST endpoints.
@@ -62,7 +64,7 @@ class SunSpecResourceTest {
   // ========== Discovery ==========
 
   @Test
-  void testDiscoveryReturnsModels() {
+  void testDiscoveryReturnsModels() throws Exception {
     List<SunSpecModelBlock> blocks = List.of(
       new SunSpecModelBlock(1, 40002, 65),
       new SunSpecModelBlock(113, 40069, 60),
@@ -70,8 +72,8 @@ class SunSpecResourceTest {
     );
     SunSpecDiscoveryResult result = SunSpecDiscoveryResult.of(40000, blocks);
 
-    Mockito.when(sunSpecService.getOrDiscover(UNIT_ID))
-      .thenReturn(Uni.createFrom().item(result));
+    Mockito.when(sunSpecService.getOrDiscover(any(DeviceAddress.class)))
+      .thenReturn(result);
 
     given()
       .when().get("/api/devices/{id}/sunspec/discovery", DEVICE_ID)
@@ -91,14 +93,14 @@ class SunSpecResourceTest {
   }
 
   @Test
-  void testDiscoveryRefresh() {
+  void testDiscoveryRefresh() throws Exception {
     List<SunSpecModelBlock> blocks = List.of(
       new SunSpecModelBlock(1, 40002, 65)
     );
     SunSpecDiscoveryResult result = SunSpecDiscoveryResult.of(40000, blocks);
 
-    Mockito.when(sunSpecService.getOrDiscover(UNIT_ID))
-      .thenReturn(Uni.createFrom().item(result));
+    Mockito.when(sunSpecService.getOrDiscover(any(DeviceAddress.class)))
+      .thenReturn(result);
 
     given()
       .queryParam("refresh", "true")
@@ -107,7 +109,7 @@ class SunSpecResourceTest {
       .statusCode(200)
       .body("modelCount", is(1));
 
-    Mockito.verify(sunSpecService).invalidateDiscovery(UNIT_ID);
+    Mockito.verify(sunSpecService).invalidateDiscovery(any(DeviceAddress.class));
   }
 
   @Test
@@ -119,10 +121,9 @@ class SunSpecResourceTest {
   }
 
   @Test
-  void testDiscoveryConnectionFailed() {
-    Mockito.when(sunSpecService.getOrDiscover(UNIT_ID))
-      .thenReturn(Uni.createFrom().failure(
-        new IllegalStateException("SunSpec device not found at any known base address")));
+  void testDiscoveryConnectionFailed() throws Exception {
+    Mockito.when(sunSpecService.getOrDiscover(any(DeviceAddress.class)))
+      .thenThrow(new IllegalStateException("SunSpec device not found at any known base address"));
 
     given()
       .when().get("/api/devices/{id}/sunspec/discovery", DEVICE_ID)
@@ -133,7 +134,7 @@ class SunSpecResourceTest {
   // ========== Common Model ==========
 
   @Test
-  void testReadCommonModel() {
+  void testReadCommonModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(1, "Common", 40003)
       .put("Mn", "Fronius")
       .put("Md", "Symo 10.0-3-M")
@@ -141,8 +142,8 @@ class SunSpecResourceTest {
       .put("Vr", "1.2.7")
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_COMMON))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_COMMON)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/common", DEVICE_ID)
@@ -168,7 +169,7 @@ class SunSpecResourceTest {
   // ========== Inverter Model ==========
 
   @Test
-  void testReadInverterModel() {
+  void testReadInverterModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(113, "Inverter (Three Phase, Float)", 40070)
       .put("A", 12.5f)
       .put("W", 3500.0f)
@@ -176,8 +177,8 @@ class SunSpecResourceTest {
       .put("St", 4)
       .build();
 
-    Mockito.when(sunSpecService.readInverterModel(UNIT_ID))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readInverterModel(any(DeviceAddress.class)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/inverter", DEVICE_ID)
@@ -192,10 +193,9 @@ class SunSpecResourceTest {
   }
 
   @Test
-  void testReadInverterNotFound() {
-    Mockito.when(sunSpecService.readInverterModel(UNIT_ID))
-      .thenReturn(Uni.createFrom().failure(
-        new IllegalArgumentException("No inverter model found on unit 1")));
+  void testReadInverterNotFound() throws Exception {
+    Mockito.when(sunSpecService.readInverterModel(any(DeviceAddress.class)))
+      .thenThrow(new IllegalArgumentException("No inverter model found on unit 1"));
 
     given()
       .when().get("/api/devices/{id}/sunspec/inverter", DEVICE_ID)
@@ -206,14 +206,14 @@ class SunSpecResourceTest {
   // ========== Nameplate Model ==========
 
   @Test
-  void testReadNameplateModel() {
+  void testReadNameplateModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(120, "Nameplate Ratings", 40132)
       .put("WRtg", 10000.0f)
       .put("VARtg", 10000.0f)
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_NAMEPLATE))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_NAMEPLATE)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/nameplate", DEVICE_ID)
@@ -226,13 +226,13 @@ class SunSpecResourceTest {
   // ========== Settings Model ==========
 
   @Test
-  void testReadSettingsModel() {
+  void testReadSettingsModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(121, "Basic Settings", 40160)
       .put("WMax", 10000.0f)
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_SETTINGS))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_SETTINGS)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/settings", DEVICE_ID)
@@ -244,14 +244,14 @@ class SunSpecResourceTest {
   // ========== Status Model ==========
 
   @Test
-  void testReadStatusModel() {
+  void testReadStatusModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(122, "Extended Measurements & Status", 40192)
       .put("PVV", 450.0f)
       .put("PVA", 7.5f)
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_STATUS))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_STATUS)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/status", DEVICE_ID)
@@ -264,13 +264,13 @@ class SunSpecResourceTest {
   // ========== Controls Model ==========
 
   @Test
-  void testReadControlsModel() {
+  void testReadControlsModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(123, "Immediate Controls", 40238)
       .put("WMaxLimPct", 100.0f)
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_CONTROLS))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_CONTROLS)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/controls", DEVICE_ID)
@@ -283,13 +283,13 @@ class SunSpecResourceTest {
   // ========== Storage Model ==========
 
   @Test
-  void testReadStorageModel() {
+  void testReadStorageModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(124, "Basic Storage Controls", 40264)
       .put("ChaState", 50)
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_STORAGE))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_STORAGE)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/storage", DEVICE_ID)
@@ -300,10 +300,9 @@ class SunSpecResourceTest {
   }
 
   @Test
-  void testReadStorageModelNotPresent() {
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_STORAGE))
-      .thenReturn(Uni.createFrom().failure(
-        new IllegalArgumentException("Model 124 not found on unit 1")));
+  void testReadStorageModelNotPresent() throws Exception {
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_STORAGE)))
+      .thenThrow(new IllegalArgumentException("Model 124 not found on unit 1"));
 
     given()
       .when().get("/api/devices/{id}/sunspec/storage", DEVICE_ID)
@@ -314,15 +313,15 @@ class SunSpecResourceTest {
   // ========== MPPT Model ==========
 
   @Test
-  void testReadMpptModel() {
+  void testReadMpptModel() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(160, "Multiple MPPT Inverter Extension", 40264)
       .put("DCA_1", 7.5f)
       .put("DCV_1", 450.0f)
       .put("DCW_1", 3375.0f)
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, SunSpecConstants.MODEL_MPPT))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(SunSpecConstants.MODEL_MPPT)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/mppt", DEVICE_ID)
@@ -335,13 +334,13 @@ class SunSpecResourceTest {
   // ========== Generic Model Reader ==========
 
   @Test
-  void testReadModelById() {
+  void testReadModelById() throws Exception {
     SunSpecModelData data = SunSpecModelData.builder(120, "Nameplate Ratings", 40132)
       .put("WRtg", 10000.0f)
       .build();
 
-    Mockito.when(sunSpecService.readModel(UNIT_ID, 120))
-      .thenReturn(Uni.createFrom().item(data));
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(120)))
+      .thenReturn(data);
 
     given()
       .when().get("/api/devices/{id}/sunspec/model/{modelId}", DEVICE_ID, 120)
@@ -351,10 +350,9 @@ class SunSpecResourceTest {
   }
 
   @Test
-  void testReadModelByIdNotFound() {
-    Mockito.when(sunSpecService.readModel(UNIT_ID, 999))
-      .thenReturn(Uni.createFrom().failure(
-        new IllegalArgumentException("No definition for model 999")));
+  void testReadModelByIdNotFound() throws Exception {
+    Mockito.when(sunSpecService.readModel(any(DeviceAddress.class), eq(999)))
+      .thenThrow(new IllegalArgumentException("No definition for model 999"));
 
     given()
       .when().get("/api/devices/{id}/sunspec/model/{modelId}", DEVICE_ID, 999)
@@ -365,7 +363,7 @@ class SunSpecResourceTest {
   // ========== Read All Models ==========
 
   @Test
-  void testReadAllModels() {
+  void testReadAllModels() throws Exception {
     SunSpecModelData common = SunSpecModelData.builder(1, "Common", 40003)
       .put("Mn", "Fronius")
       .build();
@@ -373,8 +371,8 @@ class SunSpecResourceTest {
       .put("A", 12.5f)
       .build();
 
-    Mockito.when(sunSpecService.readAllModels(UNIT_ID))
-      .thenReturn(Uni.createFrom().item(List.of(common, inverter)));
+    Mockito.when(sunSpecService.readAllModels(any(DeviceAddress.class)))
+      .thenReturn(List.of(common, inverter));
 
     given()
       .when().get("/api/devices/{id}/sunspec/models", DEVICE_ID)
@@ -388,9 +386,9 @@ class SunSpecResourceTest {
   }
 
   @Test
-  void testReadAllModelsEmpty() {
-    Mockito.when(sunSpecService.readAllModels(UNIT_ID))
-      .thenReturn(Uni.createFrom().item(List.of()));
+  void testReadAllModelsEmpty() throws Exception {
+    Mockito.when(sunSpecService.readAllModels(any(DeviceAddress.class)))
+      .thenReturn(List.of());
 
     given()
       .when().get("/api/devices/{id}/sunspec/models", DEVICE_ID)

@@ -6,11 +6,14 @@ import at.or.reder.frodo.api.dto.SunSpecModelResponse;
 import at.or.reder.frodo.api.exception.DeviceConnectionException;
 import at.or.reder.frodo.api.exception.DeviceNotFoundException;
 import at.or.reder.frodo.modbus.ModbusException;
+import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.sunspec.SunSpecConstants;
+import at.or.reder.frodo.modbus.sunspec.SunSpecDiscoveryResult;
+import at.or.reder.frodo.modbus.sunspec.SunSpecModelData;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
-import io.smallrye.mutiny.Uni;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -28,7 +31,9 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * REST API for SunSpec Modbus device interaction.
@@ -94,27 +99,32 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecDiscoveryResponse> discover(
+  @Blocking
+  public SunSpecDiscoveryResponse discover(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id,
     @Parameter(description = "Force fresh discovery (invalidate cache)")
     @QueryParam("refresh") @DefaultValue("false") boolean refresh
   ) {
     ModbusDeviceEntity device = requireDevice(id);
-    LOG.debugf("SunSpec discovery: device=%d, unit=%d, refresh=%b",
-      id, Integer.valueOf(device.unitId), Boolean.valueOf(refresh));
+    DeviceAddress address = DeviceAddress.fromEntity(device);
+    LOG.debugf("SunSpec discovery: device=%d, address=%s, refresh=%b",
+      id, address, Boolean.valueOf(refresh));
 
     if (refresh) {
-      sunSpecService.invalidateDiscovery(device.unitId);
+      sunSpecService.invalidateDiscovery(address);
     }
 
-    return sunSpecService.getOrDiscover(device.unitId)
-      .onItem().transform(result ->
-        SunSpecDiscoveryResponse.fromResult(id, device.unitId, result))
-      .onFailure(ModbusException.class).transform(ex ->
-        new DeviceConnectionException("SunSpec discovery failed: " + ex.getMessage(), ex))
-      .onFailure(IllegalStateException.class).transform(ex ->
-        new DeviceConnectionException("SunSpec not supported: " + ex.getMessage(), ex));
+    try {
+      SunSpecDiscoveryResult result = sunSpecService.getOrDiscover(address);
+      return SunSpecDiscoveryResponse.fromResult(id, device.unitId, result);
+    } catch (ModbusException ex) {
+      throw new DeviceConnectionException("SunSpec discovery failed: " + ex.getMessage(), ex);
+    } catch (IllegalStateException ex) {
+      throw new DeviceConnectionException("SunSpec not supported: " + ex.getMessage(), ex);
+    } catch (IOException | TimeoutException ex) {
+      throw new DeviceConnectionException("SunSpec discovery failed: " + ex.getMessage(), ex);
+    }
   }
 
   // ========== Model Readers ==========
@@ -149,7 +159,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readCommon(
+  @Blocking
+  public SunSpecModelResponse readCommon(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
@@ -186,20 +197,27 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readInverter(
+  @Blocking
+  public SunSpecModelResponse readInverter(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
     ModbusDeviceEntity device = requireDevice(id);
-    LOG.debugf("Reading SunSpec inverter model: device=%d, unit=%d", id, Integer.valueOf(device.unitId));
+    DeviceAddress address = DeviceAddress.fromEntity(device);
+    LOG.debugf("Reading SunSpec inverter model: device=%d, address=%s", id, address);
 
-    return sunSpecService.readInverterModel(device.unitId)
-      .onItem().transform(data ->
-        SunSpecModelResponse.fromModelData(id, device.unitId, data))
-      .onFailure(ModbusException.class).transform(ex ->
-        new DeviceConnectionException("Failed to read inverter model: " + ex.getMessage(), ex))
-      .onFailure(IllegalArgumentException.class).transform(ex ->
-        new DeviceNotFoundException("Inverter model not found on device " + id));
+    try {
+      SunSpecModelData data = sunSpecService.readInverterModel(address);
+      return SunSpecModelResponse.fromModelData(id, device.unitId, data);
+    } catch (ModbusException ex) {
+      throw new DeviceConnectionException("Failed to read inverter model: " + ex.getMessage(), ex);
+    } catch (IllegalStateException ex) {
+      throw new DeviceConnectionException("SunSpec not available on device " + id + ": " + ex.getMessage(), ex);
+    } catch (IllegalArgumentException ex) {
+      throw new DeviceNotFoundException("Inverter model not found on device " + id);
+    } catch (IOException | TimeoutException ex) {
+      throw new DeviceConnectionException("Failed to read inverter model: " + ex.getMessage(), ex);
+    }
   }
 
   /**
@@ -232,7 +250,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readNameplate(
+  @Blocking
+  public SunSpecModelResponse readNameplate(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
@@ -269,7 +288,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readSettings(
+  @Blocking
+  public SunSpecModelResponse readSettings(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
@@ -306,7 +326,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readStatus(
+  @Blocking
+  public SunSpecModelResponse readStatus(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
@@ -344,7 +365,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readControls(
+  @Blocking
+  public SunSpecModelResponse readControls(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
@@ -382,7 +404,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readStorage(
+  @Blocking
+  public SunSpecModelResponse readStorage(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
@@ -419,7 +442,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readMppt(
+  @Blocking
+  public SunSpecModelResponse readMppt(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
@@ -460,7 +484,8 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<SunSpecModelResponse> readModel(
+  @Blocking
+  public SunSpecModelResponse readModel(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id,
     @Parameter(description = "SunSpec model ID (e.g. 1, 113, 120)", required = true)
@@ -499,18 +524,25 @@ public class SunSpecResource {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
-  public Uni<List<SunSpecModelResponse>> readAllModels(
+  @Blocking
+  public List<SunSpecModelResponse> readAllModels(
     @Parameter(description = "Device ID", required = true)
     @PathParam("id") Long id
   ) {
     ModbusDeviceEntity device = requireDevice(id);
-    LOG.debugf("Reading all SunSpec models: device=%d, unit=%d", id, Integer.valueOf(device.unitId));
+    DeviceAddress address = DeviceAddress.fromEntity(device);
+    LOG.debugf("Reading all SunSpec models: device=%d, address=%s", id, address);
 
-    return sunSpecService.readAllModels(device.unitId)
-      .onItem().transform(dataList ->
-        SunSpecModelResponse.fromModelDataList(id, device.unitId, dataList))
-      .onFailure(ModbusException.class).transform(ex ->
-        new DeviceConnectionException("Failed to read models: " + ex.getMessage(), ex));
+    try {
+      List<SunSpecModelData> dataList = sunSpecService.readAllModels(address);
+      return SunSpecModelResponse.fromModelDataList(id, device.unitId, dataList);
+    } catch (ModbusException ex) {
+      throw new DeviceConnectionException("Failed to read models: " + ex.getMessage(), ex);
+    } catch (IllegalStateException ex) {
+      throw new DeviceConnectionException("SunSpec not available on device " + id + ": " + ex.getMessage(), ex);
+    } catch (IOException | TimeoutException ex) {
+      throw new DeviceConnectionException("Failed to read models: " + ex.getMessage(), ex);
+    }
   }
 
   // ========== Private Helper Methods ==========
@@ -533,21 +565,29 @@ public class SunSpecResource {
    * @param deviceId  device ID
    * @param modelId   SunSpec model ID
    * @param modelName model name for logging
-   * @return Uni resolving to the model response
+   * @return the model response
    */
-  private Uni<SunSpecModelResponse> readModelEndpoint(Long deviceId, int modelId, String modelName) {
+  private SunSpecModelResponse readModelEndpoint(Long deviceId, int modelId, String modelName) {
     ModbusDeviceEntity device = requireDevice(deviceId);
-    LOG.debugf("Reading SunSpec %s model (ID %d): device=%d, unit=%d",
-      modelName, Integer.valueOf(modelId), deviceId, Integer.valueOf(device.unitId));
+    DeviceAddress address = DeviceAddress.fromEntity(device);
+    LOG.debugf("Reading SunSpec %s model (ID %d): device=%d, address=%s",
+      modelName, Integer.valueOf(modelId), deviceId, address);
 
-    return sunSpecService.readModel(device.unitId, modelId)
-      .onItem().transform(data ->
-        SunSpecModelResponse.fromModelData(deviceId, device.unitId, data))
-      .onFailure(ModbusException.class).transform(ex ->
-        new DeviceConnectionException(
-          String.format("Failed to read %s model: %s", modelName, ex.getMessage()), ex))
-      .onFailure(IllegalArgumentException.class).transform(ex ->
-        new DeviceNotFoundException(
-          String.format("Model %d (%s) not found on device %d", modelId, modelName, deviceId)));
+    try {
+      SunSpecModelData data = sunSpecService.readModel(address, modelId);
+      return SunSpecModelResponse.fromModelData(deviceId, device.unitId, data);
+    } catch (ModbusException ex) {
+      throw new DeviceConnectionException(
+        String.format("Failed to read %s model: %s", modelName, ex.getMessage()), ex);
+    } catch (IllegalStateException ex) {
+      throw new DeviceConnectionException(
+        String.format("SunSpec not available on device %d: %s", deviceId, ex.getMessage()), ex);
+    } catch (IllegalArgumentException ex) {
+      throw new DeviceNotFoundException(
+        String.format("Model %d (%s) not found on device %d", modelId, modelName, deviceId));
+    } catch (IOException | TimeoutException ex) {
+      throw new DeviceConnectionException(
+        String.format("Failed to read %s model: %s", modelName, ex.getMessage()), ex);
+    }
   }
 }

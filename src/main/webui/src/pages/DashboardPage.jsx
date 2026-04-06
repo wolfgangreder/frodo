@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -6,35 +6,80 @@ import {
   Grid,
   Typography,
   Chip,
+  MenuItem,
+  TextField,
+  Alert,
+  Button,
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader, LoadingSpinner, ErrorDisplay } from '../components/common';
+import { DeviceDashboard } from '../components/dashboard';
+import { useDeviceList } from '../hooks';
 import { systemApi } from '../services';
 
 /**
  * Dashboard page - main overview of PV system status
+ *
+ * Shows a device selector (when multiple devices) and real-time
+ * SunSpec dashboard cards for the selected device.
  */
 function DashboardPage() {
+  const navigate = useNavigate();
+
+  // App info
   const {
     data: appInfo,
-    isLoading,
-    error,
-    refetch,
+    isLoading: isAppInfoLoading,
   } = useQuery({
     queryKey: ['appInfo'],
     queryFn: systemApi.getInfo,
   });
 
+  // Device list
+  const {
+    data: devices,
+    isLoading: isDevicesLoading,
+    isError: isDevicesError,
+    error: devicesError,
+    refetch: refetchDevices,
+  } = useDeviceList();
+
+  // Selected device ID (stored in local state, persisted in sessionStorage)
+  const [selectedDeviceId, setSelectedDeviceId] = useState(() => {
+    const stored = sessionStorage.getItem('dashboard.selectedDeviceId');
+    return stored ? Number(stored) : null;
+  });
+
+  // Auto-select first enabled device when devices load
+  useEffect(() => {
+    if (devices && devices.length > 0 && selectedDeviceId == null) {
+      const enabledDevice = devices.find((d) => d.enabled) || devices[0];
+      setSelectedDeviceId(enabledDevice.id);
+    }
+  }, [devices, selectedDeviceId]);
+
+  // Persist selection
+  useEffect(() => {
+    if (selectedDeviceId != null) {
+      sessionStorage.setItem('dashboard.selectedDeviceId', String(selectedDeviceId));
+    }
+  }, [selectedDeviceId]);
+
+  const selectedDevice = devices?.find((d) => d.id === selectedDeviceId) || null;
+
+  const isLoading = isDevicesLoading || isAppInfoLoading;
+
   if (isLoading) {
     return <LoadingSpinner message="Loading dashboard..." fullPage />;
   }
 
-  if (error) {
+  if (isDevicesError) {
     return (
       <ErrorDisplay
         title="Failed to load dashboard"
-        message={error.message}
-        onRetry={refetch}
+        message={devicesError?.message}
+        onRetry={refetchDevices}
         fullPage
       />
     );
@@ -44,18 +89,66 @@ function DashboardPage() {
     <Box>
       <PageHeader
         title="Dashboard"
-        subtitle="Overview of your PV monitoring system"
+        subtitle="Real-time PV system monitoring"
+        actions={
+          devices && devices.length > 1 ? (
+            <TextField
+              select
+              size="small"
+              label="Device"
+              value={selectedDeviceId || ''}
+              onChange={(e) => setSelectedDeviceId(Number(e.target.value))}
+              sx={{ minWidth: 200 }}
+            >
+              {devices.map((d) => (
+                <MenuItem key={d.id} value={d.id}>
+                  {d.name}{!d.enabled ? ' (disabled)' : ''}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null
+        }
       />
 
-      <Grid container spacing={3}>
-        {/* Application Info Card */}
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+      {/* No devices configured */}
+      {(!devices || devices.length === 0) ? (
+        <Card sx={{ mt: 2 }}>
+          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No Devices Configured
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Add a Modbus device to start monitoring your PV system.
+            </Typography>
+            <Button variant="contained" onClick={() => navigate('/devices')}>
+              Go to Devices
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !selectedDevice ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Select a device to view its dashboard.
+        </Alert>
+      ) : !selectedDevice.enabled ? (
+        <Box>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This device is disabled. Enable it in the device configuration to start monitoring.
+          </Alert>
+          <DeviceDashboard device={selectedDevice} />
+        </Box>
+      ) : (
+        <DeviceDashboard device={selectedDevice} />
+      )}
+
+      {/* App info footer */}
+      <Grid container spacing={2} sx={{ mt: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
-                Application Info
+              <Typography variant="subtitle2" color="primary.main" gutterBottom>
+                Application
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography variant="body2" color="text.secondary">Name</Typography>
                   <Typography variant="body2">{appInfo?.name || 'Frodo'}</Typography>
@@ -64,76 +157,35 @@ function DashboardPage() {
                   <Typography variant="body2" color="text.secondary">Version</Typography>
                   <Chip label={appInfo?.version || '0.0.0'} size="small" color="primary" />
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">Description</Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'right', maxWidth: '60%' }}>
-                    {appInfo?.description || 'PV Monitoring System'}
-                  </Typography>
-                </Box>
               </Box>
             </CardContent>
           </Card>
         </Grid>
-
-        {/* Quick Links Card */}
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+              <Typography variant="subtitle2" color="primary.main" gutterBottom>
                 Quick Links
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography
-                  component="a"
-                  href="/swagger-ui"
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ color: 'secondary.main', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
-                >
-                  Swagger UI (REST API)
-                </Typography>
-                <Typography
-                  component="a"
-                  href="/q/metrics"
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ color: 'secondary.main', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
-                >
-                  Prometheus Metrics
-                </Typography>
-                <Typography
-                  component="a"
-                  href="/q/health"
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ color: 'secondary.main', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
-                >
-                  Health Check
-                </Typography>
-                <Typography
-                  component="a"
-                  href="/q/openapi"
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ color: 'secondary.main', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
-                >
-                  OpenAPI Spec
-                </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {[
+                  { href: '/swagger-ui', label: 'Swagger UI' },
+                  { href: '/q/metrics', label: 'Prometheus Metrics' },
+                  { href: '/q/health', label: 'Health Check' },
+                ].map((link) => (
+                  <Typography
+                    key={link.href}
+                    component="a"
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    variant="body2"
+                    sx={{ color: 'secondary.main', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                  >
+                    {link.label}
+                  </Typography>
+                ))}
               </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Placeholder for future widgets */}
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-          <Card sx={{ height: '100%', minHeight: 200 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
-                System Status
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Device status widgets will appear here once devices are configured.
-              </Typography>
             </CardContent>
           </Card>
         </Grid>

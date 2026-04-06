@@ -1,5 +1,9 @@
 package at.or.reder.frodo.modbus;
 
+import at.or.reder.frodo.modbus.connection.DeviceAddress;
+import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
+import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -11,40 +15,53 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * REST endpoint for reading Modbus device registers via TCP.
+ *
+ * <p>Looks up the device by ID to obtain the host, port, and unit ID,
+ * then routes the request through the connection pool.</p>
  */
-@Path("/modbus")
+@Path("/devices/{deviceId}/modbus")
 @Tag(name = "Modbus", description = "Modbus TCP device access endpoints")
 public class ModbusResource {
 
-    @Inject
-    ModbusTcpService modbusTcpService;
+  @Inject
+  ModbusTcpService modbusTcpService;
 
-    @GET
-    @Path("/{unitId}/holding-registers")
-    @Produces(MediaType.APPLICATION_JSON)
-    @Operation(
-            summary = "Read holding registers",
-            description = "Reads holding registers from a Modbus TCP device using function code 03"
-    )
-    public io.smallrye.mutiny.Uni<ModbusRegisterResponse> readHoldingRegisters(
-            @Parameter(description = "Modbus unit ID (1-247)") @PathParam("unitId") int unitId,
-            @Parameter(description = "Starting register address (0-based)") @QueryParam("start") int startAddr,
-            @Parameter(description = "Number of registers to read") @QueryParam("count") int count) {
+  @Inject
+  ModbusDeviceRepository deviceRepository;
 
-        return modbusTcpService.readHoldingRegisters(unitId, startAddr, count)
-                .onItem().transform(registers -> {
-                    List<Integer> values = new java.util.ArrayList<>(registers.length);
-                    for (int reg : registers) {
-                        values.add(reg);
-                    }
-                    return new ModbusRegisterResponse(unitId, startAddr, values);
-                });
-    }
+  @GET
+  @Path("/holding-registers")
+  @Produces(MediaType.APPLICATION_JSON)
+  @Blocking
+  @Operation(
+    summary = "Read holding registers",
+    description = "Reads holding registers from a Modbus TCP device using function code 03"
+  )
+  public ModbusRegisterResponse readHoldingRegisters(
+    @Parameter(description = "Device ID", required = true)
+    @PathParam("deviceId") Long deviceId,
+    @Parameter(description = "Starting register address (0-based)")
+    @QueryParam("start") int startAddr,
+    @Parameter(description = "Number of registers to read")
+    @QueryParam("count") int count)
+    throws IOException, TimeoutException {
 
-    public record ModbusRegisterResponse(int unitId, int startAddress, List<Integer> registers) {
-    }
+    ModbusDeviceEntity device = deviceRepository.findByIdOptional(deviceId)
+      .orElseThrow(() -> new IllegalArgumentException("Device not found: " + deviceId));
+
+    DeviceAddress address = DeviceAddress.fromEntity(device);
+    int[] registers = modbusTcpService.readHoldingRegisters(address, startAddr, count);
+    List<Integer> values = Arrays.stream(registers).boxed().toList();
+    return new ModbusRegisterResponse(device.unitId, startAddr, values);
+  }
+
+  public record ModbusRegisterResponse(int unitId, int startAddress, List<Integer> registers) {
+  }
 }

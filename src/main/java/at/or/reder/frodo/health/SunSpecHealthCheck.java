@@ -64,7 +64,7 @@ public class SunSpecHealthCheck implements HealthCheck {
     }
 
     int cacheSize = sunSpecService.getDiscoveryCacheSize();
-    Set<Integer> cachedUnitIds = sunSpecService.getCachedUnitIds();
+    Set<String> cachedDeviceKeys = sunSpecService.getCachedDeviceKeys();
 
     builder.withData("modbus.enabled", true)
       .withData("discovery.cached.count", cacheSize)
@@ -84,27 +84,27 @@ public class SunSpecHealthCheck implements HealthCheck {
         .build();
     }
 
-    // Check cache age for each unit
+    // Check cache age for each device
     int validCount = 0;
     int expiredCount = 0;
     Duration maxAge = Duration.ofHours(maxCacheAgeHours);
 
-    for (Integer unitId : cachedUnitIds) {
-      SunSpecDiscoveryResult discovery = sunSpecService.getCachedDiscovery(unitId)
+    for (String deviceKey : cachedDeviceKeys) {
+      SunSpecDiscoveryResult discovery = sunSpecService.getCachedDiscovery(deviceKey)
         .orElse(null);
       if (discovery != null) {
         Duration age = Duration.between(discovery.discoveryTime(), Instant.now());
         long ageHours = age.toHours();
 
-        builder.withData("unit." + unitId + ".models", discovery.modelCount())
-          .withData("unit." + unitId + ".age.hours", ageHours);
+        builder.withData("device." + deviceKey + ".models", discovery.modelCount())
+          .withData("device." + deviceKey + ".age.hours", ageHours);
 
         if (age.compareTo(maxAge) > 0) {
           expiredCount++;
-          builder.withData("unit." + unitId + ".expired", true);
+          builder.withData("device." + deviceKey + ".expired", true);
         } else {
           validCount++;
-          builder.withData("unit." + unitId + ".expired", false);
+          builder.withData("device." + deviceKey + ".expired", false);
         }
       }
     }

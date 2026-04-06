@@ -52,7 +52,7 @@ class ModbusHealthCheckTest {
   @Test
   void testUp_WhenConnectedAndHealthy() {
     healthCheck.modbusEnabled = true;
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.CONNECTED, 2, Instant.now(), 100, 3));
     when(connectionPool.isHealthy()).thenReturn(true);
 
@@ -67,7 +67,7 @@ class ModbusHealthCheckTest {
   @Test
   void testDown_WhenConnectionPoolUnhealthy() {
     healthCheck.modbusEnabled = true;
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.FAILED, 0, null, 10, 10));
     when(connectionPool.isHealthy()).thenReturn(false);
 
@@ -83,7 +83,7 @@ class ModbusHealthCheckTest {
   void testDown_WhenLastSuccessTooOld() {
     healthCheck.modbusEnabled = true;
     Instant oldSuccess = Instant.now().minus(30, ChronoUnit.MINUTES);
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.CONNECTED, 0, oldSuccess, 50, 5));
     when(connectionPool.isHealthy()).thenReturn(true);
 
@@ -99,7 +99,7 @@ class ModbusHealthCheckTest {
   void testUp_WhenLastSuccessWithinThreshold() {
     healthCheck.modbusEnabled = true;
     Instant recentSuccess = Instant.now().minus(5, ChronoUnit.MINUTES);
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.CONNECTED, 0, recentSuccess, 50, 2));
     when(connectionPool.isHealthy()).thenReturn(true);
 
@@ -111,7 +111,7 @@ class ModbusHealthCheckTest {
   @Test
   void testDown_WhenRequestsMadeButNoneSucceeded() {
     healthCheck.modbusEnabled = true;
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.CONNECTED, 0, null, 10, 10));
     when(connectionPool.isHealthy()).thenReturn(true);
 
@@ -125,7 +125,7 @@ class ModbusHealthCheckTest {
   @Test
   void testUp_WhenNoRequestsYet() {
     healthCheck.modbusEnabled = true;
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.CONNECTED, 0, null, 0, 0));
     when(connectionPool.isHealthy()).thenReturn(true);
 

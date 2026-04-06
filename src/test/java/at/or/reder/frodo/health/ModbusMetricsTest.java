@@ -52,7 +52,7 @@ class ModbusMetricsTest {
     registry = new SimpleMeterRegistry();
 
     // Default stubs for gauge readings during registration
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.DISCONNECTED, 0, null, 0, 0));
     when(cacheService.getStats()).thenReturn(
       new DeviceInfoCacheService.CacheStats(0, 0, 0));
@@ -65,7 +65,7 @@ class ModbusMetricsTest {
 
   @Test
   void testConnectionActiveGauge_WhenConnected() {
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.CONNECTED, 0, Instant.now(), 10, 0));
 
     Gauge gauge = registry.find("frodo.modbus.connection.active").gauge();
@@ -75,7 +75,7 @@ class ModbusMetricsTest {
 
   @Test
   void testConnectionActiveGauge_WhenDisconnected() {
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.DISCONNECTED, 0, null, 0, 0));
 
     Gauge gauge = registry.find("frodo.modbus.connection.active").gauge();
@@ -85,7 +85,7 @@ class ModbusMetricsTest {
 
   @Test
   void testConnectionActiveGauge_WhenFailed() {
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.FAILED, 0, null, 5, 5));
 
     Gauge gauge = registry.find("frodo.modbus.connection.active").gauge();
@@ -95,7 +95,7 @@ class ModbusMetricsTest {
 
   @Test
   void testQueueSizeGauge() {
-    when(connectionPool.getStats()).thenReturn(new ConnectionStats(
+    when(connectionPool.getAggregatedStats()).thenReturn(new ConnectionStats(
       ConnectionState.CONNECTED, 7, Instant.now(), 100, 2));
 
     Gauge gauge = registry.find("frodo.modbus.queue.size").gauge();

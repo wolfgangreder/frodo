@@ -7,7 +7,6 @@ import {
   CardContent,
   Divider,
   FormControlLabel,
-  IconButton,
   MenuItem,
   Stack,
   Switch,
