@@ -1,7 +1,7 @@
 import apiClient from './apiClient';
 
 /**
- * System API service for application info and health
+ * System API service for application info, health, and pool status
  */
 const systemApi = {
   /**
@@ -22,6 +22,15 @@ const systemApi = {
     const response = await apiClient.get('/q/health/ready', {
       baseURL: '', // Override baseURL to use root path
     });
+    return response.data;
+  },
+
+  /**
+   * Get Modbus connection pool and scraping status
+   * @returns {Promise<Object>} Pool status (connectionState, activeConnections, etc.)
+   */
+  getPoolStatus: async () => {
+    const response = await apiClient.get('/status/pool');
     return response.data;
   },
 

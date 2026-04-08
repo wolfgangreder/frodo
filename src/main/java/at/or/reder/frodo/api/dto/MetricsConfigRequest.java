@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Request DTO for creating or updating a metrics scraping configuration.
  *
- * @param scrapeIntervalSeconds  scrape interval in seconds (5-300)
+ * @param scrapeIntervalSeconds  scrape interval in seconds (1-300)
  * @param enabled                whether scraping is enabled
  * @param storeToDatabase        whether to persist scraped values to DB
  * @param retentionDays          data retention period in days (1-3650)
@@ -17,7 +17,7 @@ import java.util.List;
  */
 public record MetricsConfigRequest(
   @NotNull(message = "Scrape interval is required")
-  @Min(value = 5, message = "Scrape interval must be at least 5 seconds")
+  @Min(value = 1, message = "Scrape interval must be at least 1 second")
   @Max(value = 300, message = "Scrape interval cannot exceed 300 seconds")
   Integer scrapeIntervalSeconds,
 
