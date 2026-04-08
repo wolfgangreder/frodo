@@ -19,6 +19,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import UploadIcon from '@mui/icons-material/Upload';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '../components/common';
 import { deviceApi, metricsApi, systemApi, grafanaService } from '../services';
@@ -225,6 +226,105 @@ function HealthSection() {
               />
             </ListItem>
           ))}
+        </List>
+      )}
+    </Box>
+  );
+}
+
+/** Modbus connection pool stats */
+function ConnectionPoolSection() {
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ['system', 'poolStatus'],
+    queryFn: systemApi.getPoolStatus,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+
+  const stateColor = {
+    CONNECTED: 'success',
+    FAILED: 'error',
+    CONNECTING: 'warning',
+    DISCONNECTED: 'default',
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+        <Typography variant="h6" sx={{ color: 'primary.main' }}>
+          Connection Pool
+        </Typography>
+        {data && (
+          <Chip
+            icon={<NetworkCheckIcon />}
+            label={data.connectionState}
+            color={stateColor[data.connectionState] || 'default'}
+            size="small"
+          />
+        )}
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          startIcon={isFetching ? <CircularProgress size={14} /> : null}
+        >
+          {isFetching ? 'Refreshing…' : 'Refresh'}
+        </Button>
+      </Stack>
+
+      {isLoading && <CircularProgress size={20} />}
+      {error && (
+        <Typography variant="body2" color="error">
+          Failed to load pool status
+        </Typography>
+      )}
+      {data && (
+        <List dense disablePadding>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Active Connections"
+              secondary={data.activeConnections}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Pending Requests"
+              secondary={data.pendingRequests}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Total Requests"
+              secondary={data.totalRequests.toLocaleString()}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Failed Requests"
+              secondary={data.failedRequests.toLocaleString()}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Last Successful Request"
+              secondary={data.lastSuccessTime
+                ? new Date(data.lastSuccessTime).toLocaleString()
+                : 'Never'}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Active Scraping Timers"
+              secondary={data.activeScrapingTimers}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Pool Healthy"
+              secondary={data.healthy ? 'Yes' : 'No'}
+            />
+          </ListItem>
         </List>
       )}
     </Box>
@@ -487,6 +587,13 @@ function SettingsPage() {
                 <HealthSection />
               </Box>
             </Stack>
+          </CardContent>
+        </Card>
+
+        {/* Connection Pool Stats */}
+        <Card>
+          <CardContent>
+            <ConnectionPoolSection />
           </CardContent>
         </Card>
 

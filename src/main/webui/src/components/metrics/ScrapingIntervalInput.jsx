@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 
 const INTERVAL_MARKS = [
+  { value: 1, label: '1s' },
   { value: 5, label: '5s' },
   { value: 15, label: '15s' },
   { value: 30, label: '30s' },
@@ -31,7 +32,7 @@ function ScrapingIntervalInput({ value = 30, onChange, disabled = false }) {
 
   const handleInputChange = (e) => {
     const val = parseInt(e.target.value, 10);
-    if (!isNaN(val) && val >= 5 && val <= 300) {
+    if (!isNaN(val) && val >= 1 && val <= 300) {
       onChange(val);
     }
   };
@@ -57,9 +58,9 @@ function ScrapingIntervalInput({ value = 30, onChange, disabled = false }) {
         <Slider
           value={value}
           onChange={handleSliderChange}
-          min={5}
+          min={1}
           max={300}
-          step={5}
+          step={1}
           marks={INTERVAL_MARKS}
           valueLabelDisplay="auto"
           valueLabelFormat={formatLabel}
@@ -73,8 +74,8 @@ function ScrapingIntervalInput({ value = 30, onChange, disabled = false }) {
           size="small"
           disabled={disabled}
           slotProps={{
-            input: { min: 5, max: 300, step: 5 },
-            htmlInput: { min: 5, max: 300, step: 5 },
+            input: { min: 1, max: 300, step: 1 },
+            htmlInput: { min: 1, max: 300, step: 1 },
           }}
           sx={{ width: 90 }}
           helperText="seconds"

@@ -96,14 +96,14 @@ function DeviceInfoDialog({
 
             {/* Device Identification (Modbus FC 0x2B) */}
             <Typography variant="subtitle2" color="primary" gutterBottom>
-              Device Identification (Modbus FC 0x2B)
+              Device Identification
             </Typography>
             
             {deviceInfo ? (
               <>
                 <InfoRow label="Vendor" value={deviceInfo.vendorName} />
                 <InfoRow label="Product Code" value={deviceInfo.productCode} />
-                <InfoRow label="Revision" value={deviceInfo.majorMinorRevision} />
+                <InfoRow label="Revision" value={deviceInfo.revision} />
                 <InfoRow label="Vendor URL" value={deviceInfo.vendorUrl} />
                 <InfoRow label="Product Name" value={deviceInfo.productName} />
                 <InfoRow label="Model Name" value={deviceInfo.modelName} />

@@ -314,7 +314,7 @@ function DevicesPage() {
         onClose={handleInfoClose}
         onRefresh={handleRefreshInfo}
         device={selectedDevice}
-        deviceInfo={deviceInfo}
+        deviceInfo={deviceInfo?.identification ? { ...deviceInfo.identification, lastUpdated: deviceInfo.lastUpdated } : null}
         isLoading={isInfoLoading}
         isRefreshing={refreshDeviceInfo.isPending}
       />

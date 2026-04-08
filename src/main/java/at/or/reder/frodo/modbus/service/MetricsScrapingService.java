@@ -262,6 +262,7 @@ public class MetricsScrapingService {
       return;
     }
 
+    boolean anySuccess = false;
     boolean anyFailed = false;
     String firstError = null;
 
@@ -272,6 +273,7 @@ public class MetricsScrapingService {
       try {
         SunSpecModelData modelData = sunSpecService.readModel(address, modelId);
         processModelReadSuccess(config, deviceId, modelId, params, modelData, scrapeTime);
+        anySuccess = true;
       } catch (Exception error) {
         LOG.warnf("Failed to scrape model %d from device %d: %s",
           modelId, deviceId, error.getMessage());
@@ -283,11 +285,16 @@ public class MetricsScrapingService {
     }
 
     // Update scrape status once after all models are done
+    // Mark SUCCESS if at least one model was read successfully.
+    // Only mark FAILED if ALL models failed.
     try {
-      if (anyFailed) {
-        updateScrapeStatus(config.id, ScrapeStatus.FAILED, firstError);
+      if (anySuccess) {
+        String warning = anyFailed
+          ? "Partial success; some models failed: " + firstError
+          : null;
+        updateScrapeStatus(config.id, ScrapeStatus.SUCCESS, warning);
       } else {
-        updateScrapeStatus(config.id, ScrapeStatus.SUCCESS, null);
+        updateScrapeStatus(config.id, ScrapeStatus.FAILED, firstError);
       }
     } catch (Exception e) {
       LOG.warnf(e, "Failed to update scrape status for device %d", deviceId);
