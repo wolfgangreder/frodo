@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Button, Card, CardContent, Typography } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import { PageHeader, LoadingSpinner, ErrorDisplay } from '../components/common';
+import RouterIcon from '@mui/icons-material/Router';
+import { PageHeader, LoadingSpinner, ErrorDisplay, EmptyState } from '../components/common';
 import {
   DeviceList,
   DeviceForm,
@@ -227,24 +228,13 @@ function DevicesPage() {
           }
         />
 
-        <Card>
-          <CardContent sx={{ textAlign: 'center', py: 6 }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No devices configured yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Add your first PV device to start monitoring.
-            </Typography>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={handleAddDevice}
-            >
-              Add Your First Device
-            </Button>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="No devices configured yet"
+          description="Add your first PV device to start monitoring."
+          icon={<RouterIcon sx={{ fontSize: 48, opacity: 0.5 }} />}
+          actionLabel="Add Your First Device"
+          onAction={handleAddDevice}
+        />
 
         {/* Form Dialog */}
         <DeviceForm

@@ -1,4 +1,4 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, responsiveFontSizes } from '@mui/material/styles';
 
 // Color palette extracted from existing App.css
 // Primary dark: #1a1a2e (body background)
@@ -131,6 +131,10 @@ const theme = createTheme({
         root: {
           textTransform: 'none',
           fontWeight: 500,
+          '&:focus-visible': {
+            outline: '2px solid #4fc3f7',
+            outlineOffset: '2px',
+          },
         },
         contained: {
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
@@ -209,14 +213,27 @@ const theme = createTheme({
         },
       },
     },
+    // Ensure icon buttons meet 44x44px minimum touch target
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          '&:focus-visible': {
+            outline: '2px solid #4fc3f7',
+            outlineOffset: '2px',
+          },
+        },
+        sizeSmall: {
+          padding: 8, // 24px icon + 2*8px padding = 40px (close to 44px)
+          '@media (pointer: coarse)': {
+            padding: 10, // 44px on touch devices
+          },
+        },
+      },
+    },
   },
 });
 
-// Responsive breakpoints (for reference)
-// xs: 0px - 599px (mobile portrait)
-// sm: 600px - 899px (mobile landscape / small tablet)
-// md: 900px - 1199px (tablet)
-// lg: 1200px - 1535px (laptop)
-// xl: 1536px+ (desktop)
+// Apply responsive font sizes for better scaling across breakpoints
+const responsiveTheme = responsiveFontSizes(theme);
 
-export default theme;
+export default responsiveTheme;

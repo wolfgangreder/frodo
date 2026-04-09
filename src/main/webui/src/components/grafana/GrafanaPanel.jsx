@@ -42,13 +42,14 @@ function GrafanaPanel({ title, src, externalUrl, aspectRatio = 16 / 9 }) {
                     href={externalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label="Open panel in Grafana"
                   >
                     <OpenInNewIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
               )}
               <Tooltip title="Full screen">
-                <IconButton size="small" onClick={() => setFullscreen(true)}>
+                <IconButton size="small" onClick={() => setFullscreen(true)} aria-label="Enter full screen">
                   <FullscreenIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
@@ -94,7 +95,7 @@ function GrafanaPanel({ title, src, externalUrl, aspectRatio = 16 / 9 }) {
               {title}
             </Box>
             <Tooltip title="Exit full screen">
-              <IconButton size="small" onClick={() => setFullscreen(false)}>
+              <IconButton size="small" onClick={() => setFullscreen(false)} aria-label="Exit full screen">
                 <FullscreenExitIcon />
               </IconButton>
             </Tooltip>

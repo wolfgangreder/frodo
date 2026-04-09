@@ -17,29 +17,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import RouterIcon from '@mui/icons-material/Router';
-
-/**
- * Connection status chip component
- */
-function StatusChip({ status }) {
-  const statusConfig = {
-    CONNECTED: { color: 'success', label: 'Connected' },
-    DISCONNECTED: { color: 'error', label: 'Disconnected' },
-    UNKNOWN: { color: 'default', label: 'Unknown' },
-    CONNECTING: { color: 'warning', label: 'Connecting' },
-  };
-
-  const config = statusConfig[status] || statusConfig.UNKNOWN;
-
-  return (
-    <Chip
-      label={config.label}
-      color={config.color}
-      size="small"
-      variant="outlined"
-    />
-  );
-}
+import { StatusChip } from '../common';
 
 /**
  * Device card component for mobile view
@@ -117,6 +95,7 @@ function DeviceCard({
             size="small"
             onClick={() => onDashboard?.(device)}
             color="success"
+            aria-label={`Open dashboard for ${device.name}`}
           >
             <DashboardIcon />
           </IconButton>
@@ -126,6 +105,7 @@ function DeviceCard({
             size="small"
             onClick={() => onMetrics?.(device)}
             color="warning"
+            aria-label={`Configure metrics for ${device.name}`}
           >
             <TimelineIcon />
           </IconButton>
@@ -135,6 +115,7 @@ function DeviceCard({
             size="small"
             onClick={() => onViewInfo?.(device)}
             color="info"
+            aria-label={`View info for ${device.name}`}
           >
             <InfoIcon />
           </IconButton>
@@ -145,6 +126,7 @@ function DeviceCard({
             onClick={() => onRefreshInfo?.(device)}
             disabled={isRefreshing}
             color="secondary"
+            aria-label={`Refresh info for ${device.name}`}
           >
             <RefreshIcon />
           </IconButton>
@@ -154,6 +136,7 @@ function DeviceCard({
             size="small"
             onClick={() => onEdit?.(device)}
             color="primary"
+            aria-label={`Edit ${device.name}`}
           >
             <EditIcon />
           </IconButton>
@@ -163,6 +146,7 @@ function DeviceCard({
             size="small"
             onClick={() => onDelete?.(device)}
             color="error"
+            aria-label={`Delete ${device.name}`}
           >
             <DeleteIcon />
           </IconButton>

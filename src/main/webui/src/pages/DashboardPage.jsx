@@ -9,11 +9,11 @@ import {
   MenuItem,
   TextField,
   Alert,
-  Button,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader, LoadingSpinner, ErrorDisplay } from '../components/common';
+import { PageHeader, LoadingSpinner, ErrorDisplay, EmptyState } from '../components/common';
+import RouterIcon from '@mui/icons-material/Router';
 import { DeviceDashboard } from '../components/dashboard';
 import { useDeviceList } from '../hooks';
 import { systemApi } from '../services';
@@ -112,19 +112,13 @@ function DashboardPage() {
 
       {/* No devices configured */}
       {(!devices || devices.length === 0) ? (
-        <Card sx={{ mt: 2 }}>
-          <CardContent sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No Devices Configured
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Add a Modbus device to start monitoring your PV system.
-            </Typography>
-            <Button variant="contained" onClick={() => navigate('/devices')}>
-              Go to Devices
-            </Button>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="No Devices Configured"
+          description="Add a Modbus device to start monitoring your PV system."
+          icon={<RouterIcon sx={{ fontSize: 48, opacity: 0.5 }} />}
+          actionLabel="Go to Devices"
+          onAction={() => navigate('/devices')}
+        />
       ) : !selectedDevice ? (
         <Alert severity="info" sx={{ mt: 2 }}>
           Select a device to view its dashboard.

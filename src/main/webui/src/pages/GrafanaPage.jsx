@@ -108,13 +108,14 @@ function ConnectionBanner({ baseUrl, onChangeUrl }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 component="a"
+                aria-label="Open Grafana in new tab"
               >
                 <OpenInNewIcon fontSize="small" />
               </IconButton>
             </Tooltip>
 
             <Tooltip title="Change Grafana URL (go to Settings)">
-              <IconButton size="small" onClick={onChangeUrl}>
+              <IconButton size="small" onClick={onChangeUrl} aria-label="Change Grafana URL">
                 <SettingsIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -232,7 +233,7 @@ function GrafanaPage() {
         ))}
       </Select>
       <Tooltip title="Reload panels">
-        <IconButton onClick={handleRefresh}>
+        <IconButton onClick={handleRefresh} aria-label="Reload Grafana panels">
           <RefreshIcon />
         </IconButton>
       </Tooltip>

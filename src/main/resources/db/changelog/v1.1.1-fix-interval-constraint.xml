@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    Fix: Widen scrape_interval_seconds CHECK constraint to allow minimum of 1 second
+    (previously 5-300, now 1-300).
+  -->
+
+  <changeSet id="8" author="frodo">
+    <comment>Widen scrape interval constraint from 5-300 to 1-300 seconds</comment>
+
+    <sql>ALTER TABLE FroMetricsConfig DROP CONSTRAINT ck_FroMetricsConfig_interval</sql>
+    <sql>ALTER TABLE FroMetricsConfig ADD CONSTRAINT ck_FroMetricsConfig_interval CHECK (scrape_interval_seconds BETWEEN 1 AND 300)</sql>
+  </changeSet>
+
+</databaseChangeLog>

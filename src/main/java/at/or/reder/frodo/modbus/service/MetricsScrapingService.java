@@ -88,6 +88,11 @@ public class MetricsScrapingService {
   private final Map<String, Boolean> registeredGauges = new ConcurrentHashMap<>();
 
   /**
+   * Flag to prevent scrape tasks from executing during shutdown.
+   */
+  private volatile boolean shuttingDown = false;
+
+  /**
    * On application startup, initialize scraping for all enabled configs.
    */
   void onStart(@Observes StartupEvent event) {
@@ -108,8 +113,9 @@ public class MetricsScrapingService {
    */
   void onStop(@Observes ShutdownEvent event) {
     LOG.info("Shutting down metrics scraping service");
+    shuttingDown = true;
     scheduledTimers.forEach((deviceId, future) -> {
-      future.cancel(false);
+      future.cancel(true);
       LOG.debugf("Cancelled scraping timer for device %d", deviceId);
     });
     scheduledTimers.clear();
@@ -148,7 +154,7 @@ public class MetricsScrapingService {
     // Schedule periodic scraping
     long intervalSeconds = config.scrapeIntervalSeconds;
     ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
-      () -> scrapeDevice(config),
+      () -> scrapeDevice(deviceId),
       intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
 
     scheduledTimers.put(deviceId, future);
@@ -192,12 +198,19 @@ public class MetricsScrapingService {
 
   /**
    * Registers Micrometer gauges for all enabled parameters in a config.
+   *
+   * <p>Reuses existing {@link AtomicReference} instances for gauge values
+   * when they already exist (i.e., when rescheduling after a config update).
+   * This is critical because Micrometer holds a reference to the original
+   * AtomicReference — creating a new one would leave Micrometer reading
+   * the old (stale) reference while the scraper updates the new one.</p>
    */
   private void registerGauges(MetricsConfigEntity config) {
     Long deviceId = config.device.id;
     String deviceName = config.device.name;
 
-    gaugeValues.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
+    Map<String, AtomicReference<Double>> deviceGauges =
+      gaugeValues.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
 
     for (MetricsParameterEntity param : config.parameters) {
       if (!param.enabled) {
@@ -207,9 +220,10 @@ public class MetricsScrapingService {
       String metricName = buildMetricName(param);
       String fieldKey = param.sunspecModelId + "_" + param.fieldName;
 
-      // Create the AtomicReference for the gauge value
-      AtomicReference<Double> gaugeValue = new AtomicReference<>(Double.NaN);
-      gaugeValues.get(deviceId).put(fieldKey, gaugeValue);
+      // Reuse existing AtomicReference if present, so Micrometer and
+      // the scraper always share the same reference
+      AtomicReference<Double> gaugeValue =
+        deviceGauges.computeIfAbsent(fieldKey, k -> new AtomicReference<>(Double.NaN));
 
       // Register gauge only once per unique combination of metric name + tags
       String gaugeKey = metricName + "|" + deviceId + "|" + fieldKey;
@@ -241,6 +255,10 @@ public class MetricsScrapingService {
   /**
    * Performs a scrape for a single device.
    *
+   * <p>Reloads the config fresh from the database on each invocation to
+   * avoid stale parameter references that could cause FK constraint violations
+   * when the config has been updated between scrape cycles.</p>
+   *
    * <p>Groups enabled parameters by SunSpec model ID for efficient reads,
    * then reads each model and updates gauge values. Optionally persists
    * data points to the database.</p>
@@ -248,56 +266,80 @@ public class MetricsScrapingService {
    * <p>All model reads are performed sequentially on the scraping thread.
    * Status is updated once after all models have been read.</p>
    */
-  private void scrapeDevice(MetricsConfigEntity config) {
-    Long deviceId = config.device.id;
-    DeviceAddress address = DeviceAddress.fromEntity(config.device);
-    Instant scrapeTime = Instant.now();
-
-    // Group enabled parameters by model ID
-    Map<Integer, List<MetricsParameterEntity>> paramsByModel = config.parameters.stream()
-      .filter(p -> p.enabled)
-      .collect(Collectors.groupingBy(p -> p.sunspecModelId));
-
-    if (paramsByModel.isEmpty()) {
+  private void scrapeDevice(Long deviceId) {
+    if (shuttingDown) {
       return;
     }
 
-    boolean anySuccess = false;
-    boolean anyFailed = false;
-    String firstError = null;
-
-    for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : paramsByModel.entrySet()) {
-      int modelId = entry.getKey();
-      List<MetricsParameterEntity> params = entry.getValue();
-
+    try {
+      // Reload config fresh from DB to get current parameter IDs
+      MetricsConfigEntity config;
       try {
-        SunSpecModelData modelData = sunSpecService.readModel(address, modelId);
-        processModelReadSuccess(config, deviceId, modelId, params, modelData, scrapeTime);
-        anySuccess = true;
-      } catch (Exception error) {
-        LOG.warnf("Failed to scrape model %d from device %d: %s",
-          modelId, deviceId, error.getMessage());
-        anyFailed = true;
-        if (firstError == null) {
-          firstError = error.getMessage();
+        config = loadConfigForScrape(deviceId);
+      } catch (Exception e) {
+        LOG.warnf(e, "Failed to load metrics config for device %d, skipping scrape", deviceId);
+        return;
+      }
+
+      if (config == null || !config.enabled) {
+        return;
+      }
+
+      DeviceAddress address = DeviceAddress.fromEntity(config.device);
+      Instant scrapeTime = Instant.now();
+
+      // Group enabled parameters by model ID
+      Map<Integer, List<MetricsParameterEntity>> paramsByModel = config.parameters.stream()
+        .filter(p -> p.enabled)
+        .collect(Collectors.groupingBy(p -> p.sunspecModelId));
+
+      if (paramsByModel.isEmpty()) {
+        return;
+      }
+
+      boolean anySuccess = false;
+      boolean anyFailed = false;
+      String firstError = null;
+
+      for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : paramsByModel.entrySet()) {
+        int modelId = entry.getKey();
+        List<MetricsParameterEntity> params = entry.getValue();
+
+        try {
+          SunSpecModelData modelData = sunSpecService.readModel(address, modelId);
+          processModelReadSuccess(config, deviceId, modelId, params, modelData, scrapeTime);
+          anySuccess = true;
+        } catch (Exception error) {
+          LOG.warnf("Failed to scrape model %d from device %d: %s",
+            modelId, deviceId, error.getMessage());
+          anyFailed = true;
+          if (firstError == null) {
+            firstError = error.getMessage();
+          }
         }
       }
-    }
 
-    // Update scrape status once after all models are done
-    // Mark SUCCESS if at least one model was read successfully.
-    // Only mark FAILED if ALL models failed.
-    try {
-      if (anySuccess) {
-        String warning = anyFailed
-          ? "Partial success; some models failed: " + firstError
-          : null;
-        updateScrapeStatus(config.id, ScrapeStatus.SUCCESS, warning);
-      } else {
-        updateScrapeStatus(config.id, ScrapeStatus.FAILED, firstError);
+      // Update scrape status once after all models are done
+      // Mark SUCCESS if at least one model was read successfully.
+      // Only mark FAILED if ALL models failed.
+      try {
+        if (anySuccess) {
+          String warning = anyFailed
+            ? "Partial success; some models failed: " + firstError
+            : null;
+          updateScrapeStatus(config.id, ScrapeStatus.SUCCESS, warning);
+        } else {
+          updateScrapeStatus(config.id, ScrapeStatus.FAILED, firstError);
+        }
+      } catch (Exception e) {
+        LOG.warnf(e, "Failed to update scrape status for device %d", deviceId);
       }
     } catch (Exception e) {
-      LOG.warnf(e, "Failed to update scrape status for device %d", deviceId);
+      // Top-level catch: prevents any uncaught exception from killing
+      // the ScheduledExecutorService task permanently.
+      // Without this, a single failure (e.g., LazyInitializationException)
+      // would silently stop all future scrapes for this device.
+      LOG.errorf(e, "Unexpected error during metrics scrape for device %d", deviceId);
     }
   }
 
@@ -351,6 +393,21 @@ public class MetricsScrapingService {
         LOG.warnf(e, "Failed to persist metrics data for device %d model %d", deviceId, modelId);
       }
     }
+  }
+
+  /**
+   * Loads a fresh config with parameters from the database for scraping.
+   *
+   * <p>This ensures the scraper always uses current parameter IDs,
+   * preventing FK constraint violations when parameters have been
+   * updated between scrape cycles.</p>
+   *
+   * @param deviceId the device ID
+   * @return the config entity with parameters loaded, or null if not found
+   */
+  @Transactional
+  MetricsConfigEntity loadConfigForScrape(Long deviceId) {
+    return configRepository.findByDeviceIdWithParameters(deviceId).orElse(null);
   }
 
   /**

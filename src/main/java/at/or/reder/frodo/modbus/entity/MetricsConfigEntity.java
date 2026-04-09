@@ -46,7 +46,7 @@ public class MetricsConfigEntity extends PanacheEntity {
   public ModbusDeviceEntity device;
 
   /**
-   * Interval in seconds between scrape operations (5-300).
+   * Interval in seconds between scrape operations (1-300).
    */
   @Column(name = "scrape_interval_seconds", nullable = false)
   public int scrapeIntervalSeconds = 30;

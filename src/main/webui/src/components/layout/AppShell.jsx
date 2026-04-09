@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import {
   Box,
+  Link,
   Toolbar,
   useTheme,
 } from '@mui/material';
@@ -20,12 +21,35 @@ function AppShell() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Skip to main content link for keyboard/screen reader users */}
+      <Link
+        href="#main-content"
+        sx={{
+          position: 'absolute',
+          left: '-9999px',
+          zIndex: 9999,
+          padding: 2,
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          textDecoration: 'none',
+          fontWeight: 600,
+          '&:focus': {
+            left: theme.spacing(2),
+            top: theme.spacing(2),
+          },
+        }}
+      >
+        Skip to main content
+      </Link>
+
       <Header />
       <Sidebar />
 
       {/* Main content area */}
       <Box
         component="main"
+        id="main-content"
+        tabIndex={-1}
         sx={{
           flexGrow: 1,
           width: {
@@ -37,6 +61,7 @@ function AppShell() {
           }),
           backgroundColor: 'background.default',
           minHeight: '100vh',
+          outline: 'none',
         }}
       >
         {/* Toolbar spacer to push content below AppBar */}

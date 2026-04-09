@@ -32,27 +32,27 @@ public class MetricsConfigRepository implements PanacheRepository<MetricsConfigE
   }
 
   /**
-   * Finds the metrics config for a device, eagerly fetching parameters.
+   * Finds the metrics config for a device, eagerly fetching the device and parameters.
    *
    * @param deviceId the device ID
-   * @return Optional containing the config with parameters loaded, or empty
+   * @return Optional containing the config with device and parameters loaded, or empty
    */
   public Optional<MetricsConfigEntity> findByDeviceIdWithParameters(Long deviceId) {
     List<MetricsConfigEntity> results = find(
-      "SELECT c FROM MetricsConfigEntity c LEFT JOIN FETCH c.parameters WHERE c.device.id = ?1",
+      "SELECT c FROM MetricsConfigEntity c JOIN FETCH c.device LEFT JOIN FETCH c.parameters WHERE c.device.id = ?1",
       deviceId
     ).list();
     return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
   }
 
   /**
-   * Lists all enabled metrics configs with their parameters eagerly loaded.
+   * Lists all enabled metrics configs with their device and parameters eagerly loaded.
    *
    * @return list of enabled configs
    */
   public List<MetricsConfigEntity> findAllEnabled() {
     return find(
-      "SELECT c FROM MetricsConfigEntity c LEFT JOIN FETCH c.parameters WHERE c.enabled = true"
+      "SELECT c FROM MetricsConfigEntity c JOIN FETCH c.device LEFT JOIN FETCH c.parameters WHERE c.enabled = true"
     ).list();
   }
 

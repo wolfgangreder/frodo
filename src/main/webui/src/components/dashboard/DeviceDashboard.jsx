@@ -135,6 +135,7 @@ function DeviceDashboard({ device }) {
             size="small"
             onClick={handleRefreshAll}
             disabled={isAnyFetching}
+            aria-label="Refresh all device data"
             sx={{
               animation: isAnyFetching ? 'spin 1s linear infinite' : 'none',
               '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },

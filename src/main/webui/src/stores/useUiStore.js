@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 
+let notificationId = 0;
+
 /**
  * UI Store - manages global UI state
  * - Sidebar open/closed state (responsive)
- * - Current page/navigation
- * - Notifications/snackbar
+ * - Notification queue (stacked toasts)
  * - Loading states
  */
 const useUiStore = create((set, get) => ({
@@ -12,8 +13,8 @@ const useUiStore = create((set, get) => ({
   sidebarOpen: true,
   sidebarMobileOpen: false,
 
-  // Notifications (snackbar)
-  notification: null, // { message, severity: 'success' | 'error' | 'warning' | 'info', duration }
+  // Notification queue
+  notifications: [],
 
   // Global loading state
   isLoading: false,
@@ -26,9 +27,14 @@ const useUiStore = create((set, get) => ({
   toggleMobileSidebar: () => set((state) => ({ sidebarMobileOpen: !state.sidebarMobileOpen })),
   setMobileSidebarOpen: (open) => set({ sidebarMobileOpen: open }),
 
-  // Notification actions
+  // Notification actions (queue-based)
   showNotification: (message, severity = 'info', duration = 5000) =>
-    set({ notification: { message, severity, duration, key: Date.now() } }),
+    set((state) => ({
+      notifications: [
+        ...state.notifications,
+        { id: ++notificationId, message, severity, duration },
+      ],
+    })),
 
   showSuccess: (message, duration = 5000) =>
     get().showNotification(message, 'success', duration),
@@ -42,7 +48,15 @@ const useUiStore = create((set, get) => ({
   showInfo: (message, duration = 5000) =>
     get().showNotification(message, 'info', duration),
 
-  clearNotification: () => set({ notification: null }),
+  dismissNotification: (id) =>
+    set((state) => ({
+      notifications: state.notifications.filter((n) => n.id !== id),
+    })),
+
+  clearNotification: () =>
+    set((state) => ({
+      notifications: state.notifications.slice(1),
+    })),
 
   // Loading actions
   setLoading: (isLoading, message = '') =>

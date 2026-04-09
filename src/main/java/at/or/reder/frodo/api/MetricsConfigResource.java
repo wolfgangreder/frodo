@@ -46,7 +46,11 @@ import org.jboss.logging.Logger;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * REST API for per-device metrics scraping configuration and historical data.
@@ -148,6 +152,9 @@ public class MetricsConfigResource {
     }
 
     configRepository.save(config);
+
+    // Flush to ensure constraint violations surface before scheduling
+    configRepository.flush();
 
     // Reschedule scraping with new config
     scrapingService.scheduleDeviceScraping(config);
@@ -354,20 +361,44 @@ public class MetricsConfigResource {
 
   /**
    * Synchronizes the parameter list of a config entity with the requested parameters.
+   *
+   * <p>Updates parameters in-place where possible (matching by modelId + fieldName),
+   * preserving their database IDs. This prevents FK constraint violations when a
+   * concurrent scrape task holds references to the old parameter entities.</p>
    */
   private void updateParameters(MetricsConfigEntity config, List<ParameterConfigRequest> requested) {
-    // Remove existing parameters that are not in the new list
-    config.parameters.clear();
-
-    // Add new parameters
-    for (ParameterConfigRequest paramReq : requested) {
-      MetricsParameterEntity param = new MetricsParameterEntity();
-      param.config = config;
-      param.sunspecModelId = paramReq.sunspecModelId();
-      param.fieldName = paramReq.fieldName();
-      param.enabled = paramReq.enabled();
-      param.customMetricName = paramReq.customMetricName();
-      config.parameters.add(param);
+    // Build a lookup of existing parameters by (modelId, fieldName)
+    Map<String, MetricsParameterEntity> existingByKey = new HashMap<>();
+    for (MetricsParameterEntity existing : config.parameters) {
+      String key = existing.sunspecModelId + "|" + existing.fieldName;
+      existingByKey.put(key, existing);
     }
+
+    // Track which existing parameters are still needed
+    Set<String> requestedKeys = new HashSet<>();
+
+    for (ParameterConfigRequest paramReq : requested) {
+      String key = paramReq.sunspecModelId() + "|" + paramReq.fieldName();
+      requestedKeys.add(key);
+
+      MetricsParameterEntity existing = existingByKey.get(key);
+      if (existing != null) {
+        // Update in-place — preserves the database ID
+        existing.enabled = paramReq.enabled();
+        existing.customMetricName = paramReq.customMetricName();
+      } else {
+        // New parameter — add it
+        MetricsParameterEntity param = new MetricsParameterEntity();
+        param.config = config;
+        param.sunspecModelId = paramReq.sunspecModelId();
+        param.fieldName = paramReq.fieldName();
+        param.enabled = paramReq.enabled();
+        param.customMetricName = paramReq.customMetricName();
+        config.parameters.add(param);
+      }
+    }
+
+    // Remove parameters that are no longer in the request
+    config.parameters.removeIf(p -> !requestedKeys.contains(p.sunspecModelId + "|" + p.fieldName));
   }
 }
