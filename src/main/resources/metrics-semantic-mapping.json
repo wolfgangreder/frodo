@@ -1,0 +1,628 @@
+{
+  "version": "1.0.0",
+  "description": "Maps SunSpec model fields to semantic Prometheus metric names with ISO base units",
+  "unitMapping": {
+    "W": { "baseUnit": "watts", "symbol": "W", "quantity": "power" },
+    "VA": { "baseUnit": "voltamperes", "symbol": "VA", "quantity": "apparent power" },
+    "var": { "baseUnit": "vars", "symbol": "var", "quantity": "reactive power" },
+    "Wh": { "baseUnit": "watt_hours", "symbol": "Wh", "quantity": "energy" },
+    "VAh": { "baseUnit": "voltampere_hours", "symbol": "VAh", "quantity": "apparent energy" },
+    "varh": { "baseUnit": "var_hours", "symbol": "varh", "quantity": "reactive energy" },
+    "A": { "baseUnit": "amperes", "symbol": "A", "quantity": "current" },
+    "V": { "baseUnit": "volts", "symbol": "V", "quantity": "voltage" },
+    "Hz": { "baseUnit": "hertz", "symbol": "Hz", "quantity": "frequency" },
+    "C": { "baseUnit": "celsius", "symbol": "°C", "quantity": "temperature" },
+    "Pct": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "cos()": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "ohms": { "baseUnit": "ohms", "symbol": "Ω", "quantity": "resistance" },
+    "AH": { "baseUnit": "ampere_hours", "symbol": "Ah", "quantity": "capacity" },
+    "Secs": { "baseUnit": "seconds", "symbol": "s", "quantity": "time" },
+    "% WMax": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "% VArMax": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "% WChaMax": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "% AhrRtg": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "% WMax/sec": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "% WChaMax/sec": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "% WGra": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" },
+    "% VArAval": { "baseUnit": "ratio", "symbol": "", "quantity": "ratio" }
+  },
+  "metrics": [
+    {
+      "metricName": "frodo_sunspec_ac_power_watts",
+      "semanticName": "ac_power",
+      "description": "AC power output from the inverter. Positive values indicate power generation, negative values indicate consumption.",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "W" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_current_amperes",
+      "semanticName": "ac_current",
+      "description": "Total AC current from the inverter (sum of all phases).",
+      "unit": "A",
+      "baseUnit": "amperes",
+      "type": "gauge",
+      "category": "current",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "A" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_phase_current_amperes",
+      "semanticName": "ac_phase_current",
+      "description": "AC current per phase. Use the 'phase' tag (A, B, C) to distinguish phases.",
+      "unit": "A",
+      "baseUnit": "amperes",
+      "type": "gauge",
+      "category": "current",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "AphA", "tags": { "phase": "A" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "AphB", "tags": { "phase": "B" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "AphC", "tags": { "phase": "C" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_voltage_line_volts",
+      "semanticName": "ac_voltage_line",
+      "description": "AC line-to-line (phase-to-phase) voltage.",
+      "unit": "V",
+      "baseUnit": "volts",
+      "type": "gauge",
+      "category": "voltage",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "PPVphAB", "tags": { "line": "AB" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "PPVphBC", "tags": { "line": "BC" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "PPVphCA", "tags": { "line": "CA" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_voltage_phase_volts",
+      "semanticName": "ac_voltage_phase",
+      "description": "AC phase-to-neutral voltage.",
+      "unit": "V",
+      "baseUnit": "volts",
+      "type": "gauge",
+      "category": "voltage",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "PhVphA", "tags": { "phase": "A" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "PhVphB", "tags": { "phase": "B" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "PhVphC", "tags": { "phase": "C" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_frequency_hertz",
+      "semanticName": "ac_frequency",
+      "description": "AC line frequency.",
+      "unit": "Hz",
+      "baseUnit": "hertz",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "Hz" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_apparent_power_voltamperes",
+      "semanticName": "ac_apparent_power",
+      "description": "AC apparent power (VA) from the inverter.",
+      "unit": "VA",
+      "baseUnit": "voltamperes",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "VA" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_reactive_power_vars",
+      "semanticName": "ac_reactive_power",
+      "description": "AC reactive power (var) from the inverter.",
+      "unit": "var",
+      "baseUnit": "vars",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "VAr" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_power_factor_ratio",
+      "semanticName": "ac_power_factor",
+      "description": "AC power factor as a ratio (0.0 to 1.0). Indicates the phase angle between voltage and current.",
+      "unit": "Pct",
+      "baseUnit": "ratio",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "PF" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_ac_energy_total_watt_hours",
+      "semanticName": "ac_energy_total",
+      "description": "Cumulative AC energy production since inverter installation (lifetime energy).",
+      "unit": "Wh",
+      "baseUnit": "watt_hours",
+      "type": "gauge",
+      "category": "energy",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "WH" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_dc_current_amperes",
+      "semanticName": "dc_current",
+      "description": "Total DC current from the PV array (aggregate from inverter model).",
+      "unit": "A",
+      "baseUnit": "amperes",
+      "type": "gauge",
+      "category": "current",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "DCA" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_mppt_dc_current_amperes",
+      "semanticName": "mppt_dc_current",
+      "description": "DC current per MPPT string. Use the 'channel' tag to distinguish strings.",
+      "unit": "A",
+      "baseUnit": "amperes",
+      "type": "gauge",
+      "category": "current",
+      "fields": [
+        { "modelIds": [160], "field": "module/1/DCA", "tags": { "channel": "1" } },
+        { "modelIds": [160], "field": "module/2/DCA", "tags": { "channel": "2" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_dc_voltage_volts",
+      "semanticName": "dc_voltage",
+      "description": "Total DC voltage from the PV array (aggregate from inverter model).",
+      "unit": "V",
+      "baseUnit": "volts",
+      "type": "gauge",
+      "category": "voltage",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "DCV" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_mppt_dc_voltage_volts",
+      "semanticName": "mppt_dc_voltage",
+      "description": "DC voltage per MPPT string. Use the 'channel' tag to distinguish strings.",
+      "unit": "V",
+      "baseUnit": "volts",
+      "type": "gauge",
+      "category": "voltage",
+      "fields": [
+        { "modelIds": [160], "field": "module/1/DCV", "tags": { "channel": "1" } },
+        { "modelIds": [160], "field": "module/2/DCV", "tags": { "channel": "2" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_dc_power_watts",
+      "semanticName": "dc_power",
+      "description": "Total DC power from the PV array (aggregate from inverter model).",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "DCW" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_mppt_dc_power_watts",
+      "semanticName": "mppt_dc_power",
+      "description": "DC power per MPPT string. Use the 'channel' tag to distinguish strings.",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [160], "field": "module/1/DCW", "tags": { "channel": "1" } },
+        { "modelIds": [160], "field": "module/2/DCW", "tags": { "channel": "2" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_dc_energy_total_watt_hours",
+      "semanticName": "dc_energy_total",
+      "description": "Cumulative DC energy production per MPPT string (lifetime energy).",
+      "unit": "Wh",
+      "baseUnit": "watt_hours",
+      "type": "gauge",
+      "category": "energy",
+      "fields": [
+        { "modelIds": [160], "field": "module/1/DCWH", "tags": { "channel": "1" } },
+        { "modelIds": [160], "field": "module/2/DCWH", "tags": { "channel": "2" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_temperature_celsius",
+      "semanticName": "temperature",
+      "description": "Inverter temperature readings. Use the 'location' tag (cabinet, heatsink, transformer, other) to distinguish sensors.",
+      "unit": "C",
+      "baseUnit": "celsius",
+      "type": "gauge",
+      "category": "temperature",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "TmpCab", "tags": { "location": "cabinet" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "TmpSnk", "tags": { "location": "heatsink" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "TmpTrns", "tags": { "location": "transformer" } },
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "TmpOt", "tags": { "location": "other" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_mppt_temperature_celsius",
+      "semanticName": "mppt_temperature",
+      "description": "MPPT string temperature per channel. Use the 'channel' tag to distinguish strings.",
+      "unit": "C",
+      "baseUnit": "celsius",
+      "type": "gauge",
+      "category": "temperature",
+      "fields": [
+        { "modelIds": [160], "field": "module/1/Tmp", "tags": { "channel": "1" } },
+        { "modelIds": [160], "field": "module/2/Tmp", "tags": { "channel": "2" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_operating_state",
+      "semanticName": "operating_state",
+      "description": "Inverter operating state. Values: 1=Off, 2=Sleeping, 3=Starting, 4=Running (MPPT), 5=Throttled, 6=Shutting Down, 7=Fault, 8=Standby.",
+      "unit": null,
+      "baseUnit": null,
+      "type": "gauge",
+      "category": "status",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "St" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_vendor_state",
+      "semanticName": "vendor_state",
+      "description": "Vendor-specific operating state code (Fronius-defined).",
+      "unit": null,
+      "baseUnit": null,
+      "type": "gauge",
+      "category": "status",
+      "fields": [
+        { "modelIds": [101, 102, 103, 111, 112, 113], "field": "StVnd" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_dc_operating_state",
+      "semanticName": "dc_operating_state",
+      "description": "DC MPPT string operating state per channel.",
+      "unit": null,
+      "baseUnit": null,
+      "type": "gauge",
+      "category": "status",
+      "fields": [
+        { "modelIds": [160], "field": "module/1/DCSt", "tags": { "channel": "1" } },
+        { "modelIds": [160], "field": "module/2/DCSt", "tags": { "channel": "2" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_power_watts",
+      "semanticName": "rating_power",
+      "description": "Continuous power output capability of the inverter (nameplate rating).",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "WRtg" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_apparent_power_voltamperes",
+      "semanticName": "rating_apparent_power",
+      "description": "Continuous VA capability of the inverter (nameplate rating).",
+      "unit": "VA",
+      "baseUnit": "voltamperes",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "VARtg" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_reactive_power_vars",
+      "semanticName": "rating_reactive_power",
+      "description": "Continuous reactive power (VAR) capability per quadrant.",
+      "unit": "var",
+      "baseUnit": "vars",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "VArRtgQ1", "tags": { "quadrant": "1" } },
+        { "modelIds": [120], "field": "VArRtgQ2", "tags": { "quadrant": "2" } },
+        { "modelIds": [120], "field": "VArRtgQ3", "tags": { "quadrant": "3" } },
+        { "modelIds": [120], "field": "VArRtgQ4", "tags": { "quadrant": "4" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_current_amperes",
+      "semanticName": "rating_current",
+      "description": "Maximum RMS AC current level (nameplate rating).",
+      "unit": "A",
+      "baseUnit": "amperes",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "ARtg" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_energy_watt_hours",
+      "semanticName": "rating_energy",
+      "description": "Nominal energy rating of storage (nameplate rating).",
+      "unit": "Wh",
+      "baseUnit": "watt_hours",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "WHRtg" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_max_charge_power_watts",
+      "semanticName": "rating_max_charge_power",
+      "description": "Maximum charge rate (nameplate rating).",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "MaxChaRte" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_max_discharge_power_watts",
+      "semanticName": "rating_max_discharge_power",
+      "description": "Maximum discharge rate (nameplate rating).",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "MaxDisChaRte" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_rating_capacity_ampere_hours",
+      "semanticName": "rating_capacity",
+      "description": "Usable battery capacity (nameplate rating).",
+      "unit": "AH",
+      "baseUnit": "ampere_hours",
+      "type": "gauge",
+      "category": "rating",
+      "fields": [
+        { "modelIds": [120], "field": "AhrRtg" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_setting_max_power_watts",
+      "semanticName": "setting_max_power",
+      "description": "Maximum power output setting.",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "setting",
+      "fields": [
+        { "modelIds": [121], "field": "WMax" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_setting_voltage_reference_volts",
+      "semanticName": "setting_voltage_reference",
+      "description": "Voltage at the point of common coupling (PCC).",
+      "unit": "V",
+      "baseUnit": "volts",
+      "type": "gauge",
+      "category": "setting",
+      "fields": [
+        { "modelIds": [121], "field": "VRef" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_setting_max_apparent_power_voltamperes",
+      "semanticName": "setting_max_apparent_power",
+      "description": "Maximum apparent power setpoint.",
+      "unit": "VA",
+      "baseUnit": "voltamperes",
+      "type": "gauge",
+      "category": "setting",
+      "fields": [
+        { "modelIds": [121], "field": "VAMax" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_setting_nominal_frequency_hertz",
+      "semanticName": "setting_nominal_frequency",
+      "description": "Nominal frequency at the ECP (Electrical Connection Point).",
+      "unit": "Hz",
+      "baseUnit": "hertz",
+      "type": "gauge",
+      "category": "setting",
+      "fields": [
+        { "modelIds": [121], "field": "ECPNomHz" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_lifetime_energy_active_watt_hours",
+      "semanticName": "lifetime_energy_active",
+      "description": "Lifetime active energy output (accumulated Wh since installation).",
+      "unit": "Wh",
+      "baseUnit": "watt_hours",
+      "type": "gauge",
+      "category": "energy",
+      "fields": [
+        { "modelIds": [122], "field": "ActWh" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_lifetime_energy_apparent_voltampere_hours",
+      "semanticName": "lifetime_energy_apparent",
+      "description": "Lifetime apparent energy output (accumulated VAh since installation).",
+      "unit": "VAh",
+      "baseUnit": "voltampere_hours",
+      "type": "gauge",
+      "category": "energy",
+      "fields": [
+        { "modelIds": [122], "field": "ActVAh" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_lifetime_energy_reactive_var_hours",
+      "semanticName": "lifetime_energy_reactive",
+      "description": "Lifetime reactive energy output per quadrant (accumulated varh since installation).",
+      "unit": "varh",
+      "baseUnit": "var_hours",
+      "type": "gauge",
+      "category": "energy",
+      "fields": [
+        { "modelIds": [122], "field": "ActVArhQ1", "tags": { "quadrant": "1" } },
+        { "modelIds": [122], "field": "ActVArhQ2", "tags": { "quadrant": "2" } },
+        { "modelIds": [122], "field": "ActVArhQ3", "tags": { "quadrant": "3" } },
+        { "modelIds": [122], "field": "ActVArhQ4", "tags": { "quadrant": "4" } }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_available_power_watts",
+      "semanticName": "available_power",
+      "description": "Available watts (current generation capacity based on conditions).",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [122], "field": "WAval" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_available_reactive_power_vars",
+      "semanticName": "available_reactive_power",
+      "description": "Available reactive power (VARs).",
+      "unit": "var",
+      "baseUnit": "vars",
+      "type": "gauge",
+      "category": "power",
+      "fields": [
+        { "modelIds": [122], "field": "VArAval" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_isolation_resistance_ohms",
+      "semanticName": "isolation_resistance",
+      "description": "Isolation resistance measurement.",
+      "unit": "ohms",
+      "baseUnit": "ohms",
+      "type": "gauge",
+      "category": "status",
+      "fields": [
+        { "modelIds": [122], "field": "Ris" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_control_power_limit_ratio",
+      "semanticName": "control_power_limit",
+      "description": "Power output limit as a ratio of WMax (0.0 to 1.0). Writable control parameter.",
+      "unit": "% WMax",
+      "baseUnit": "ratio",
+      "type": "gauge",
+      "category": "control",
+      "fields": [
+        { "modelIds": [123], "field": "WMaxLimPct" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_control_power_factor_ratio",
+      "semanticName": "control_power_factor",
+      "description": "Fixed power factor setting. Writable control parameter.",
+      "unit": "cos()",
+      "baseUnit": "ratio",
+      "type": "gauge",
+      "category": "control",
+      "fields": [
+        { "modelIds": [123], "field": "OutPFSet" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_control_connection_state",
+      "semanticName": "control_connection_state",
+      "description": "Connection control state. Values: 0=Disconnect, 1=Connect.",
+      "unit": null,
+      "baseUnit": null,
+      "type": "gauge",
+      "category": "control",
+      "fields": [
+        { "modelIds": [123], "field": "Conn" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_battery_charge_state_ratio",
+      "semanticName": "battery_charge_state",
+      "description": "Battery state of charge as a ratio (0.0 = empty, 1.0 = full).",
+      "unit": "% AhrRtg",
+      "baseUnit": "ratio",
+      "type": "gauge",
+      "category": "battery",
+      "fields": [
+        { "modelIds": [124], "field": "ChaState" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_battery_voltage_volts",
+      "semanticName": "battery_voltage",
+      "description": "Internal battery voltage.",
+      "unit": "V",
+      "baseUnit": "volts",
+      "type": "gauge",
+      "category": "battery",
+      "fields": [
+        { "modelIds": [124], "field": "InBatV" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_battery_charge_status",
+      "semanticName": "battery_charge_status",
+      "description": "Battery charge status. Values: 1=Off, 2=Empty, 3=Discharging, 4=Charging, 5=Full, 6=Holding, 7=Testing.",
+      "unit": null,
+      "baseUnit": null,
+      "type": "gauge",
+      "category": "battery",
+      "fields": [
+        { "modelIds": [124], "field": "ChaSt" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_battery_available_capacity_ampere_hours",
+      "semanticName": "battery_available_capacity",
+      "description": "Available storage capacity in ampere-hours.",
+      "unit": "AH",
+      "baseUnit": "ampere_hours",
+      "type": "gauge",
+      "category": "battery",
+      "fields": [
+        { "modelIds": [124], "field": "StorAval" }
+      ]
+    },
+    {
+      "metricName": "frodo_sunspec_battery_max_charge_power_watts",
+      "semanticName": "battery_max_charge_power",
+      "description": "Maximum charge setpoint.",
+      "unit": "W",
+      "baseUnit": "watts",
+      "type": "gauge",
+      "category": "battery",
+      "fields": [
+        { "modelIds": [124], "field": "WChaMax" }
+      ]
+    }
+  ]
+}

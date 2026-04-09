@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DevicesIcon from '@mui/icons-material/Devices';
+import DescriptionIcon from '@mui/icons-material/Description';
 import InsightsIcon from '@mui/icons-material/Insights';
 import SettingsIcon from '@mui/icons-material/Settings';
 import InfoIcon from '@mui/icons-material/Info';
@@ -33,6 +34,11 @@ const navItems = [
     title: 'Devices',
     path: '/devices',
     icon: <DevicesIcon />,
+  },
+  {
+    title: 'Metrics Docs',
+    path: '/metrics-docs',
+    icon: <DescriptionIcon />,
   },
   {
     title: 'Grafana',

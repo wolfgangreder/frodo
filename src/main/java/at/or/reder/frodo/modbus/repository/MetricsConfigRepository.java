@@ -3,6 +3,7 @@ package at.or.reder.frodo.modbus.repository;
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 
 import java.util.List;
@@ -17,6 +18,14 @@ import java.util.Optional;
  *
  * <p>Uses Panache repository pattern for simplified JPA operations.
  * All write operations are transactional.</p>
+ *
+ * <p><strong>Jaybird/Firebird compatibility:</strong> Methods that need
+ * both device and parameters use a two-step approach: first a
+ * {@code JOIN FETCH} for the device (1:1 association), then a separate
+ * lazy-load initialization for the parameters collection. This avoids
+ * the {@code LEFT JOIN FETCH} on collections which can trigger Jaybird's
+ * "The result set is closed" error (ISC error 337248339) when Hibernate's
+ * result set processing conflicts with Jaybird's auto-close behavior.</p>
  */
 @ApplicationScoped
 public class MetricsConfigRepository implements PanacheRepository<MetricsConfigEntity> {
@@ -34,26 +43,63 @@ public class MetricsConfigRepository implements PanacheRepository<MetricsConfigE
   /**
    * Finds the metrics config for a device, eagerly fetching the device and parameters.
    *
+   * <p>Uses a two-step approach for Jaybird compatibility: loads the config
+   * with its device via {@code JOIN FETCH}, then force-initializes the
+   * parameters collection in a separate query.</p>
+   *
    * @param deviceId the device ID
    * @return Optional containing the config with device and parameters loaded, or empty
    */
+  @Transactional
   public Optional<MetricsConfigEntity> findByDeviceIdWithParameters(Long deviceId) {
-    List<MetricsConfigEntity> results = find(
-      "SELECT c FROM MetricsConfigEntity c JOIN FETCH c.device LEFT JOIN FETCH c.parameters WHERE c.device.id = ?1",
-      deviceId
-    ).list();
-    return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    EntityManager em = getEntityManager();
+
+    // Step 1: Load config with device (1:1 join, no collection fetch)
+    List<MetricsConfigEntity> results = em.createQuery(
+      "SELECT c FROM MetricsConfigEntity c JOIN FETCH c.device WHERE c.device.id = ?1",
+      MetricsConfigEntity.class
+    ).setParameter(1, deviceId)
+    .getResultList();
+
+    if (results.isEmpty()) {
+      return Optional.empty();
+    }
+
+    // Step 2: Force-initialize parameters collection (triggers clean lazy load)
+    MetricsConfigEntity config = results.get(0);
+    config.parameters.size();
+
+    return Optional.of(config);
   }
 
   /**
    * Lists all enabled metrics configs with their device and parameters eagerly loaded.
    *
-   * @return list of enabled configs
+   * <p>Uses a two-step approach for Jaybird compatibility: loads all enabled
+   * configs with their devices via {@code JOIN FETCH}, then force-initializes
+   * each config's parameters collection. This avoids the cartesian product
+   * explosion and result set conflicts of a single multi-{@code JOIN FETCH}
+   * query.</p>
+   *
+   * @return list of enabled configs with parameters populated
    */
+  @Transactional
   public List<MetricsConfigEntity> findAllEnabled() {
-    return find(
-      "SELECT c FROM MetricsConfigEntity c JOIN FETCH c.device LEFT JOIN FETCH c.parameters WHERE c.enabled = true"
-    ).list();
+    EntityManager em = getEntityManager();
+
+    // Step 1: Load enabled configs with device (1:1 join, no collection fetch)
+    List<MetricsConfigEntity> configs = em.createQuery(
+      "SELECT c FROM MetricsConfigEntity c JOIN FETCH c.device WHERE c.enabled = true",
+      MetricsConfigEntity.class
+    ).getResultList();
+
+    // Step 2: Force-initialize parameters collections
+    // Each lazy load executes a clean, sequential query
+    for (MetricsConfigEntity config : configs) {
+      config.parameters.size();
+    }
+
+    return configs;
   }
 
   /**

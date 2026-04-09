@@ -5,9 +5,12 @@ import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.entity.MetricsDataEntity;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
 import at.or.reder.frodo.modbus.entity.ScrapeStatus;
+import at.or.reder.frodo.modbus.metrics.MetricMetadata.ResolvedMetric;
+import at.or.reder.frodo.modbus.metrics.MetricMetadataRegistry;
 import at.or.reder.frodo.modbus.repository.MetricsConfigRepository;
 import at.or.reder.frodo.modbus.repository.MetricsDataRepository;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelData;
+import at.or.reder.frodo.modbus.sunspec.SunSpecModelRegistry;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -23,6 +26,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -61,6 +65,9 @@ public class MetricsScrapingService {
 
   @Inject
   MeterRegistry meterRegistry;
+
+  @Inject
+  MetricMetadataRegistry metadataRegistry;
 
   /**
    * Thread pool for scheduled scraping tasks.
@@ -199,6 +206,10 @@ public class MetricsScrapingService {
   /**
    * Registers Micrometer gauges for all enabled parameters in a config.
    *
+   * <p>Uses the {@link MetricMetadataRegistry} to resolve semantic metric
+   * names and tags (phase, channel, line, etc.) from the mapping JSON.
+   * Falls back to legacy naming when no semantic mapping exists.</p>
+   *
    * <p>Reuses existing {@link AtomicReference} instances for gauge values
    * when they already exist (i.e., when rescheduling after a config update).
    * This is critical because Micrometer holds a reference to the original
@@ -217,8 +228,16 @@ public class MetricsScrapingService {
         continue;
       }
 
-      String metricName = buildMetricName(param);
       String fieldKey = param.sunspecModelId + "_" + param.fieldName;
+
+      // Resolve semantic metric name and tags from the mapping
+      Optional<ResolvedMetric> resolved =
+        metadataRegistry.resolve(param.sunspecModelId, param.fieldName);
+
+      String metricName = buildMetricName(param, resolved.orElse(null));
+      String description = resolved
+        .map(ResolvedMetric::description)
+        .orElse("SunSpec " + param.fieldName + " from model " + param.sunspecModelId);
 
       // Reuse existing AtomicReference if present, so Micrometer and
       // the scraper always share the same reference
@@ -228,25 +247,48 @@ public class MetricsScrapingService {
       // Register gauge only once per unique combination of metric name + tags
       String gaugeKey = metricName + "|" + deviceId + "|" + fieldKey;
       if (registeredGauges.putIfAbsent(gaugeKey, Boolean.TRUE) == null) {
-        Gauge.builder(metricName, gaugeValue, AtomicReference::get)
+        Gauge.Builder<?> builder = Gauge.builder(metricName, gaugeValue, AtomicReference::get)
           .tag("device_id", String.valueOf(deviceId))
           .tag("device_name", deviceName)
           .tag("model_id", String.valueOf(param.sunspecModelId))
-          .tag("field", param.fieldName)
-          .description("SunSpec " + param.fieldName + " from model " + param.sunspecModelId)
-          .register(meterRegistry);
+          .tag("model_name", SunSpecModelRegistry.get(param.sunspecModelId)
+            .map(def -> def.name())
+            .orElse("unknown"))
+          .description(description);
+
+        // Add semantic tags (phase, channel, line, quadrant, location)
+        if (resolved.isPresent()) {
+          for (Map.Entry<String, String> tag : resolved.get().tags().entrySet()) {
+            builder = builder.tag(tag.getKey(), tag.getValue());
+          }
+        } else {
+          // Legacy fallback: keep field tag for unmapped parameters
+          builder = builder.tag("field", param.fieldName);
+        }
+
+        builder.register(meterRegistry);
       }
     }
   }
 
   /**
    * Builds the Prometheus metric name for a parameter.
+   *
+   * <p>Priority order:</p>
+   * <ol>
+   *   <li>Custom name from {@link MetricsParameterEntity#customMetricName}</li>
+   *   <li>Semantic name from {@link MetricMetadataRegistry} (e.g. {@code frodo_sunspec_ac_power_watts})</li>
+   *   <li>Legacy fallback: {@code frodo_sunspec_{modelId}_{fieldName}}</li>
+   * </ol>
    */
-  private String buildMetricName(MetricsParameterEntity param) {
+  private String buildMetricName(MetricsParameterEntity param, ResolvedMetric resolved) {
     if (param.customMetricName != null && !param.customMetricName.isBlank()) {
       return param.customMetricName;
     }
-    // Default naming: frodo_sunspec_{modelId}_{fieldName}
+    if (resolved != null) {
+      return resolved.metricName();
+    }
+    // Legacy fallback: frodo_sunspec_{modelId}_{fieldName}
     return String.format("frodo_sunspec_%d_%s",
       param.sunspecModelId,
       param.fieldName.toLowerCase().replace("/", "_"));

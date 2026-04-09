@@ -24,6 +24,11 @@ export {
 } from './useMetricsConfig';
 
 export {
+  useMetricsDocs,
+  metricsDocsKeys,
+} from './useMetricsDocs';
+
+export {
   useSunSpecDiscovery,
   useSunSpecCommon,
   useSunSpecInverter,

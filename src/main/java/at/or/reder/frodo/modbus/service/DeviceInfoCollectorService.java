@@ -7,8 +7,10 @@ import at.or.reder.frodo.modbus.model.DeviceIdentification;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelData;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
+import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -41,6 +43,8 @@ public class DeviceInfoCollectorService {
 
   private static final Logger LOG = Logger.getLogger(DeviceInfoCollectorService.class);
 
+  private volatile boolean shuttingDown = false;
+
   @Inject
   SunSpecService sunSpecService;
 
@@ -63,6 +67,15 @@ public class DeviceInfoCollectorService {
   boolean modbusEnabled;
 
   /**
+   * Observes Quarkus shutdown events to prevent the scheduled collector
+   * from racing with container teardown (especially during dev-mode hot reloads).
+   */
+  void onStop(@Observes ShutdownEvent event) {
+    shuttingDown = true;
+    LOG.info("Shutdown event received, stopping device info collection");
+  }
+
+  /**
    * Scheduled job to collect device identification for all enabled devices.
    *
    * <p>Runs according to the configured refresh interval (default: 5 minutes).
@@ -73,10 +86,17 @@ public class DeviceInfoCollectorService {
    */
   @Scheduled(
     every = "${frodo.modbus.device-info.refresh-interval:5m}",
+    delayed = "30s",
     identity = "device-info-collector"
   )
   @Transactional
   void collectAllDeviceInfo() {
+    // Skip if shutting down (prevents race with container teardown)
+    if (shuttingDown) {
+      LOG.debug("Skipping device info collection: application is shutting down");
+      return;
+    }
+
     // Skip if Hibernate is disabled (dev/test modes)
     if (!hibernateEnabled) {
       LOG.debug("Skipping device info collection: Hibernate ORM is disabled");
@@ -104,6 +124,10 @@ public class DeviceInfoCollectorService {
     int failureCount = 0;
 
     for (ModbusDeviceEntity device : devices) {
+      if (shuttingDown) {
+        LOG.info("Aborting device info collection: application is shutting down");
+        break;
+      }
       try {
         collectForDevice(device);
         successCount++;

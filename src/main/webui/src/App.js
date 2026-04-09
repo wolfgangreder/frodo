@@ -5,6 +5,7 @@ import {
   DashboardPage,
   DevicesPage,
   MetricsConfigPage,
+  MetricsDocsPage,
   GrafanaPage,
   SettingsPage,
   AboutPage,
@@ -28,6 +29,9 @@ function App() {
 
         {/* Metrics configuration per device */}
         <Route path="devices/:id/metrics" element={<MetricsConfigPage />} />
+
+        {/* Metrics documentation */}
+        <Route path="metrics-docs" element={<MetricsDocsPage />} />
 
         {/* Grafana dashboards */}
         <Route path="grafana" element={<GrafanaPage />} />
