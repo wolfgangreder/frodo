@@ -3,6 +3,7 @@ package at.or.reder.frodo.health;
 import at.or.reder.frodo.modbus.connection.ConnectionState;
 import at.or.reder.frodo.modbus.connection.ConnectionStats;
 import at.or.reder.frodo.modbus.connection.ModbusConnectionPool;
+import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.service.DeviceInfoCacheService;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
 import io.micrometer.core.instrument.Counter;
@@ -47,6 +48,9 @@ class ModbusMetricsTest {
   @Mock
   SunSpecService sunSpecService;
 
+  @Mock
+  ModbusDeviceRepository deviceRepository;
+
   @BeforeEach
   void setUp() {
     registry = new SimpleMeterRegistry();
@@ -58,7 +62,7 @@ class ModbusMetricsTest {
       new DeviceInfoCacheService.CacheStats(0, 0, 0));
     when(sunSpecService.getDiscoveryCacheSize()).thenReturn(0);
 
-    metrics = new ModbusMetrics(registry, connectionPool, cacheService, sunSpecService);
+    metrics = new ModbusMetrics(registry, connectionPool, cacheService, sunSpecService, deviceRepository);
   }
 
   // --- Gauge Tests ---

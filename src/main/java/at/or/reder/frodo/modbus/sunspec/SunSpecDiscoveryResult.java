@@ -125,6 +125,32 @@ public record SunSpecDiscoveryResult(
   }
 
   /**
+   * Checks whether any of the given model IDs is present.
+   *
+   * @param modelIds SunSpec model IDs to check
+   * @return true if at least one of the given models was discovered
+   */
+  public boolean hasAnyModel(int... modelIds) {
+    for (int modelId : modelIds) {
+      if (hasModel(modelId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns a list of all discovered model IDs.
+   *
+   * @return unmodifiable list of model IDs in chain order
+   */
+  public List<Integer> modelIds() {
+    return models.stream()
+      .map(SunSpecModelBlock::modelId)
+      .toList();
+  }
+
+  /**
    * Returns the number of discovered models (excluding the end block).
    *
    * @return model count

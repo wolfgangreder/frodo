@@ -14,6 +14,7 @@ import at.or.reder.frodo.api.exception.DeviceNotFoundException;
 import at.or.reder.frodo.modbus.ModbusException;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
 import at.or.reder.frodo.modbus.model.DeviceIdentification;
+import at.or.reder.frodo.modbus.model.DeviceType;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.service.ConnectionTestService;
 import at.or.reder.frodo.modbus.service.DeviceInfoCacheService;
@@ -73,13 +74,18 @@ public class DeviceResource {
   ConnectionTestService connectionTestService;
 
   /**
-   * Lists all Modbus devices.
+   * Lists Modbus devices with optional filtering.
    *
-   * @return list of all devices
+   * @param deviceType filter by device type (optional)
+   * @param parentId   filter by parent device ID (optional)
+   * @return list of matching devices
    */
   @GET
   @Transactional
-  @Operation(summary = "List all devices", description = "Returns a list of all configured Modbus devices")
+  @Operation(
+    summary = "List devices",
+    description = "Returns a list of configured Modbus devices, optionally filtered by device type and/or parent device ID"
+  )
   @APIResponses({
     @APIResponse(
       responseCode = "200",
@@ -87,9 +93,27 @@ public class DeviceResource {
       content = @Content(schema = @Schema(implementation = DeviceListResponse.class))
     )
   })
-  public DeviceListResponse listDevices() {
-    LOG.debug("Listing all devices");
-    List<ModbusDeviceEntity> entities = deviceRepository.listAll();
+  public DeviceListResponse listDevices(
+    @Parameter(description = "Filter by device type")
+    @QueryParam("deviceType") DeviceType deviceType,
+    @Parameter(description = "Filter by parent device ID")
+    @QueryParam("parentId") Long parentId
+  ) {
+    LOG.debugf("Listing devices: deviceType=%s, parentId=%s", deviceType, parentId);
+
+    List<ModbusDeviceEntity> entities;
+    if (deviceType != null && parentId != null) {
+      // Both filters: get children of parent, then filter by type
+      entities = deviceRepository.listChildDevices(parentId).stream()
+        .filter(d -> d.deviceType == deviceType)
+        .toList();
+    } else if (deviceType != null) {
+      entities = deviceRepository.listByDeviceType(deviceType);
+    } else if (parentId != null) {
+      entities = deviceRepository.listChildDevices(parentId);
+    } else {
+      entities = deviceRepository.listAll();
+    }
 
     List<DeviceSummary> summaries = entities.stream()
       .map(this::toDeviceSummary)
@@ -272,12 +296,17 @@ public class DeviceResource {
   @DELETE
   @Path("/{id}")
   @Transactional
-  @Operation(summary = "Delete device", description = "Deletes a Modbus device configuration")
+  @Operation(summary = "Delete device", description = "Deletes a Modbus device configuration. Fails if the device has sub-devices.")
   @APIResponses({
     @APIResponse(responseCode = "204", description = "Device deleted"),
     @APIResponse(
       responseCode = "404",
       description = "Device not found",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    ),
+    @APIResponse(
+      responseCode = "409",
+      description = "Device has sub-devices",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class))
     )
   })
@@ -288,6 +317,15 @@ public class DeviceResource {
     LOG.infof("Deleting device: id=%d", id);
     ModbusDeviceEntity device = deviceRepository.findByIdOptional(id)
       .orElseThrow(() -> DeviceNotFoundException.forId(id));
+
+    // Prevent deletion if device has sub-devices
+    List<ModbusDeviceEntity> children = deviceRepository.listChildDevices(id);
+    if (!children.isEmpty()) {
+      LOG.warnf("Cannot delete device %d: has %d sub-device(s)", id, children.size());
+      throw new IllegalStateException(
+        String.format("Cannot delete device %d: it has %d sub-device(s). Delete sub-devices first.",
+          id, children.size()));
+    }
 
     deviceRepository.delete(device);
     cacheService.invalidate(id);

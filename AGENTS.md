@@ -53,6 +53,7 @@ at.or.reder.frodo/
 ├── api/                        # REST endpoints (JAX-RS resources)
 │   ├── FrodoResource            # /api/info
 │   ├── DeviceResource           # /api/devices CRUD + info
+│   ├── DeviceDiscoveryResource  # /api/devices/discover, sub-devices
 │   ├── SunSpecResource          # /api/devices/{id}/sunspec/*
 │   ├── dto/                     # Request/response DTOs (records)
 │   └── exception/               # Exception mappers
@@ -80,7 +81,9 @@ at.or.reder.frodo/
 │   │   ├── QueuedRequest         # Queued request wrapper
 │   │   ├── ConnectionStats       # Pool statistics record
 │   │   └── ConnectionState       # Connection state enum
-│   ├── service/                 # Device info collection
+│   ├── service/                 # Device info collection & discovery
+│   │   ├── DeviceDiscoveryService   # Multi-source device discovery
+│   │   ├── DiscoveredDevice         # Discovery result record
 │   │   ├── DeviceInfoCollectorService  # Scheduled collection
 │   │   └── DeviceInfoCacheService      # In-memory cache
 │   ├── entity/                  # JPA entities
@@ -318,21 +321,49 @@ class FrodoResourceTest {
 - `%test.` prefix for test overrides
 - External services disabled in dev/test by default
 
+### Device Discovery
+- **Configuration**: `frodo.discovery.*` properties
+- **Unit ID Ranges**: Comma-separated values and dash-separated ranges (e.g. `1,200-203`)
+- **Default Ranges**: Unit ID 1 (inverter), 200-203 (up to 4 smart meters)
+- **Multi-Source Strategy**: Combines Modbus/SunSpec scanning with Solar API discovery
+  - SunSpec: Scans unit IDs, reads model chain, determines device type from models
+  - FC 0x2B: Fallback for non-SunSpec devices, reads device identification
+  - Solar API: Discovers Ohmpilot devices by ComponentId (when enabled)
+- **Device Type Detection**: 
+  - SunSpec models 101-103, 111-113 → INVERTER
+  - SunSpec models 201-204, 211-214 → SMART_METER
+  - SunSpec model 124 → STORAGE
+  - FC 0x2B with "ohmpilot"/"smartload" → OHMPILOT
+  - Solar API Smartloads.Ohmpilots → OHMPILOT
+- **Persistence**: Auto-discovered devices saved with `autoDiscovered=true` and parent-child relationships
+- **Usage**:
+  ```java
+  @Inject
+  DeviceDiscoveryService discoveryService;
+  
+  List<DiscoveredDevice> devices = discoveryService.discoverDevices("192.168.1.160", 502);
+  discoveryService.saveDiscoveredDevices(parentDeviceId, devices);
+  ```
+
 ## Key Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/info` | Application info |
-| `GET /api/devices` | List all devices |
+| `GET /api/devices` | List devices (supports `?deviceType=` and `?parentId=` filters) |
 | `POST /api/devices` | Create a device |
+| `POST /api/devices/discover` | Discover devices on host:port |
 | `GET /api/devices/{id}` | Get device details |
 | `PUT /api/devices/{id}` | Update a device |
-| `DELETE /api/devices/{id}` | Delete a device |
+| `DELETE /api/devices/{id}` | Delete a device (fails if sub-devices exist) |
+| `POST /api/devices/{id}/discover-sub-devices` | Discover sub-devices for existing device |
+| `GET /api/devices/{id}/sub-devices` | List sub-devices of a parent device |
 | `GET /api/devices/{id}/info` | Cached device identification (FC 0x2B) |
 | `POST /api/devices/{id}/info/refresh` | Force refresh device identification |
 | `GET /api/devices/{id}/sunspec/discovery` | SunSpec model chain discovery |
 | `GET /api/devices/{id}/sunspec/common` | SunSpec Common model (1) |
 | `GET /api/devices/{id}/sunspec/inverter` | Auto-detect inverter model |
+| `GET /api/devices/{id}/sunspec/meter` | Auto-detect meter model |
 | `GET /api/devices/{id}/sunspec/nameplate` | Nameplate ratings (120) |
 | `GET /api/devices/{id}/sunspec/settings` | Basic settings (121) |
 | `GET /api/devices/{id}/sunspec/status` | Extended measurements & status (122) |

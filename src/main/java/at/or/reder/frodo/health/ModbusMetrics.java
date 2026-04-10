@@ -3,6 +3,8 @@ package at.or.reder.frodo.health;
 import at.or.reder.frodo.modbus.connection.ConnectionState;
 import at.or.reder.frodo.modbus.connection.ConnectionStats;
 import at.or.reder.frodo.modbus.connection.ModbusConnectionPool;
+import at.or.reder.frodo.modbus.model.DeviceType;
+import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.service.DeviceInfoCacheService;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
 import io.micrometer.core.instrument.Counter;
@@ -35,6 +37,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>{@code frodo.modbus.devices.cache.total} — total device info cache entries</li>
  *   <li>{@code frodo.modbus.devices.cache.active} — active (non-expired) cache entries</li>
  *   <li>{@code frodo.sunspec.discovery.cached} — number of cached SunSpec discoveries</li>
+ *   <li>{@code frodo.devices.total} — total devices by type (tag: type=inverter|smart_meter|...)</li>
  * </ul>
  *
  * <p><em>Counters:</em></p>
@@ -43,6 +46,8 @@ import java.util.concurrent.TimeUnit;
  *   <li>{@code frodo.sunspec.discovery.total} — SunSpec discovery attempts (tag: status)</li>
  *   <li>{@code frodo.sunspec.model.reads.total} — SunSpec model read attempts (tag: status, model_id)</li>
  *   <li>{@code frodo.sunspec.cache.invalidations.total} — SunSpec cache invalidations</li>
+ *   <li>{@code frodo.discovery.scans.total} — device discovery scans (tag: result=success|failure)</li>
+ *   <li>{@code frodo.discovery.devices.found.total} — total devices found during discovery</li>
  * </ul>
  *
  * <p><em>Timers:</em></p>
@@ -63,6 +68,7 @@ public class ModbusMetrics {
   private final ModbusConnectionPool connectionPool;
   private final DeviceInfoCacheService deviceInfoCacheService;
   private final SunSpecService sunSpecService;
+  private final ModbusDeviceRepository deviceRepository;
 
   // Counters
   private final Counter requestsSuccessCounter;
@@ -70,6 +76,9 @@ public class ModbusMetrics {
   private final Counter sunspecDiscoverySuccessCounter;
   private final Counter sunspecDiscoveryFailureCounter;
   private final Counter sunspecCacheInvalidationsCounter;
+  private final Counter discoveryScansSuccessCounter;
+  private final Counter discoveryScansFailureCounter;
+  private final Counter discoveryDevicesFoundCounter;
 
   // Per-model counters cache (created lazily)
   private final Map<String, Counter> modelReadCounters = new ConcurrentHashMap<>();
@@ -86,11 +95,13 @@ public class ModbusMetrics {
   public ModbusMetrics(MeterRegistry registry,
                        ModbusConnectionPool connectionPool,
                        DeviceInfoCacheService deviceInfoCacheService,
-                       SunSpecService sunSpecService) {
+                       SunSpecService sunSpecService,
+                       ModbusDeviceRepository deviceRepository) {
     this.registry = registry;
     this.connectionPool = connectionPool;
     this.deviceInfoCacheService = deviceInfoCacheService;
     this.sunSpecService = sunSpecService;
+    this.deviceRepository = deviceRepository;
 
     // --- Register Gauges ---
     Gauge.builder("frodo.modbus.connection.active", this, ModbusMetrics::connectionActive)
@@ -112,6 +123,15 @@ public class ModbusMetrics {
     Gauge.builder("frodo.sunspec.discovery.cached", this, ModbusMetrics::sunspecDiscoveryCached)
       .description("Number of cached SunSpec discovery results")
       .register(registry);
+
+    // Device count gauges per type
+    for (DeviceType type : DeviceType.values()) {
+      String typeName = type.name().toLowerCase();
+      Gauge.builder("frodo.devices.total", this, m -> m.deviceCountByType(type))
+        .description("Number of configured devices by type")
+        .tag("type", typeName)
+        .register(registry);
+    }
 
     // --- Register Counters ---
     requestsSuccessCounter = Counter.builder("frodo.modbus.requests.total")
@@ -136,6 +156,20 @@ public class ModbusMetrics {
 
     sunspecCacheInvalidationsCounter = Counter.builder("frodo.sunspec.cache.invalidations.total")
       .description("SunSpec discovery cache invalidations")
+      .register(registry);
+
+    discoveryScansSuccessCounter = Counter.builder("frodo.discovery.scans.total")
+      .description("Device discovery scan attempts")
+      .tag("result", "success")
+      .register(registry);
+
+    discoveryScansFailureCounter = Counter.builder("frodo.discovery.scans.total")
+      .description("Device discovery scan attempts")
+      .tag("result", "failure")
+      .register(registry);
+
+    discoveryDevicesFoundCounter = Counter.builder("frodo.discovery.devices.found.total")
+      .description("Total devices found during discovery scans")
       .register(registry);
 
     // --- Register Timers ---
@@ -175,6 +209,15 @@ public class ModbusMetrics {
 
   private double sunspecDiscoveryCached() {
     return sunSpecService.getDiscoveryCacheSize();
+  }
+
+  private double deviceCountByType(DeviceType type) {
+    try {
+      return deviceRepository.listByDeviceType(type).size();
+    } catch (Exception ex) {
+      LOG.debugf("Could not count devices of type %s: %s", type, ex.getMessage());
+      return 0.0;
+    }
   }
 
   // --- Public API for recording metrics from other services ---
@@ -272,6 +315,23 @@ public class ModbusMetrics {
    */
   public void recordSunSpecCacheInvalidation() {
     sunspecCacheInvalidationsCounter.increment();
+  }
+
+  /**
+   * Records a successful device discovery scan.
+   *
+   * @param devicesFound number of devices found during the scan
+   */
+  public void recordDiscoveryScanSuccess(int devicesFound) {
+    discoveryScansSuccessCounter.increment();
+    discoveryDevicesFoundCounter.increment(devicesFound);
+  }
+
+  /**
+   * Records a failed device discovery scan.
+   */
+  public void recordDiscoveryScanFailure() {
+    discoveryScansFailureCounter.increment();
   }
 
   /**

@@ -29,6 +29,10 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
       return handleNotFound((DeviceNotFoundException) exception);
     } else if (exception instanceof DeviceConnectionException) {
       return handleConnectionError((DeviceConnectionException) exception);
+    } else if (exception instanceof IllegalStateException) {
+      return handleConflict((IllegalStateException) exception);
+    } else if (exception instanceof IllegalArgumentException) {
+      return handleBadRequest((IllegalArgumentException) exception);
     } else {
       return handleGenericError(exception);
     }
@@ -56,6 +60,30 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
       getRequestPath()
     );
     return Response.status(Response.Status.SERVICE_UNAVAILABLE).entity(error).build();
+  }
+
+  private Response handleConflict(IllegalStateException exception) {
+    LOG.warnf("Conflict: %s", exception.getMessage());
+    ErrorResponse error = new ErrorResponse(
+      409,
+      "Conflict",
+      exception.getMessage(),
+      Instant.now(),
+      getRequestPath()
+    );
+    return Response.status(Response.Status.CONFLICT).entity(error).build();
+  }
+
+  private Response handleBadRequest(IllegalArgumentException exception) {
+    LOG.debugf("Bad request: %s", exception.getMessage());
+    ErrorResponse error = new ErrorResponse(
+      400,
+      "Bad Request",
+      exception.getMessage(),
+      Instant.now(),
+      getRequestPath()
+    );
+    return Response.status(Response.Status.BAD_REQUEST).entity(error).build();
   }
 
   private Response handleGenericError(Exception exception) {
