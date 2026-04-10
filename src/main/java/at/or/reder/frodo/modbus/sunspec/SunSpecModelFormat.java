@@ -52,4 +52,21 @@ public enum SunSpecModelFormat {
       case FLOAT -> SunSpecConstants.isFloatInverterModel(modelId);
     };
   }
+
+  /**
+   * Checks whether the given model ID is a meter model matching this format.
+   *
+   * <p>Only applies to meter models (201-204, 211-214).
+   * Non-meter models are considered format-agnostic and
+   * this method returns {@code false} for them.</p>
+   *
+   * @param modelId the SunSpec model ID to check
+   * @return true if the model ID is a meter model matching this format
+   */
+  public boolean matchesMeterModel(int modelId) {
+    return switch (this) {
+      case INT_SF -> SunSpecConstants.isIntSfMeterModel(modelId);
+      case FLOAT -> SunSpecConstants.isFloatMeterModel(modelId);
+    };
+  }
 }

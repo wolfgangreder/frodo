@@ -82,6 +82,39 @@ public record SunSpecDiscoveryResult(
   }
 
   /**
+   * Finds any meter model block (201-204 or 211-214).
+   *
+   * @return Optional containing the meter model block
+   */
+  public Optional<SunSpecModelBlock> findMeterModel() {
+    return models.stream()
+      .filter(m -> SunSpecConstants.isMeterModel(m.modelId()))
+      .findFirst();
+  }
+
+  /**
+   * Finds a meter model block matching the preferred format.
+   *
+   * <p>First searches for a meter model matching the given format
+   * (e.g. Int&amp;SF models 201-204, or Float models 211-214). If no
+   * match is found for the preferred format, falls back to any
+   * meter model present in the chain.</p>
+   *
+   * @param preferredFormat the preferred model format (INT_SF or FLOAT)
+   * @return Optional containing the matching meter model block
+   */
+  public Optional<SunSpecModelBlock> findMeterModel(SunSpecModelFormat preferredFormat) {
+    Optional<SunSpecModelBlock> preferred = models.stream()
+      .filter(m -> preferredFormat.matchesMeterModel(m.modelId()))
+      .findFirst();
+    if (preferred.isPresent()) {
+      return preferred;
+    }
+    // Fall back to any meter model
+    return findMeterModel();
+  }
+
+  /**
    * Checks whether a specific model is present.
    *
    * @param modelId SunSpec model ID

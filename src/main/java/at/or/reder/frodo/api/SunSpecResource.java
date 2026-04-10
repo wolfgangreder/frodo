@@ -39,15 +39,15 @@ import java.util.concurrent.TimeoutException;
  * REST API for SunSpec Modbus device interaction.
  *
  * <p>Provides endpoints for SunSpec model chain discovery and reading
- * individual model data from Fronius Gen24 PV inverters.</p>
+ * individual model data from Fronius Gen24 PV inverters and Smart Meters.</p>
  *
  * <p><b>Protocol References:</b></p>
  * <ul>
  *   <li>Fronius Gen24 Register Maps: {@code refdoc/gen24-modbus-api-external-docs/}</li>
  *   <li>Float Models: Gen24_Primo_Symo_Inverter_Register_Map_Float_ROW.xlsx</li>
  *   <li>Int+SF Models: Gen24_Primo_Symo_Inverter_Register_Map_Int&SF_ROW.xlsx</li>
- *   <li>Supported models: Common (1), Inverter (101-103, 111-113), Nameplate (120),
- *       Settings (121-123), Status (124-126), Controls (127-132)</li>
+ *   <li>Supported models: Common (1), Inverter (101-103, 111-113), Meter (201-204, 211-214),
+ *       Nameplate (120), Settings (121), Status (122), Controls (123), Storage (124), MPPT (160)</li>
  * </ul>
  */
 @Path("/devices/{id}/sunspec")
@@ -217,6 +217,59 @@ public class SunSpecResource {
       throw new DeviceNotFoundException("Inverter model not found on device " + id);
     } catch (IOException | TimeoutException ex) {
       throw new DeviceConnectionException("Failed to read inverter model: " + ex.getMessage(), ex);
+    }
+  }
+
+  /**
+   * Reads the meter model (211-214 or 201-204) for real-time data.
+   *
+   * @param id device ID
+   * @return meter model data (voltage, current, power, energy)
+   */
+  @GET
+  @Path("/meter")
+  @Operation(
+    summary = "Read meter model",
+    description = "Reads the meter model (auto-detects Float 211-214 or Int+SF 201-204) "
+      + "containing real-time data: AC voltage, current, power, energy, frequency, and power factor."
+  )
+  @APIResponses({
+    @APIResponse(
+      responseCode = "200",
+      description = "Meter model data",
+      content = @Content(schema = @Schema(implementation = SunSpecModelResponse.class))
+    ),
+    @APIResponse(
+      responseCode = "404",
+      description = "Device or meter model not found",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    ),
+    @APIResponse(
+      responseCode = "503",
+      description = "Device connection failed",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+  })
+  @Blocking
+  public SunSpecModelResponse readMeter(
+    @Parameter(description = "Device ID", required = true)
+    @PathParam("id") Long id
+  ) {
+    ModbusDeviceEntity device = requireDevice(id);
+    DeviceAddress address = DeviceAddress.fromEntity(device);
+    LOG.debugf("Reading SunSpec meter model: device=%d, address=%s", id, address);
+
+    try {
+      SunSpecModelData data = sunSpecService.readMeterModel(address);
+      return SunSpecModelResponse.fromModelData(id, device.unitId, data);
+    } catch (ModbusException ex) {
+      throw new DeviceConnectionException("Failed to read meter model: " + ex.getMessage(), ex);
+    } catch (IllegalStateException ex) {
+      throw new DeviceConnectionException("SunSpec not available on device " + id + ": " + ex.getMessage(), ex);
+    } catch (IllegalArgumentException ex) {
+      throw new DeviceNotFoundException("Meter model not found on device " + id);
+    } catch (IOException | TimeoutException ex) {
+      throw new DeviceConnectionException("Failed to read meter model: " + ex.getMessage(), ex);
     }
   }
 

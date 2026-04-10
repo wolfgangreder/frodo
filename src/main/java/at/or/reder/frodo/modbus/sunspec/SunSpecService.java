@@ -179,6 +179,38 @@ public class SunSpecService {
   }
 
   /**
+   * Reads the meter model (201-204 or 211-214) for real-time data.
+   *
+   * <p>Uses the configured {@code frodo.sunspec.model-format} to prefer
+   * the matching meter model variant. Falls back to any meter model if the
+   * preferred format is not present in the model chain.</p>
+   *
+   * <p>Meter models:</p>
+   * <ul>
+   *   <li>201/211 - Single Phase (A-N or A-B)</li>
+   *   <li>202/212 - Split Single Phase (A-B-N)</li>
+   *   <li>203/213 - Three Phase WYE (A-B-C-N)</li>
+   *   <li>204/214 - Three Phase Delta (A-B-C)</li>
+   * </ul>
+   *
+   * @param address target device address (host, port, unitId)
+   * @return meter model data (current, voltage, power, energy, etc.)
+   * @throws IOException      if communication fails
+   * @throws TimeoutException if the request times out
+   */
+  public SunSpecModelData readMeterModel(DeviceAddress address) throws IOException, TimeoutException {
+    SunSpecDiscoveryResult discovery = getOrDiscover(address);
+    Optional<SunSpecModelBlock> block = discovery.findMeterModel(modelFormat);
+    if (block.isEmpty()) {
+      throw new IllegalArgumentException("No meter model found on " + address);
+    }
+    LOG.debugf("Using meter model %d (%s) for %s (configured format: %s)",
+      block.get().modelId(), SunSpecConstants.modelName(block.get().modelId()),
+      address, modelFormat);
+    return readModelBlock(address, block.get());
+  }
+
+  /**
    * Reads all discovered models from a device.
    *
    * @param address target device address (host, port, unitId)
