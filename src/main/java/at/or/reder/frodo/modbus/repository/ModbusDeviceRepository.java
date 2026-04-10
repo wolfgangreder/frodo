@@ -2,6 +2,7 @@ package at.or.reder.frodo.modbus.repository;
 
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceInfoEntity;
+import at.or.reder.frodo.modbus.model.DeviceType;
 import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -125,5 +126,47 @@ public class ModbusDeviceRepository implements PanacheRepository<ModbusDeviceEnt
   public Optional<ModbusDeviceInfoEntity> findDeviceInfo(Long deviceId) {
     return ModbusDeviceInfoEntity.<ModbusDeviceInfoEntity>find("device.id", deviceId)
       .firstResultOptional();
+  }
+
+  /**
+   * Finds a device by host, port, and unit ID.
+   *
+   * @param host   Modbus TCP host
+   * @param port   Modbus TCP port
+   * @param unitId Modbus unit ID
+   * @return Optional containing the matching device, or empty if not found
+   */
+  public Optional<ModbusDeviceEntity> findByConnection(String host, int port, int unitId) {
+    return find("host = ?1 and port = ?2 and unitId = ?3", host, port, unitId)
+      .firstResultOptional();
+  }
+
+  /**
+   * Lists devices filtered by device type.
+   *
+   * @param deviceType the device type to filter by
+   * @return list of devices with the specified type
+   */
+  public List<ModbusDeviceEntity> listByDeviceType(DeviceType deviceType) {
+    return list("deviceType", Sort.by("id").ascending(), deviceType);
+  }
+
+  /**
+   * Lists child devices of a parent device.
+   *
+   * @param parentDeviceId the parent device ID
+   * @return list of child devices
+   */
+  public List<ModbusDeviceEntity> listChildDevices(Long parentDeviceId) {
+    return list("parentDevice.id", Sort.by("id").ascending(), parentDeviceId);
+  }
+
+  /**
+   * Lists all auto-discovered devices.
+   *
+   * @return list of auto-discovered devices
+   */
+  public List<ModbusDeviceEntity> listAutoDiscovered() {
+    return list("autoDiscovered", Sort.by("id").ascending(), true);
   }
 }

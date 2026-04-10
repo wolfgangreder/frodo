@@ -13,7 +13,16 @@ Frodo is a **Quarkus 3.x server application** for Modbus protocol communication 
 - FirebirdSQL database (Jaybird JDBC driver)
 - React 18 frontend (via Quinoa extension)
 
-**Reference Documentation:** See `refdoc/modbus.pdf` for Modbus protocol specifications.
+**Reference Documentation:**
+- `refdoc/modbus.pdf` - Fronius Modbus TCP protocol specification
+- `refdoc/solar_api.pdf` - Fronius Solar API documentation
+- `refdoc/sunspec/` - SunSpec Alliance specifications:
+  - `SunSpec_Information_Model_Reference_20240701_-1.xlsx` - Complete model reference
+  - `SunSpec-Device-Information-Model-Specificiation-V1-4.pdf` - Core device models
+  - `SunSpec-DER-Information-Model-Specification-V1-2.pdf` - DER (inverter) models
+  - `SunSpec-Modbus-FactSheet-RevA-2019-07-web.pdf` - Quick reference
+- `refdoc/gen24-modbus-api-external-docs/` - Fronius Gen24 register maps
+- GitHub Repository: https://github.com/sunspec/models - Official SunSpec model definitions (JSON/XML)
 
 ## Build & Run Commands
 
@@ -47,6 +56,13 @@ at.or.reder.frodo/
 │   ├── SunSpecResource          # /api/devices/{id}/sunspec/*
 │   ├── dto/                     # Request/response DTOs (records)
 │   └── exception/               # Exception mappers
+├── solarapi/                   # Fronius Solar API integration
+│   ├── SolarApiClient           # HTTP client for Solar API
+│   ├── model/                   # Solar API data models
+│   │   ├── PowerFlowRealtimeData # Power flow response
+│   │   ├── SmartloadsData       # Ohmpilot/smartload data
+│   │   └── SolarApiResponse     # Generic response wrapper
+│   └── SolarApiHealthCheck      # Solar API health monitoring
 ├── health/                     # Health & monitoring
 │   ├── FrodoHealthCheck         # Application readiness
 │   ├── ModbusHealthCheck        # Modbus connection pool health
@@ -247,10 +263,36 @@ class FrodoResourceTest {
 ### SunSpec Protocol
 - SunSpec "SunS" signature at register 40000 (0x53756e53)
 - Model chain discovery: scan sequentially from base address
-- Supported models: Common (1), Inverter (101-103, 111-113), Nameplate (120), Settings (121), Status (122), Controls (123), Storage (124), MPPT (160)
+- Supported models: 
+  - Common (1)
+  - Inverter (101-103, 111-113)
+  - Nameplate (120), Settings (121), Status (122), Controls (123), Storage (124)
+  - MPPT (160)
+  - Meter (201-204, 211-214) - for Smart Meter devices (Single Phase, Split Phase, 3-Phase WYE/Delta)
 - Float and Int+SF register map variants supported
+- Official SunSpec model definitions: https://github.com/sunspec/models (JSON/XML/SMDX formats)
 - Register maps: `refdoc/gen24-modbus-api-external-docs/` (Fronius Gen24 Excel files)
+- SunSpec specifications: `refdoc/sunspec/` (PDF documentation and Excel reference)
 - See `docs/SUNSPEC_MODELS.md` for detailed model documentation
+- See `docs/DEVICE_DISCOVERY_PLAN.md` for multi-device architecture
+
+### Fronius Solar API
+- **Base URL**: `http://{inverter-ip}/solar_api/v1/` (HTTP, port 80)
+- **Key Endpoints**:
+  - `GET /solar_api/v1/GetPowerFlowRealtimeData.fcgi` - Unified power flow data (all devices)
+  - `GET /solar_api/v1/GetOhmPilotRealtimeData.cgi` - Ohmpilot-specific data
+  - `GET /solar_api/v1/GetActiveDeviceInfo.cgi?DeviceClass={class}` - Device discovery
+- **PowerFlowRealtimeData Structure**:
+  - `Inverters` - Map of inverter data by DeviceId
+  - `Site` - Aggregated site-level metrics (P_Grid, P_Load, P_PV, P_Akku)
+  - `Smartloads.Ohmpilots` - Map of Ohmpilot data by ComponentId
+    - `P_AC_Total` - Power consumption [W]
+    - `State` - Operating state (normal, boost, fault, etc.)
+    - `Temperature` - Tank/storage temperature [°C]
+  - `Smartloads.OhmpilotEcos` - Ohmpilot Eco devices (dual heating rods)
+  - `SecondaryMeters` - Additional meter data
+- **Use Case**: Device discovery and metrics collection without Modbus complexity
+- **Integration**: Complementary to Modbus (Solar API for discovery, Modbus for control)
 
 ### Async/Reactive
 - Use Vert.x Mutiny APIs (`io.vertx.mutiny.*`)

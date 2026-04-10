@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    Add device discovery support: device type classification,
+    parent-child device hierarchy, and auto-discovery tracking.
+
+    Supports multi-device architectures where an inverter acts as a
+    Modbus TCP gateway for meters, Ohmpilots, and other sub-devices.
+  -->
+
+  <changeSet id="9" author="frodo">
+    <comment>Add device type, parent device, and auto-discovered fields for multi-device discovery</comment>
+
+    <addColumn tableName="FroModbusDevice">
+      <!-- Device type: INVERTER, STORAGE, SMART_METER, OHMPILOT, UNKNOWN -->
+      <column name="device_type" type="VARCHAR(50)"/>
+
+      <!-- Self-referencing FK to parent device (inverter gateway) -->
+      <column name="parent_device_id" type="BIGINT"/>
+
+      <!-- Whether device was auto-discovered vs manually configured -->
+      <column name="auto_discovered" type="BOOLEAN" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+    </addColumn>
+
+    <addForeignKeyConstraint
+      baseTableName="FroModbusDevice"
+      baseColumnNames="parent_device_id"
+      constraintName="fk_FroDevice_parent"
+      referencedTableName="FroModbusDevice"
+      referencedColumnNames="id"
+      onDelete="CASCADE"/>
+
+    <createIndex tableName="FroModbusDevice" indexName="idx_FroDevice_device_type">
+      <column name="device_type"/>
+    </createIndex>
+
+    <createIndex tableName="FroModbusDevice" indexName="idx_FroDevice_parent">
+      <column name="parent_device_id"/>
+    </createIndex>
+  </changeSet>
+
+</databaseChangeLog>

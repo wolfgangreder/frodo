@@ -42,6 +42,8 @@ public final class SunSpecModelRegistry {
     registerCommonModel();
     registerInverterFloatModels();
     registerInverterIntSfModels();
+    registerMeterFloatModels();
+    registerMeterIntSfModels();
     registerNameplateModel();
     registerSettingsModel();
     registerStatusModel();
@@ -212,6 +214,208 @@ public final class SunSpecModelRegistry {
       SunSpecModelDefinition.of(MODEL_INVERTER_SPLIT_PHASE, "Inverter (Split Phase, Int+SF)", immutableFields));
     REGISTRY.put(MODEL_INVERTER_THREE_PHASE,
       SunSpecModelDefinition.of(MODEL_INVERTER_THREE_PHASE, "Inverter (Three Phase, Int+SF)", immutableFields));
+  }
+
+  // ---- Models 211-214: Meter (Float format) ----
+
+  private static void registerMeterFloatModels() {
+    List<SunSpecFieldDefinition> fields = new ArrayList<>();
+    
+    // Current measurements (Float32, no scale factors)
+    fields.add(readOnly("A", 0, 2, FLOAT32, "A", "Total AC Current"));
+    fields.add(readOnly("AphA", 2, 2, FLOAT32, "A", "Phase A Current"));
+    fields.add(readOnly("AphB", 4, 2, FLOAT32, "A", "Phase B Current"));
+    fields.add(readOnly("AphC", 6, 2, FLOAT32, "A", "Phase C Current"));
+    
+    // Voltage measurements
+    fields.add(readOnly("PhV", 8, 2, FLOAT32, "V", "Line to Neutral AC Voltage (avg)"));
+    fields.add(readOnly("PhVphA", 10, 2, FLOAT32, "V", "Phase Voltage AN"));
+    fields.add(readOnly("PhVphB", 12, 2, FLOAT32, "V", "Phase Voltage BN"));
+    fields.add(readOnly("PhVphC", 14, 2, FLOAT32, "V", "Phase Voltage CN"));
+    fields.add(readOnly("PPV", 16, 2, FLOAT32, "V", "Line to Line AC Voltage (avg)"));
+    fields.add(readOnly("PPVphAB", 18, 2, FLOAT32, "V", "Phase Voltage AB"));
+    fields.add(readOnly("PPVphBC", 20, 2, FLOAT32, "V", "Phase Voltage BC"));
+    fields.add(readOnly("PPVphCA", 22, 2, FLOAT32, "V", "Phase Voltage CA"));
+    
+    // Frequency
+    fields.add(readOnly("Hz", 24, 2, FLOAT32, "Hz", "Frequency"));
+    
+    // Power measurements
+    fields.add(readOnly("W", 26, 2, FLOAT32, "W", "Total Real Power"));
+    fields.add(readOnly("WphA", 28, 2, FLOAT32, "W", "Watts phase A"));
+    fields.add(readOnly("WphB", 30, 2, FLOAT32, "W", "Watts phase B"));
+    fields.add(readOnly("WphC", 32, 2, FLOAT32, "W", "Watts phase C"));
+    fields.add(readOnly("VA", 34, 2, FLOAT32, "VA", "AC Apparent Power"));
+    fields.add(readOnly("VAphA", 36, 2, FLOAT32, "VA", "VA phase A"));
+    fields.add(readOnly("VAphB", 38, 2, FLOAT32, "VA", "VA phase B"));
+    fields.add(readOnly("VAphC", 40, 2, FLOAT32, "VA", "VA phase C"));
+    fields.add(readOnly("VAR", 42, 2, FLOAT32, "var", "Reactive Power"));
+    fields.add(readOnly("VARphA", 44, 2, FLOAT32, "var", "VAR phase A"));
+    fields.add(readOnly("VARphB", 46, 2, FLOAT32, "var", "VAR phase B"));
+    fields.add(readOnly("VARphC", 48, 2, FLOAT32, "var", "VAR phase C"));
+    
+    // Power Factor
+    fields.add(readOnly("PF", 50, 2, FLOAT32, "PF", "Power Factor"));
+    fields.add(readOnly("PFphA", 52, 2, FLOAT32, "PF", "PF phase A"));
+    fields.add(readOnly("PFphB", 54, 2, FLOAT32, "PF", "PF phase B"));
+    fields.add(readOnly("PFphC", 56, 2, FLOAT32, "PF", "PF phase C"));
+    
+    // Energy measurements
+    fields.add(readOnly("TotWhExp", 58, 2, FLOAT32, "Wh", "Total Real Energy Exported"));
+    fields.add(readOnly("TotWhExpPhA", 60, 2, FLOAT32, "Wh", "Total Wh Exported phase A"));
+    fields.add(readOnly("TotWhExpPhB", 62, 2, FLOAT32, "Wh", "Total Wh Exported phase B"));
+    fields.add(readOnly("TotWhExpPhC", 64, 2, FLOAT32, "Wh", "Total Wh Exported phase C"));
+    fields.add(readOnly("TotWhImp", 66, 2, FLOAT32, "Wh", "Total Real Energy Imported"));
+    fields.add(readOnly("TotWhImpPhA", 68, 2, FLOAT32, "Wh", "Total Wh Imported phase A"));
+    fields.add(readOnly("TotWhImpPhB", 70, 2, FLOAT32, "Wh", "Total Wh Imported phase B"));
+    fields.add(readOnly("TotWhImpPhC", 72, 2, FLOAT32, "Wh", "Total Wh Imported phase C"));
+    
+    fields.add(readOnly("TotVAhExp", 74, 2, FLOAT32, "VAh", "Total Apparent Energy Exported"));
+    fields.add(readOnly("TotVAhExpPhA", 76, 2, FLOAT32, "VAh", "Total VAh Exported phase A"));
+    fields.add(readOnly("TotVAhExpPhB", 78, 2, FLOAT32, "VAh", "Total VAh Exported phase B"));
+    fields.add(readOnly("TotVAhExpPhC", 80, 2, FLOAT32, "VAh", "Total VAh Exported phase C"));
+    fields.add(readOnly("TotVAhImp", 82, 2, FLOAT32, "VAh", "Total Apparent Energy Imported"));
+    fields.add(readOnly("TotVAhImpPhA", 84, 2, FLOAT32, "VAh", "Total VAh Imported phase A"));
+    fields.add(readOnly("TotVAhImpPhB", 86, 2, FLOAT32, "VAh", "Total VAh Imported phase B"));
+    fields.add(readOnly("TotVAhImpPhC", 88, 2, FLOAT32, "VAh", "Total VAh Imported phase C"));
+    
+    // Reactive energy by quadrant
+    fields.add(readOnly("TotVArhImpQ1", 90, 2, FLOAT32, "varh", "Total VAR-hours Imported Q1"));
+    fields.add(readOnly("TotVArhImpQ1phA", 92, 2, FLOAT32, "varh", "Total VArh Imported Q1 phase A"));
+    fields.add(readOnly("TotVArhImpQ1phB", 94, 2, FLOAT32, "varh", "Total VArh Imported Q1 phase B"));
+    fields.add(readOnly("TotVArhImpQ1phC", 96, 2, FLOAT32, "varh", "Total VArh Imported Q1 phase C"));
+    fields.add(readOnly("TotVArhImpQ2", 98, 2, FLOAT32, "varh", "Total VAR-hours Imported Q2"));
+    fields.add(readOnly("TotVArhImpQ2phA", 100, 2, FLOAT32, "varh", "Total VArh Imported Q2 phase A"));
+    fields.add(readOnly("TotVArhImpQ2phB", 102, 2, FLOAT32, "varh", "Total VArh Imported Q2 phase B"));
+    fields.add(readOnly("TotVArhImpQ2phC", 104, 2, FLOAT32, "varh", "Total VArh Imported Q2 phase C"));
+    fields.add(readOnly("TotVArhExpQ3", 106, 2, FLOAT32, "varh", "Total VAR-hours Exported Q3"));
+    fields.add(readOnly("TotVArhExpQ3phA", 108, 2, FLOAT32, "varh", "Total VArh Exported Q3 phase A"));
+    fields.add(readOnly("TotVArhExpQ3phB", 110, 2, FLOAT32, "varh", "Total VArh Exported Q3 phase B"));
+    fields.add(readOnly("TotVArhExpQ3phC", 112, 2, FLOAT32, "varh", "Total VArh Exported Q3 phase C"));
+    fields.add(readOnly("TotVArhExpQ4", 114, 2, FLOAT32, "varh", "Total VAR-hours Exported Q4"));
+    fields.add(readOnly("TotVArhExpQ4phA", 116, 2, FLOAT32, "varh", "Total VArh Exported Q4 phase A"));
+    fields.add(readOnly("TotVArhExpQ4phB", 118, 2, FLOAT32, "varh", "Total VArh Exported Q4 phase B"));
+    fields.add(readOnly("TotVArhExpQ4phC", 120, 2, FLOAT32, "varh", "Total VArh Exported Q4 phase C"));
+    
+    // Event flags
+    fields.add(readOnly("Evt", 122, 2, BITFIELD32, null, "Meter Event Flags"));
+    
+    List<SunSpecFieldDefinition> immutableFields = List.copyOf(fields);
+    REGISTRY.put(MODEL_METER_SINGLE_PHASE_FLOAT,
+      SunSpecModelDefinition.of(MODEL_METER_SINGLE_PHASE_FLOAT, "Meter (Single Phase AN/AB, Float)", immutableFields));
+    REGISTRY.put(MODEL_METER_SPLIT_PHASE_FLOAT,
+      SunSpecModelDefinition.of(MODEL_METER_SPLIT_PHASE_FLOAT, "Meter (Split Phase ABN, Float)", immutableFields));
+    REGISTRY.put(MODEL_METER_THREE_PHASE_WYE_FLOAT,
+      SunSpecModelDefinition.of(MODEL_METER_THREE_PHASE_WYE_FLOAT, "Meter (Three Phase WYE, Float)", immutableFields));
+    REGISTRY.put(MODEL_METER_THREE_PHASE_DELTA_FLOAT,
+      SunSpecModelDefinition.of(MODEL_METER_THREE_PHASE_DELTA_FLOAT, "Meter (Three Phase Delta, Float)", immutableFields));
+  }
+
+  // ---- Models 201-204: Meter (Int&SF format) ----
+
+  private static void registerMeterIntSfModels() {
+    List<SunSpecFieldDefinition> fields = new ArrayList<>();
+    
+    // Current measurements (Int16 with scale factor)
+    fields.add(readOnlyScaled("A", 0, 1, INT16, "A", "A_SF", "Total AC Current"));
+    fields.add(readOnlyScaled("AphA", 1, 1, INT16, "A", "A_SF", "Phase A Current"));
+    fields.add(readOnlyScaled("AphB", 2, 1, INT16, "A", "A_SF", "Phase B Current"));
+    fields.add(readOnlyScaled("AphC", 3, 1, INT16, "A", "A_SF", "Phase C Current"));
+    fields.add(readOnly("A_SF", 4, 1, SUNSSF, null, "Current scale factor"));
+    
+    // Voltage measurements
+    fields.add(readOnlyScaled("PhV", 5, 1, INT16, "V", "V_SF", "Line to Neutral AC Voltage (avg)"));
+    fields.add(readOnlyScaled("PhVphA", 6, 1, INT16, "V", "V_SF", "Phase Voltage AN"));
+    fields.add(readOnlyScaled("PhVphB", 7, 1, INT16, "V", "V_SF", "Phase Voltage BN"));
+    fields.add(readOnlyScaled("PhVphC", 8, 1, INT16, "V", "V_SF", "Phase Voltage CN"));
+    fields.add(readOnlyScaled("PPV", 9, 1, INT16, "V", "V_SF", "Line to Line AC Voltage (avg)"));
+    fields.add(readOnlyScaled("PPVphAB", 10, 1, INT16, "V", "V_SF", "Phase Voltage AB"));
+    fields.add(readOnlyScaled("PPVphBC", 11, 1, INT16, "V", "V_SF", "Phase Voltage BC"));
+    fields.add(readOnlyScaled("PPVphCA", 12, 1, INT16, "V", "V_SF", "Phase Voltage CA"));
+    fields.add(readOnly("V_SF", 13, 1, SUNSSF, null, "Voltage scale factor"));
+    
+    // Frequency
+    fields.add(readOnlyScaled("Hz", 14, 1, INT16, "Hz", "Hz_SF", "Frequency"));
+    fields.add(readOnly("Hz_SF", 15, 1, SUNSSF, null, "Frequency scale factor"));
+    
+    // Power measurements
+    fields.add(readOnlyScaled("W", 16, 1, INT16, "W", "W_SF", "Total Real Power"));
+    fields.add(readOnlyScaled("WphA", 17, 1, INT16, "W", "W_SF", "Watts phase A"));
+    fields.add(readOnlyScaled("WphB", 18, 1, INT16, "W", "W_SF", "Watts phase B"));
+    fields.add(readOnlyScaled("WphC", 19, 1, INT16, "W", "W_SF", "Watts phase C"));
+    fields.add(readOnly("W_SF", 20, 1, SUNSSF, null, "Real Power scale factor"));
+    
+    fields.add(readOnlyScaled("VA", 21, 1, INT16, "VA", "VA_SF", "AC Apparent Power"));
+    fields.add(readOnlyScaled("VAphA", 22, 1, INT16, "VA", "VA_SF", "VA phase A"));
+    fields.add(readOnlyScaled("VAphB", 23, 1, INT16, "VA", "VA_SF", "VA phase B"));
+    fields.add(readOnlyScaled("VAphC", 24, 1, INT16, "VA", "VA_SF", "VA phase C"));
+    fields.add(readOnly("VA_SF", 25, 1, SUNSSF, null, "Apparent Power scale factor"));
+    
+    fields.add(readOnlyScaled("VAR", 26, 1, INT16, "var", "VAR_SF", "Reactive Power"));
+    fields.add(readOnlyScaled("VARphA", 27, 1, INT16, "var", "VAR_SF", "VAR phase A"));
+    fields.add(readOnlyScaled("VARphB", 28, 1, INT16, "var", "VAR_SF", "VAR phase B"));
+    fields.add(readOnlyScaled("VARphC", 29, 1, INT16, "var", "VAR_SF", "VAR phase C"));
+    fields.add(readOnly("VAR_SF", 30, 1, SUNSSF, null, "Reactive Power scale factor"));
+    
+    // Power Factor
+    fields.add(readOnlyScaled("PF", 31, 1, INT16, "Pct", "PF_SF", "Power Factor"));
+    fields.add(readOnlyScaled("PFphA", 32, 1, INT16, "Pct", "PF_SF", "PF phase A"));
+    fields.add(readOnlyScaled("PFphB", 33, 1, INT16, "Pct", "PF_SF", "PF phase B"));
+    fields.add(readOnlyScaled("PFphC", 34, 1, INT16, "Pct", "PF_SF", "PF phase C"));
+    fields.add(readOnly("PF_SF", 35, 1, SUNSSF, null, "Power Factor scale factor"));
+    
+    // Energy measurements (ACC32 = 2 registers)
+    fields.add(readOnlyScaled("TotWhExp", 36, 2, ACC32, "Wh", "TotWh_SF", "Total Real Energy Exported"));
+    fields.add(readOnlyScaled("TotWhExpPhA", 38, 2, ACC32, "Wh", "TotWh_SF", "Total Wh Exported phase A"));
+    fields.add(readOnlyScaled("TotWhExpPhB", 40, 2, ACC32, "Wh", "TotWh_SF", "Total Wh Exported phase B"));
+    fields.add(readOnlyScaled("TotWhExpPhC", 42, 2, ACC32, "Wh", "TotWh_SF", "Total Wh Exported phase C"));
+    fields.add(readOnlyScaled("TotWhImp", 44, 2, ACC32, "Wh", "TotWh_SF", "Total Real Energy Imported"));
+    fields.add(readOnlyScaled("TotWhImpPhA", 46, 2, ACC32, "Wh", "TotWh_SF", "Total Wh Imported phase A"));
+    fields.add(readOnlyScaled("TotWhImpPhB", 48, 2, ACC32, "Wh", "TotWh_SF", "Total Wh Imported phase B"));
+    fields.add(readOnlyScaled("TotWhImpPhC", 50, 2, ACC32, "Wh", "TotWh_SF", "Total Wh Imported phase C"));
+    fields.add(readOnly("TotWh_SF", 52, 1, SUNSSF, null, "Real Energy scale factor"));
+    
+    fields.add(readOnlyScaled("TotVAhExp", 53, 2, ACC32, "VAh", "TotVAh_SF", "Total Apparent Energy Exported"));
+    fields.add(readOnlyScaled("TotVAhExpPhA", 55, 2, ACC32, "VAh", "TotVAh_SF", "Total VAh Exported phase A"));
+    fields.add(readOnlyScaled("TotVAhExpPhB", 57, 2, ACC32, "VAh", "TotVAh_SF", "Total VAh Exported phase B"));
+    fields.add(readOnlyScaled("TotVAhExpPhC", 59, 2, ACC32, "VAh", "TotVAh_SF", "Total VAh Exported phase C"));
+    fields.add(readOnlyScaled("TotVAhImp", 61, 2, ACC32, "VAh", "TotVAh_SF", "Total Apparent Energy Imported"));
+    fields.add(readOnlyScaled("TotVAhImpPhA", 63, 2, ACC32, "VAh", "TotVAh_SF", "Total VAh Imported phase A"));
+    fields.add(readOnlyScaled("TotVAhImpPhB", 65, 2, ACC32, "VAh", "TotVAh_SF", "Total VAh Imported phase B"));
+    fields.add(readOnlyScaled("TotVAhImpPhC", 67, 2, ACC32, "VAh", "TotVAh_SF", "Total VAh Imported phase C"));
+    fields.add(readOnly("TotVAh_SF", 69, 1, SUNSSF, null, "Apparent Energy scale factor"));
+    
+    // Reactive energy by quadrant
+    fields.add(readOnlyScaled("TotVArhImpQ1", 70, 2, ACC32, "varh", "TotVArh_SF", "Total VAR-hours Imported Q1"));
+    fields.add(readOnlyScaled("TotVArhImpQ1PhA", 72, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Imported Q1 phase A"));
+    fields.add(readOnlyScaled("TotVArhImpQ1PhB", 74, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Imported Q1 phase B"));
+    fields.add(readOnlyScaled("TotVArhImpQ1PhC", 76, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Imported Q1 phase C"));
+    fields.add(readOnlyScaled("TotVArhImpQ2", 78, 2, ACC32, "varh", "TotVArh_SF", "Total VAR-hours Imported Q2"));
+    fields.add(readOnlyScaled("TotVArhImpQ2PhA", 80, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Imported Q2 phase A"));
+    fields.add(readOnlyScaled("TotVArhImpQ2PhB", 82, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Imported Q2 phase B"));
+    fields.add(readOnlyScaled("TotVArhImpQ2PhC", 84, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Imported Q2 phase C"));
+    fields.add(readOnlyScaled("TotVArhExpQ3", 86, 2, ACC32, "varh", "TotVArh_SF", "Total VAR-hours Exported Q3"));
+    fields.add(readOnlyScaled("TotVArhExpQ3PhA", 88, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Exported Q3 phase A"));
+    fields.add(readOnlyScaled("TotVArhExpQ3PhB", 90, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Exported Q3 phase B"));
+    fields.add(readOnlyScaled("TotVArhExpQ3PhC", 92, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Exported Q3 phase C"));
+    fields.add(readOnlyScaled("TotVArhExpQ4", 94, 2, ACC32, "varh", "TotVArh_SF", "Total VAR-hours Exported Q4"));
+    fields.add(readOnlyScaled("TotVArhExpQ4PhA", 96, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Exported Q4 phase A"));
+    fields.add(readOnlyScaled("TotVArhExpQ4PhB", 98, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Exported Q4 phase B"));
+    fields.add(readOnlyScaled("TotVArhExpQ4PhC", 100, 2, ACC32, "varh", "TotVArh_SF", "Total VArh Exported Q4 phase C"));
+    fields.add(readOnly("TotVArh_SF", 102, 1, SUNSSF, null, "Reactive Energy scale factor"));
+    
+    // Event flags
+    fields.add(readOnly("Evt", 103, 2, BITFIELD32, null, "Meter Event Flags"));
+    
+    List<SunSpecFieldDefinition> immutableFields = List.copyOf(fields);
+    REGISTRY.put(MODEL_METER_SINGLE_PHASE,
+      SunSpecModelDefinition.of(MODEL_METER_SINGLE_PHASE, "Meter (Single Phase AN/AB, Int+SF)", immutableFields));
+    REGISTRY.put(MODEL_METER_SPLIT_PHASE,
+      SunSpecModelDefinition.of(MODEL_METER_SPLIT_PHASE, "Meter (Split Phase ABN, Int+SF)", immutableFields));
+    REGISTRY.put(MODEL_METER_THREE_PHASE_WYE,
+      SunSpecModelDefinition.of(MODEL_METER_THREE_PHASE_WYE, "Meter (Three Phase WYE, Int+SF)", immutableFields));
+    REGISTRY.put(MODEL_METER_THREE_PHASE_DELTA,
+      SunSpecModelDefinition.of(MODEL_METER_THREE_PHASE_DELTA, "Meter (Three Phase Delta, Int+SF)", immutableFields));
   }
 
   // ---- Model 120: Nameplate Ratings ----

@@ -100,6 +100,30 @@ public final class SunSpecConstants {
   /** Multiple MPPT inverter extension model. */
   public static final int MODEL_MPPT = 160;
 
+  /** Single phase (AN or AB) meter model (Int+SF format). */
+  public static final int MODEL_METER_SINGLE_PHASE = 201;
+
+  /** Split single phase (ABN) meter model (Int+SF format). */
+  public static final int MODEL_METER_SPLIT_PHASE = 202;
+
+  /** Wye-connect three phase (ABCN) meter model (Int+SF format). */
+  public static final int MODEL_METER_THREE_PHASE_WYE = 203;
+
+  /** Delta-connect three phase (ABC) meter model (Int+SF format). */
+  public static final int MODEL_METER_THREE_PHASE_DELTA = 204;
+
+  /** Single phase (AN or AB) meter model (Float format). */
+  public static final int MODEL_METER_SINGLE_PHASE_FLOAT = 211;
+
+  /** Split single phase (ABN) meter model (Float format). */
+  public static final int MODEL_METER_SPLIT_PHASE_FLOAT = 212;
+
+  /** Wye-connect three phase (ABCN) meter model (Float format). */
+  public static final int MODEL_METER_THREE_PHASE_WYE_FLOAT = 213;
+
+  /** Delta-connect three phase (ABC) meter model (Float format). */
+  public static final int MODEL_METER_THREE_PHASE_DELTA_FLOAT = 214;
+
   /**
    * Checks whether the given model ID represents a Float-format inverter model.
    *
@@ -133,6 +157,38 @@ public final class SunSpecConstants {
   }
 
   /**
+   * Checks whether the given model ID represents a Float-format meter model.
+   *
+   * @param modelId the model ID to check
+   * @return true if the model is a float-format meter model (211-214)
+   */
+  public static boolean isFloatMeterModel(int modelId) {
+    return modelId >= MODEL_METER_SINGLE_PHASE_FLOAT
+      && modelId <= MODEL_METER_THREE_PHASE_DELTA_FLOAT;
+  }
+
+  /**
+   * Checks whether the given model ID represents an Int&SF-format meter model.
+   *
+   * @param modelId the model ID to check
+   * @return true if the model is an int+SF meter model (201-204)
+   */
+  public static boolean isIntSfMeterModel(int modelId) {
+    return modelId >= MODEL_METER_SINGLE_PHASE
+      && modelId <= MODEL_METER_THREE_PHASE_DELTA;
+  }
+
+  /**
+   * Checks whether the given model ID is any meter model (Int&SF or Float).
+   *
+   * @param modelId the model ID to check
+   * @return true if the model is a meter model
+   */
+  public static boolean isMeterModel(int modelId) {
+    return isIntSfMeterModel(modelId) || isFloatMeterModel(modelId);
+  }
+
+  /**
    * Returns a human-readable name for a SunSpec model ID.
    *
    * @param modelId the model ID
@@ -153,6 +209,14 @@ public final class SunSpecConstants {
       case MODEL_CONTROLS -> "Immediate Controls";
       case MODEL_STORAGE -> "Basic Storage Controls";
       case MODEL_MPPT -> "Multiple MPPT Inverter Extension";
+      case MODEL_METER_SINGLE_PHASE -> "Meter (Single Phase AN/AB, Int+SF)";
+      case MODEL_METER_SPLIT_PHASE -> "Meter (Split Phase ABN, Int+SF)";
+      case MODEL_METER_THREE_PHASE_WYE -> "Meter (Three Phase WYE, Int+SF)";
+      case MODEL_METER_THREE_PHASE_DELTA -> "Meter (Three Phase Delta, Int+SF)";
+      case MODEL_METER_SINGLE_PHASE_FLOAT -> "Meter (Single Phase AN/AB, Float)";
+      case MODEL_METER_SPLIT_PHASE_FLOAT -> "Meter (Split Phase ABN, Float)";
+      case MODEL_METER_THREE_PHASE_WYE_FLOAT -> "Meter (Three Phase WYE, Float)";
+      case MODEL_METER_THREE_PHASE_DELTA_FLOAT -> "Meter (Three Phase Delta, Float)";
       case END_MODEL_ID -> "End Block";
       default -> "Unknown (" + modelId + ")";
     };

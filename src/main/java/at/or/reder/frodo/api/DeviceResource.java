@@ -422,6 +422,9 @@ public class DeviceResource {
       device.unitId,
       device.enabled,
       device.description,
+      device.deviceType,
+      device.autoDiscovered,
+      device.parentDevice != null ? device.parentDevice.id : null,
       identification,
       lastUpdated,
       cached,
@@ -436,6 +439,15 @@ public class DeviceResource {
     device.unitId = request.unitId();
     device.enabled = request.enabled();
     device.description = request.description();
+    device.deviceType = request.deviceType();
+
+    if (request.parentDeviceId() != null) {
+      ModbusDeviceEntity parent = deviceRepository.findByIdOptional(request.parentDeviceId())
+        .orElseThrow(() -> DeviceNotFoundException.forId(request.parentDeviceId()));
+      device.parentDevice = parent;
+    } else {
+      device.parentDevice = null;
+    }
 
     if (request.connectionTimeoutSeconds() != null) {
       device.connectionTimeoutSeconds = request.connectionTimeoutSeconds();
@@ -458,6 +470,9 @@ public class DeviceResource {
       device.port,
       device.unitId,
       device.enabled,
+      device.deviceType,
+      device.autoDiscovered,
+      device.parentDevice != null ? device.parentDevice.id : null,
       status,
       lastSuccessfulRead,
       hasDeviceInfo
@@ -485,6 +500,9 @@ public class DeviceResource {
       device.unitId,
       device.enabled,
       device.description,
+      device.deviceType,
+      device.autoDiscovered,
+      device.parentDevice != null ? device.parentDevice.id : null,
       identification,
       lastUpdated,
       cached,

@@ -1,9 +1,16 @@
 package at.or.reder.frodo.modbus.entity;
 
+import at.or.reder.frodo.modbus.model.DeviceType;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -12,6 +19,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Entity representing a Modbus TCP device configuration.
@@ -95,6 +104,36 @@ public class ModbusDeviceEntity extends PanacheEntity {
    */
   @Column(name = "updated_at", nullable = false)
   public Instant updatedAt;
+
+  /**
+   * Type of device (inverter, meter, Ohmpilot, etc.).
+   * Nullable for legacy devices; auto-detected during discovery.
+   */
+  @Column(name = "device_type", length = 50)
+  @Enumerated(EnumType.STRING)
+  public DeviceType deviceType;
+
+  /**
+   * Parent device in the Modbus gateway hierarchy.
+   * For sub-devices (meters, Ohmpilots), this points to the inverter
+   * that acts as the Modbus TCP gateway.
+   */
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "parent_device_id")
+  public ModbusDeviceEntity parentDevice;
+
+  /**
+   * Child devices discovered via this device's gateway connection.
+   */
+  @OneToMany(mappedBy = "parentDevice", cascade = CascadeType.ALL)
+  public List<ModbusDeviceEntity> childDevices = new ArrayList<>();
+
+  /**
+   * Whether this device was automatically discovered (true)
+   * or manually configured (false).
+   */
+  @Column(name = "auto_discovered", nullable = false)
+  public boolean autoDiscovered = false;
 
   /**
    * Cached device identification information.

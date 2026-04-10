@@ -1,5 +1,7 @@
 package at.or.reder.frodo.api.dto;
 
+import at.or.reder.frodo.modbus.model.DeviceType;
+
 import java.time.Instant;
 
 /**
@@ -11,6 +13,9 @@ import java.time.Instant;
  * @param port                Modbus TCP port
  * @param unitId              Modbus unit ID
  * @param enabled             whether device is enabled
+ * @param deviceType          device type (null for legacy devices)
+ * @param autoDiscovered      whether device was auto-discovered
+ * @param parentDeviceId      parent device ID (null for top-level devices)
  * @param connectionStatus    connection status (UNKNOWN, CONNECTED, FAILED)
  * @param lastSuccessfulRead  timestamp of last successful read (null if never)
  * @param hasDeviceInfo       whether device identification is cached
@@ -22,6 +27,9 @@ public record DeviceSummary(
   int port,
   int unitId,
   boolean enabled,
+  DeviceType deviceType,
+  boolean autoDiscovered,
+  Long parentDeviceId,
   ConnectionStatus connectionStatus,
   Instant lastSuccessfulRead,
   boolean hasDeviceInfo

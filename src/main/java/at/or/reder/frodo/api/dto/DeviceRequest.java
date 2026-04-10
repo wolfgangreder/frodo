@@ -1,5 +1,6 @@
 package at.or.reder.frodo.api.dto;
 
+import at.or.reder.frodo.modbus.model.DeviceType;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -14,6 +15,8 @@ import jakarta.validation.constraints.NotNull;
  * @param unitId                    Modbus unit ID (0-247)
  * @param enabled                   whether device is enabled
  * @param description               device description (optional)
+ * @param deviceType                device type (optional, auto-detected if null)
+ * @param parentDeviceId            parent device ID (optional, for sub-devices)
  * @param connectionTimeoutSeconds  connection timeout in seconds (1-300)
  * @param requestTimeoutSeconds     request timeout in seconds (1-300)
  */
@@ -38,6 +41,10 @@ public record DeviceRequest(
   Boolean enabled,
 
   String description,
+
+  DeviceType deviceType,
+
+  Long parentDeviceId,
 
   @Min(value = 1, message = "Connection timeout must be at least 1 second")
   @Max(value = 300, message = "Connection timeout cannot exceed 300 seconds")
