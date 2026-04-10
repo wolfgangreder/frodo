@@ -278,21 +278,34 @@ class FrodoResourceTest {
 
 ### Fronius Solar API
 - **Base URL**: `http://{inverter-ip}/solar_api/v1/` (HTTP, port 80)
+- **Configuration**: `frodo.solar-api.*` properties (disabled by default, host, port, timeout)
+- **Implementation**: JAX-RS Client with CDI producer, async Mutiny `Uni<T>` wrapper
 - **Key Endpoints**:
   - `GET /solar_api/v1/GetPowerFlowRealtimeData.fcgi` - Unified power flow data (all devices)
-  - `GET /solar_api/v1/GetOhmPilotRealtimeData.cgi` - Ohmpilot-specific data
+  - `GET /solar_api/v1/GetOhmPilotRealtimeData.cgi` - Ohmpilot-specific data (deprecated, use PowerFlowRealtimeData)
   - `GET /solar_api/v1/GetActiveDeviceInfo.cgi?DeviceClass={class}` - Device discovery
 - **PowerFlowRealtimeData Structure**:
-  - `Inverters` - Map of inverter data by DeviceId
+  - `Inverters` - Map of inverter data by DeviceId (String → InverterData)
   - `Site` - Aggregated site-level metrics (P_Grid, P_Load, P_PV, P_Akku)
-  - `Smartloads.Ohmpilots` - Map of Ohmpilot data by ComponentId
+  - `Smartloads.Ohmpilots` - Map of Ohmpilot data by ComponentId (String → OhmpilotData)
     - `P_AC_Total` - Power consumption [W]
-    - `State` - Operating state (normal, boost, fault, etc.)
+    - `State` - Operating state (normal, boost, fault, startup, standby)
     - `Temperature` - Tank/storage temperature [°C]
+    - `CodeOfState` - Numeric state code
   - `Smartloads.OhmpilotEcos` - Ohmpilot Eco devices (dual heating rods)
-  - `SecondaryMeters` - Additional meter data
+  - `SecondaryMeters` - Additional meter data (map by MeterId)
+  - `Version` - API version (e.g., "13")
+- **Client Usage**:
+  ```java
+  @Inject
+  SolarApiClient solarApiClient;
+  
+  Uni<PowerFlowRealtimeData> data = solarApiClient.getPowerFlowRealtimeData();
+  ```
+- **Health Check**: `SolarApiHealthCheck` monitors API availability (readiness probe)
 - **Use Case**: Device discovery and metrics collection without Modbus complexity
 - **Integration**: Complementary to Modbus (Solar API for discovery, Modbus for control)
+- **ComponentId vs Unit ID**: ComponentId from Solar API doesn't map to Modbus Unit ID (requires testing)
 
 ### Async/Reactive
 - Use Vert.x Mutiny APIs (`io.vertx.mutiny.*`)
