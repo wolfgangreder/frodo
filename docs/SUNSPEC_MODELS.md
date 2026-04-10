@@ -57,6 +57,14 @@ Base Address (40000)
 | 123 | Immediate Controls | Int+SF | Power limit, PF, VAR control (writable) |
 | 124 | Basic Storage Controls | Int+SF | Charge/discharge settings (writable) |
 | 160 | Multiple MPPT Extension | Int+SF | Per-string DC current, voltage, power |
+| 201 | Meter (Single Phase AN/AB) | Int+SF | AC current, voltage, power, energy (single phase) |
+| 202 | Meter (Split Phase ABN) | Int+SF | AC current, voltage, power, energy (split phase) |
+| 203 | Meter (Three Phase WYE) | Int+SF | AC current, voltage, power, energy (3-phase WYE) |
+| 204 | Meter (Three Phase Delta) | Int+SF | AC current, voltage, power, energy (3-phase delta) |
+| 211 | Meter (Single Phase AN/AB) | Float | AC current, voltage, power, energy (single phase) |
+| 212 | Meter (Split Phase ABN) | Float | AC current, voltage, power, energy (split phase) |
+| 213 | Meter (Three Phase WYE) | Float | AC current, voltage, power, energy (3-phase WYE) |
+| 214 | Meter (Three Phase Delta) | Float | AC current, voltage, power, energy (3-phase delta) |
 
 ### Inverter Model Auto-Detection
 
@@ -64,6 +72,14 @@ The `/sunspec/inverter` endpoint auto-detects which inverter model variant is av
 - Checks Float models first (111, 112, 113)
 - Falls back to Int+SF models (101, 102, 103)
 - Returns the first match found in the device's model chain
+
+### Meter Model Auto-Detection
+
+The `/sunspec/meter` endpoint auto-detects which meter model variant is available on the device:
+- Checks Float models first (211, 212, 213, 214)
+- Falls back to Int+SF models (201, 202, 203, 204)
+- Returns the first match found in the device's model chain
+- Used by the device discovery service to identify Smart Meter devices
 
 ## Data Types
 
@@ -295,6 +311,70 @@ Per-string DC measurements. Contains a fixed header with scale factors followed 
 | `Tmp` | int16 | C | Temperature |
 | `DCSt` | enum16 | -- | Operating State |
 | `DCEvt` | bitfield32 | -- | Module Events |
+
+### Models 211-214: Meter (Float)
+
+AC electrical measurements, power, and energy accumulators for smart meters. All fields are read-only using IEEE 754 float values.
+
+| Field | Offset | Size | Type | Unit | Description |
+|-------|--------|------|------|------|-------------|
+| `A` | 0 | 2 | float32 | A | Total AC Current |
+| `AphA` | 2 | 2 | float32 | A | Phase A Current |
+| `AphB` | 4 | 2 | float32 | A | Phase B Current |
+| `AphC` | 6 | 2 | float32 | A | Phase C Current |
+| `PhV` | 8 | 2 | float32 | V | Line to Neutral AC Voltage (avg) |
+| `PhVphA` | 10 | 2 | float32 | V | Phase Voltage AN |
+| `PhVphB` | 12 | 2 | float32 | V | Phase Voltage BN |
+| `PhVphC` | 14 | 2 | float32 | V | Phase Voltage CN |
+| `PPV` | 16 | 2 | float32 | V | Line to Line AC Voltage (avg) |
+| `PPVphAB` | 18 | 2 | float32 | V | Phase Voltage AB |
+| `PPVphBC` | 20 | 2 | float32 | V | Phase Voltage BC |
+| `PPVphCA` | 22 | 2 | float32 | V | Phase Voltage CA |
+| `Hz` | 24 | 2 | float32 | Hz | Frequency |
+| `W` | 26 | 2 | float32 | W | Total Real Power |
+| `WphA` | 28 | 2 | float32 | W | Watts phase A |
+| `WphB` | 30 | 2 | float32 | W | Watts phase B |
+| `WphC` | 32 | 2 | float32 | W | Watts phase C |
+| `VA` | 34 | 2 | float32 | VA | AC Apparent Power |
+| `VAphA` | 36 | 2 | float32 | VA | VA phase A |
+| `VAphB` | 38 | 2 | float32 | VA | VA phase B |
+| `VAphC` | 40 | 2 | float32 | VA | VA phase C |
+| `VAR` | 42 | 2 | float32 | var | Reactive Power |
+| `VARphA` | 44 | 2 | float32 | var | VAR phase A |
+| `VARphB` | 46 | 2 | float32 | var | VAR phase B |
+| `VARphC` | 48 | 2 | float32 | var | VAR phase C |
+| `PF` | 50 | 2 | float32 | PF | Power Factor |
+| `PFphA` | 52 | 2 | float32 | PF | PF phase A |
+| `PFphB` | 54 | 2 | float32 | PF | PF phase B |
+| `PFphC` | 56 | 2 | float32 | PF | PF phase C |
+| `TotWhExp` | 58 | 2 | float32 | Wh | Total Real Energy Exported |
+| `TotWhExpPhA` | 60 | 2 | float32 | Wh | Total Wh Exported phase A |
+| `TotWhExpPhB` | 62 | 2 | float32 | Wh | Total Wh Exported phase B |
+| `TotWhExpPhC` | 64 | 2 | float32 | Wh | Total Wh Exported phase C |
+| `TotWhImp` | 66 | 2 | float32 | Wh | Total Real Energy Imported |
+| `TotWhImpPhA` | 68 | 2 | float32 | Wh | Total Wh Imported phase A |
+| `TotWhImpPhB` | 70 | 2 | float32 | Wh | Total Wh Imported phase B |
+| `TotWhImpPhC` | 72 | 2 | float32 | Wh | Total Wh Imported phase C |
+| `TotVAhExp` | 74 | 2 | float32 | VAh | Total Apparent Energy Exported |
+| `TotVAhImp` | 82 | 2 | float32 | VAh | Total Apparent Energy Imported |
+| `TotVArhImpQ1` | 90 | 2 | float32 | varh | Total VAR-hours Imported Q1 |
+| `TotVArhImpQ2` | 98 | 2 | float32 | varh | Total VAR-hours Imported Q2 |
+| `TotVArhExpQ3` | 106 | 2 | float32 | varh | Total VAR-hours Exported Q3 |
+| `TotVArhExpQ4` | 114 | 2 | float32 | varh | Total VAR-hours Exported Q4 |
+| `Evt` | 122 | 2 | bitfield32 | -- | Meter Event Flags |
+
+Per-phase energy variants (`*PhA`, `*PhB`, `*PhC`) exist for all energy accumulators but are omitted from the table for brevity. Total: 124 registers.
+
+### Models 201-204: Meter (Int+SF)
+
+Same measurements as Float meter models but using integer values with scale factors. Includes `*_SF` fields for each measurement group.
+
+Key differences from Float models:
+- Current fields use `int16` with `A_SF` scale factor
+- Voltage fields use `int16` with `V_SF` scale factor
+- Power fields use `int16` with `W_SF`, `VA_SF`, `VAR_SF` scale factors
+- Energy fields use `acc32` with `TotWh_SF`, `TotVAh_SF`, `TotVArh_SF` scale factors
+- Total: 105 registers (including scale factor registers)
 
 ## Register Decoding Pipeline
 

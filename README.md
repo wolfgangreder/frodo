@@ -11,8 +11,10 @@ Frodo is a Quarkus 3.x server application for Modbus TCP communication with PV (
 | Modbus TCP | java.net.Socket with connection pooling & fair-lock request queue |
 | SunSpec Protocol | Model chain discovery, typed register decoding (Float & Int+SF) |
 | Device Management | CRUD API, database-backed config, scheduled info collection |
-| Monitoring | Micrometer Prometheus metrics (JVM, Modbus, SunSpec) |
-| Health Checks | MicroProfile Health (Modbus connection, SunSpec cache) |
+| Device Discovery | Multi-source discovery (SunSpec + Solar API), device hierarchy |
+| Solar API | Fronius Solar API client for Ohmpilot and power flow data |
+| Monitoring | Micrometer Prometheus metrics (JVM, Modbus, SunSpec, Discovery) |
+| Health Checks | MicroProfile Health (Modbus, SunSpec, Solar API, device hierarchy) |
 | Messaging | MQTT via SmallRye Reactive Messaging |
 | Database | FirebirdSQL via Jaybird 6 JDBC + Liquibase migrations |
 | Containerization | Docker (Quarkus Docker extension) |
@@ -108,13 +110,21 @@ The application starts on <http://localhost:8080>.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/devices` | List all configured devices |
+| GET | `/api/devices` | List devices (supports `?deviceType=` and `?parentId=` filters) |
 | POST | `/api/devices` | Create a new device |
 | GET | `/api/devices/{id}` | Get device details |
 | PUT | `/api/devices/{id}` | Update a device |
-| DELETE | `/api/devices/{id}` | Delete a device |
+| DELETE | `/api/devices/{id}` | Delete a device (fails 409 if sub-devices exist) |
 | GET | `/api/devices/{id}/info` | Get cached device identification (FC 0x2B) |
 | POST | `/api/devices/{id}/info/refresh` | Force refresh device identification |
+
+### Device Discovery
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/devices/discover` | Discover devices on a host:port (Modbus + Solar API) |
+| POST | `/api/devices/{id}/discover-sub-devices` | Discover sub-devices for an existing parent device |
+| GET | `/api/devices/{id}/sub-devices` | List sub-devices of a parent device |
 
 ### Modbus Raw Access
 
@@ -129,6 +139,7 @@ The application starts on <http://localhost:8080>.
 | GET | `/api/devices/{id}/sunspec/discovery` | Discover SunSpec model chain |
 | GET | `/api/devices/{id}/sunspec/common` | Common model (1) -- device identification |
 | GET | `/api/devices/{id}/sunspec/inverter` | Auto-detect inverter model (101-103 / 111-113) |
+| GET | `/api/devices/{id}/sunspec/meter` | Auto-detect meter model (201-204 / 211-214) |
 | GET | `/api/devices/{id}/sunspec/nameplate` | Nameplate ratings (120) |
 | GET | `/api/devices/{id}/sunspec/settings` | Basic settings (121) |
 | GET | `/api/devices/{id}/sunspec/status` | Extended measurements & status (122) |
@@ -172,6 +183,30 @@ curl -s http://localhost:8080/api/devices/1/sunspec/model/120 | jq .
 
 # List all available models on the device
 curl -s http://localhost:8080/api/devices/1/sunspec/models | jq .
+
+# Discover devices on a Modbus TCP gateway
+curl -s -X POST http://localhost:8080/api/devices/discover \
+  -H "Content-Type: application/json" \
+  -d '{
+    "host": "192.168.1.160",
+    "port": 502,
+    "autoSave": true
+  }' | jq .
+
+# Discover sub-devices for an existing parent device
+curl -s -X POST http://localhost:8080/api/devices/1/discover-sub-devices | jq .
+
+# List sub-devices of a parent device
+curl -s http://localhost:8080/api/devices/1/sub-devices | jq .
+
+# Filter devices by type
+curl -s "http://localhost:8080/api/devices?deviceType=SMART_METER" | jq .
+
+# Filter devices by parent
+curl -s "http://localhost:8080/api/devices?parentId=1" | jq .
+
+# Read meter data (auto-detects Float vs Int+SF)
+curl -s http://localhost:8080/api/devices/2/sunspec/meter | jq .
 
 # Read raw Modbus holding registers
 curl -s "http://localhost:8080/api/modbus/1/holding-registers?start=40000&count=10" | jq .
@@ -253,6 +288,24 @@ All `frodo.*` configuration properties in `src/main/resources/application.proper
 | `frodo.sunspec.health.discovery-required` | `false` | Require SunSpec discovery for health UP |
 | `frodo.sunspec.health.max-cache-age-hours` | `24` | Max SunSpec cache age before WARN |
 
+### Device Discovery
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `frodo.discovery.enabled` | `true` | Enable device discovery functionality |
+| `frodo.discovery.unit-id-ranges` | `1,200-203` | Unit ID ranges to scan (comma-separated values/ranges) |
+| `frodo.discovery.timeout-seconds` | `5` | Timeout per device probe during discovery |
+| `frodo.discovery.max-concurrent-scans` | `1` | Maximum concurrent discovery scans |
+
+### Solar API
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `frodo.solar-api.enabled` | `false` | Enable Fronius Solar API integration |
+| `frodo.solar-api.host` | `localhost` | Solar API host (usually the inverter IP) |
+| `frodo.solar-api.port` | `80` | Solar API port |
+| `frodo.solar-api.timeout-seconds` | `10` | HTTP request timeout |
+
 ### Example Production Configuration
 
 ```properties
@@ -284,6 +337,14 @@ frodo.modbus.device.seed-from-config=true
 frodo.modbus.health.max-age-minutes=15
 frodo.sunspec.health.max-cache-age-hours=24
 
+# Device Discovery
+frodo.discovery.enabled=true
+frodo.discovery.unit-id-ranges=1,200-203
+
+# Solar API (for Ohmpilot discovery)
+frodo.solar-api.enabled=true
+frodo.solar-api.host=192.168.1.100
+
 # Database
 quarkus.datasource.active=true
 quarkus.datasource.jdbc.url=jdbc:firebirdsql://localhost:3050/frodo.fdb
@@ -305,28 +366,34 @@ src/main/java/at/or/reder/frodo/
 ├── api/                         -- REST endpoints
 │   ├── FrodoResource.java           Application info (/api/info)
 │   ├── DeviceResource.java          Device management CRUD (/api/devices)
+│   ├── DeviceDiscoveryResource.java Discovery endpoints (discover, sub-devices)
 │   ├── SunSpecResource.java         SunSpec protocol endpoints
 │   ├── dto/                         Request/response DTOs (records)
 │   └── exception/                   REST exception mappers
 ├── health/                      -- Health & monitoring
 │   ├── FrodoHealthCheck.java        Application readiness check
-│   ├── ModbusHealthCheck.java       Modbus connection health check
+│   ├── ModbusHealthCheck.java       Modbus + device hierarchy health check
 │   ├── SunSpecHealthCheck.java      SunSpec discovery cache health check
+│   ├── SolarApiHealthCheck.java     Solar API availability health check
 │   └── ModbusMetrics.java           Micrometer gauges, counters, timers
 ├── modbus/                      -- Modbus TCP protocol
 │   ├── ModbusTcpService.java        Core Modbus TCP service (FC 0x03, 0x06, 0x10, 0x2B)
 │   ├── ModbusResource.java          Raw register access endpoint
 │   ├── ModbusException.java         Modbus protocol exceptions
 │   ├── connection/                  Connection pool & request queue
-│   ├── service/                     Device info collection & caching
+│   ├── service/                     Device info collection, caching & discovery
+│   │   ├── DeviceDiscoveryService.java  Multi-source device discovery
+│   │   ├── DiscoveredDevice.java        Discovery result record
+│   │   ├── DeviceInfoCollectorService.java  Scheduled collection
+│   │   └── DeviceInfoCacheService.java      In-memory cache
 │   ├── entity/                      JPA entities (device, device info)
 │   ├── repository/                  Panache repositories
 │   ├── config/                      Device config initializer
-│   ├── model/                       Domain models (DeviceIdentification)
+│   ├── model/                       Domain models (DeviceIdentification, DeviceType)
 │   ├── cache/                       In-memory cache models
 │   └── sunspec/                     SunSpec protocol support
 │       ├── SunSpecService.java          Discovery, model reading, caching
-│       ├── SunSpecModelRegistry.java    Model definitions (all supported models)
+│       ├── SunSpecModelRegistry.java    Model definitions (inverter, meter, storage, ...)
 │       ├── SunSpecModelDataDecoder.java Model data decoder
 │       ├── SunSpecRegisterDecoder.java  Data type decoder (float32, acc32, ...)
 │       ├── SunSpecConstants.java        Model IDs, base addresses
@@ -336,6 +403,14 @@ src/main/java/at/or/reder/frodo/
 │       ├── SunSpecModelData.java        Decoded model data record
 │       ├── SunSpecModelDefinition.java  Model metadata record
 │       └── SunSpecFieldDefinition.java  Field metadata record
+├── solarapi/                    -- Fronius Solar API integration
+│   ├── SolarApiClient.java          HTTP client for Solar API
+│   ├── SolarApiClientProducer.java  CDI producer for JAX-RS Client
+│   └── model/                       Solar API data models
+│       ├── SolarApiResponse.java        Generic response wrapper
+│       ├── PowerFlowRealtimeData.java   Power flow response
+│       ├── SmartloadsData.java          Ohmpilot/smartload data
+│       └── OhmpilotData.java           Ohmpilot device data
 └── mqtt/                        -- MQTT messaging
     └── MqttService.java             Publish/subscribe service
 ```
@@ -343,6 +418,7 @@ src/main/java/at/or/reder/frodo/
 ## Further Documentation
 
 - **[docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md)** -- Firebird database setup guide
+- **[docs/DEVICE_DISCOVERY.md](docs/DEVICE_DISCOVERY.md)** -- Device discovery guide (multi-device, Solar API)
 - **[docs/SUNSPEC_MODELS.md](docs/SUNSPEC_MODELS.md)** -- SunSpec model registry reference
 - **[docs/TESTING.md](docs/TESTING.md)** -- Testing guide
 - **[docs/SECURITY.md](docs/SECURITY.md)** -- Security guidelines and secret scanning
