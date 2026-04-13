@@ -34,7 +34,7 @@ dependencies {
     implementation 'io.quarkus:quarkus-liquibase'
     implementation 'io.quarkus:quarkus-hibernate-validator'
     // Firebird dialect moved to community dialects artifact in Hibernate ORM 6+
-    implementation 'org.hibernate.orm:hibernate-community-dialects:7.3.0.Final'
+    implementation 'org.hibernate.orm:hibernate-community-dialects:7.3.1.Final'
 
     // Quarkus Scheduler for background jobs
     implementation 'io.quarkus:quarkus-scheduler'
