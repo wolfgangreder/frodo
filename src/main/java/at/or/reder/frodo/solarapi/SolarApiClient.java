@@ -5,22 +5,16 @@ import at.or.reder.frodo.solarapi.model.SolarApiResponse;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
-import jakarta.ws.rs.core.GenericType;
-import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.logging.Logger;
 
-import java.io.IOException;
-import java.time.Duration;
-import java.util.concurrent.CompletionStage;
-
 /**
- * HTTP client for Fronius Solar API endpoints.
+ * HTTP client wrapper for Fronius Solar API endpoints.
  *
  * <p>Provides async access to Solar API endpoints for device discovery
- * and metrics collection. Uses JAX-RS Client for HTTP communication.</p>
+ * and metrics collection. Delegates to the MicroProfile REST Client
+ * {@link SolarApiRestClient} for HTTP communication.</p>
  *
  * <p><b>Base URL:</b> {@code http://{host}:{port}/solar_api/v1/}</p>
  *
@@ -34,6 +28,7 @@ import java.util.concurrent.CompletionStage;
  * <p><b>API Reference:</b> {@code refdoc/solar_api.pdf}</p>
  *
  * @see PowerFlowRealtimeData
+ * @see SolarApiRestClient
  */
 @ApplicationScoped
 public class SolarApiClient {
@@ -46,14 +41,12 @@ public class SolarApiClient {
   @ConfigProperty(name = "frodo.solar-api.port", defaultValue = "80")
   int solarApiPort;
 
-  @ConfigProperty(name = "frodo.solar-api.timeout-seconds", defaultValue = "5")
-  int timeoutSeconds;
-
   @ConfigProperty(name = "frodo.solar-api.enabled", defaultValue = "false")
   boolean solarApiEnabled;
 
   @Inject
-  Client httpClient;
+  @RestClient
+  SolarApiRestClient restClient;
 
   /**
    * Fetches power flow realtime data from the Solar API.
@@ -65,7 +58,6 @@ public class SolarApiClient {
    *
    * @return async response with power flow data
    * @throws IllegalStateException if Solar API is disabled
-   * @throws IOException           if HTTP request fails
    */
   public Uni<SolarApiResponse<PowerFlowRealtimeData>> getPowerFlowRealtimeData() {
     if (!solarApiEnabled) {
@@ -74,22 +66,17 @@ public class SolarApiClient {
       );
     }
 
-    String url = buildUrl("/solar_api/v1/GetPowerFlowRealtimeData.fcgi");
-    LOG.debugf("Fetching power flow data from %s", url);
+    LOG.debugf("Fetching power flow data from %s", getBaseUrl());
 
-    return Uni.createFrom().item(() -> {
-        return httpClient.target(url)
-          .request(MediaType.APPLICATION_JSON)
-          .get(new GenericType<SolarApiResponse<PowerFlowRealtimeData>>() {
-          });
-      }).onItem().transform(response -> {
-      LOG.debugf("Received power flow data (version: %s, has Ohmpilots: %s)",
-        response.getData() != null ? response.getData().getVersion() : "unknown",
-        response.getData() != null && response.getData().hasOhmpilots());
-      return response;
-    }).onFailure().invoke(ex -> {
-      LOG.errorf(ex, "Failed to fetch power flow data from %s", url);
-    });
+    return restClient.getPowerFlowRealtimeData()
+      .onItem().invoke(response -> {
+        LOG.debugf("Received power flow data (version: %s, has Ohmpilots: %s)",
+          response.getData() != null ? response.getData().getVersion() : "unknown",
+          response.getData() != null && response.getData().hasOhmpilots());
+      })
+      .onFailure().invoke(ex -> {
+        LOG.errorf(ex, "Failed to fetch power flow data from %s", getBaseUrl());
+      });
   }
 
   /**
@@ -107,16 +94,6 @@ public class SolarApiClient {
     return getPowerFlowRealtimeData()
       .map(response -> response != null && response.isSuccess())
       .onFailure().recoverWithItem(false);
-  }
-
-  /**
-   * Builds the full URL for a Solar API endpoint.
-   *
-   * @param path endpoint path (e.g. "/solar_api/v1/GetPowerFlowRealtimeData.fcgi")
-   * @return full URL
-   */
-  private String buildUrl(String path) {
-    return String.format("http://%s:%d%s", solarApiHost, solarApiPort, path);
   }
 
   /**

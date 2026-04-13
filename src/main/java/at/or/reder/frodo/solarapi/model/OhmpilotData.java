@@ -1,5 +1,6 @@
 package at.or.reder.frodo.solarapi.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -26,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *   <li>{@code standby} - Standby mode</li>
  * </ul>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record OhmpilotData(
   @JsonProperty("P_AC_Total") Double powerTotal,
   @JsonProperty("State") String state,

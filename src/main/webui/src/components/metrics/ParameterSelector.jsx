@@ -3,6 +3,7 @@ import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -17,6 +18,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
 import SelectAllIcon from '@mui/icons-material/SelectAll';
 import DeselectIcon from '@mui/icons-material/Deselect';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 /**
  * ParameterSelector - grouped parameter selection with search and select all/deselect all
@@ -26,8 +28,9 @@ import DeselectIcon from '@mui/icons-material/Deselect';
  * @param {Array} props.selectedParameters - Currently selected parameter keys (modelId_fieldName)
  * @param {Function} props.onSelectionChange - Callback when selection changes
  * @param {boolean} props.disabled - Whether the selector is disabled
+ * @param {boolean} props.discoveryBased - Whether parameters came from live device discovery
  */
-function ParameterSelector({ availableParameters = [], selectedParameters = [], onSelectionChange, disabled = false }) {
+function ParameterSelector({ availableParameters = [], selectedParameters = [], onSelectionChange, disabled = false, discoveryBased = true }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedModels, setExpandedModels] = useState({});
 
@@ -61,6 +64,7 @@ function ParameterSelector({ availableParameters = [], selectedParameters = [], 
             f.fieldName.toLowerCase().includes(term) ||
             (f.description && f.description.toLowerCase().includes(term)) ||
             (f.units && f.units.toLowerCase().includes(term)) ||
+            (f.metricName && f.metricName.toLowerCase().includes(term)) ||
             group.modelName.toLowerCase().includes(term)
         ),
       }))
@@ -125,6 +129,31 @@ function ParameterSelector({ availableParameters = [], selectedParameters = [], 
 
   return (
     <Box>
+      {/* Discovery status warning */}
+      {!discoveryBased && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Could not discover models from the device. Showing all known SunSpec models from the
+          static registry. Parameters for models not present on the device will be
+          automatically skipped during scraping.
+        </Alert>
+      )}
+
+      {/* Model selection guide */}
+      <Alert severity="info" icon={<InfoOutlinedIcon />} sx={{ mb: 2 }}>
+        <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+          SunSpec model selection guide
+        </Typography>
+        <Typography variant="caption" component="div" color="text.secondary">
+          Each device supports only <strong>one data format</strong> (Int+SF or Float) and
+          only <strong>one phase type</strong> (Single Phase, Split Phase, or Three Phase).
+          For example, an inverter will report either model 103 (Three Phase, Int+SF) or 113
+          (Three Phase, Float), but never both. Similarly, a meter provides only one of
+          models 201-204 or 211-214 depending on its wiring and format.
+          Parameters selected for models not present on the device are automatically filtered
+          out at scrape time.
+        </Typography>
+      </Alert>
+
       {/* Search and bulk actions */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }} alignItems="center">
         <TextField
@@ -233,19 +262,30 @@ function ParameterSelector({ availableParameters = [], selectedParameters = [], 
                           />
                         }
                         label={
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {field.fieldName}
-                            </Typography>
-                            {field.units && (
-                              <Chip label={field.units} size="small" variant="outlined" sx={{ height: 20 }} />
-                            )}
-                            {field.description && (
-                              <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: { xs: 150, sm: 300 } }}>
-                                {field.description}
+                          <Box>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {field.fieldName}
+                              </Typography>
+                              {field.units && (
+                                <Chip label={field.units} size="small" variant="outlined" sx={{ height: 20 }} />
+                              )}
+                              {field.description && (
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: { xs: 150, sm: 300 } }}>
+                                  {field.description}
+                                </Typography>
+                              )}
+                            </Stack>
+                            {field.metricName && (
+                              <Typography
+                                variant="caption"
+                                color="text.disabled"
+                                sx={{ fontFamily: 'monospace', fontSize: '0.7rem', display: 'block', mt: -0.25 }}
+                              >
+                                {field.metricName}
                               </Typography>
                             )}
-                          </Stack>
+                          </Box>
                         }
                         sx={{ width: '100%' }}
                       />

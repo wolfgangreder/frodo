@@ -1,5 +1,6 @@
 package at.or.reder.frodo.solarapi.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
@@ -21,6 +22,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * @param <T> the type of data contained in the Body.Data field
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record SolarApiResponse<T>(
   @JsonProperty("Body") Body<T> body,
   @JsonProperty("Head") Head head
@@ -31,6 +33,7 @@ public record SolarApiResponse<T>(
    *
    * @param <T> the data type
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Body<T>(
     @JsonProperty("Data") T data
   ) {
@@ -39,6 +42,7 @@ public record SolarApiResponse<T>(
   /**
    * Response metadata and status information.
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Head(
     @JsonProperty("RequestArguments") Object requestArguments,
     @JsonProperty("Status") Status status,
@@ -49,6 +53,7 @@ public record SolarApiResponse<T>(
   /**
    * API call status information.
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Status(
     @JsonProperty("Code") int code,
     @JsonProperty("Reason") String reason,

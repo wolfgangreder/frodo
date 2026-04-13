@@ -13,6 +13,7 @@ import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
+import at.or.reder.frodo.modbus.metrics.MetricMetadataRegistry;
 import at.or.reder.frodo.modbus.repository.MetricsConfigRepository;
 import at.or.reder.frodo.modbus.repository.MetricsDataRepository;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
@@ -81,6 +82,9 @@ public class MetricsConfigResource {
 
   @Inject
   SunSpecService sunSpecService;
+
+  @Inject
+  MetricMetadataRegistry metadataRegistry;
 
   /**
    * Gets the metrics configuration for a device.
@@ -202,14 +206,15 @@ public class MetricsConfigResource {
                 modelName,
                 field.name(),
                 field.units(),
-                field.description()
+                field.description(),
+                resolveMetricName(model.modelId(), field.name())
               ));
             }
           }
         }
       }
 
-      return new AvailableParametersResponse(deviceId, params);
+      return new AvailableParametersResponse(deviceId, params, true);
     } catch (Exception error) {
       LOG.warnf("SunSpec discovery failed for device %d, falling back to static registry: %s",
         deviceId, error.getMessage());
@@ -334,13 +339,31 @@ public class MetricsConfigResource {
             def.name(),
             field.name(),
             field.units(),
-            field.description()
+            field.description(),
+            resolveMetricName(modelId, field.name())
           ));
         }
       }
     }
 
-    return new AvailableParametersResponse(deviceId, params);
+    return new AvailableParametersResponse(deviceId, params, false);  }
+
+  /**
+   * Resolves the Prometheus metric name for a SunSpec field.
+   *
+   * <p>Uses the semantic mapping from {@link MetricMetadataRegistry} if available,
+   * otherwise falls back to the legacy naming convention
+   * {@code frodo_sunspec_{modelId}_{fieldName}}.</p>
+   *
+   * @param modelId   SunSpec model ID
+   * @param fieldName field name within the model
+   * @return the metric name that will be used in Prometheus
+   */
+  private String resolveMetricName(int modelId, String fieldName) {
+    return metadataRegistry.resolve(modelId, fieldName)
+      .map(resolved -> resolved.metricName())
+      .orElseGet(() -> String.format("frodo_sunspec_%d_%s",
+        modelId, fieldName.toLowerCase().replace("/", "_")));
   }
 
   /**

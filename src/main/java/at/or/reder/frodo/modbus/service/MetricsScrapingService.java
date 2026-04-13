@@ -9,10 +9,13 @@ import at.or.reder.frodo.modbus.metrics.MetricMetadata.ResolvedMetric;
 import at.or.reder.frodo.modbus.metrics.MetricMetadataRegistry;
 import at.or.reder.frodo.modbus.repository.MetricsConfigRepository;
 import at.or.reder.frodo.modbus.repository.MetricsDataRepository;
+import at.or.reder.frodo.modbus.sunspec.SunSpecConstants;
+import at.or.reder.frodo.modbus.sunspec.SunSpecDiscoveryResult;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelData;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelRegistry;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
 import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
@@ -27,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -90,9 +94,11 @@ public class MetricsScrapingService {
   private final Map<Long, Map<String, AtomicReference<Double>>> gaugeValues = new ConcurrentHashMap<>();
 
   /**
-   * Tracks which gauge metric names have been registered (to avoid double-registration).
+   * Tracks registered gauges per device: deviceId -> (gaugeKey -> Meter.Id).
+   * Used to unregister stale gauges from the MeterRegistry when a device
+   * is rescheduled or cancelled.
    */
-  private final Map<String, Boolean> registeredGauges = new ConcurrentHashMap<>();
+  private final Map<Long, Map<String, Meter.Id>> registeredGauges = new ConcurrentHashMap<>();
 
   /**
    * Flag to prevent scrape tasks from executing during shutdown.
@@ -116,7 +122,8 @@ public class MetricsScrapingService {
   }
 
   /**
-   * On application shutdown, cancel all scheduled timers and shut down the executor.
+   * On application shutdown, cancel all scheduled timers, unregister gauges,
+   * and shut down the executor.
    */
   void onStop(@Observes ShutdownEvent event) {
     LOG.info("Shutting down metrics scraping service");
@@ -126,6 +133,22 @@ public class MetricsScrapingService {
       LOG.debugf("Cancelled scraping timer for device %d", deviceId);
     });
     scheduledTimers.clear();
+
+    // Unregister all Micrometer gauges
+    int totalRemoved = 0;
+    for (Map.Entry<Long, Map<String, Meter.Id>> deviceEntry : registeredGauges.entrySet()) {
+      for (Meter.Id meterId : deviceEntry.getValue().values()) {
+        if (meterRegistry.remove(meterId) != null) {
+          totalRemoved++;
+        }
+      }
+    }
+    registeredGauges.clear();
+    gaugeValues.clear();
+    if (totalRemoved > 0) {
+      LOG.debugf("Removed %d Micrometer gauge(s) during shutdown", totalRemoved);
+    }
+
     scheduler.shutdownNow();
   }
 
@@ -155,8 +178,14 @@ public class MetricsScrapingService {
       return;
     }
 
-    // Register Prometheus gauges for enabled parameters
-    registerGauges(config);
+    // Discover which models are actually present on the device so we only
+    // register gauges for available models (prevents phantom metrics in
+    // /q/metrics for models that don't exist on this device).
+    DeviceAddress address = DeviceAddress.fromEntity(config.device);
+    Set<Integer> availableModelIds = discoverAvailableModels(address, deviceId);
+
+    // Register Prometheus gauges for enabled parameters (filtered by availability)
+    registerGauges(config, availableModelIds);
 
     // Schedule periodic scraping
     long intervalSeconds = config.scrapeIntervalSeconds;
@@ -165,12 +194,21 @@ public class MetricsScrapingService {
       intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
 
     scheduledTimers.put(deviceId, future);
-    LOG.infof("Scheduled metrics scraping for device %d (%s) every %d seconds (%d parameters)",
-      deviceId, config.device.name, config.scrapeIntervalSeconds, enabledParams);
+    long actualParams = availableModelIds != null
+      ? config.parameters.stream()
+          .filter(p -> p.enabled && availableModelIds.contains(p.sunspecModelId))
+          .count()
+      : enabledParams;
+    LOG.infof("Scheduled metrics scraping for device %d (%s) every %d seconds (%d parameters, %d available after filtering)",
+      deviceId, config.device.name, config.scrapeIntervalSeconds, enabledParams, actualParams);
   }
 
   /**
-   * Cancels scheduled scraping for a device.
+   * Cancels scheduled scraping for a device and removes all its Micrometer gauges.
+   *
+   * <p>This ensures that stale gauges (for models no longer available or for
+   * disabled parameters) are removed from {@code /q/metrics} when a device
+   * is rescheduled or disabled.</p>
    *
    * @param deviceId device ID
    */
@@ -180,6 +218,22 @@ public class MetricsScrapingService {
       existing.cancel(false);
       LOG.debugf("Cancelled scraping timer for device %d", deviceId);
     }
+
+    // Unregister all Micrometer gauges for this device
+    Map<String, Meter.Id> deviceMeterIds = registeredGauges.remove(deviceId);
+    if (deviceMeterIds != null && !deviceMeterIds.isEmpty()) {
+      int removed = 0;
+      for (Map.Entry<String, Meter.Id> entry : deviceMeterIds.entrySet()) {
+        Meter meter = meterRegistry.remove(entry.getValue());
+        if (meter != null) {
+          removed++;
+        }
+      }
+      LOG.debugf("Removed %d Micrometer gauge(s) for device %d", removed, deviceId);
+    }
+
+    // Clean up gauge value references
+    gaugeValues.remove(deviceId);
   }
 
   /**
@@ -204,19 +258,27 @@ public class MetricsScrapingService {
   // ========== Internal Methods ==========
 
   /**
-   * Registers Micrometer gauges for all enabled parameters in a config.
+   * Registers Micrometer gauges for enabled parameters that are available on the device.
    *
    * <p>Uses the {@link MetricMetadataRegistry} to resolve semantic metric
    * names and tags (phase, channel, line, etc.) from the mapping JSON.
    * Falls back to legacy naming when no semantic mapping exists.</p>
+   *
+   * <p>Only registers gauges for models that were discovered on the device.
+   * This prevents phantom metrics in {@code /q/metrics} for models that
+   * don't exist (e.g. Float gauges on an Int+SF device, or three-phase
+   * meter gauges on a single-phase meter).</p>
    *
    * <p>Reuses existing {@link AtomicReference} instances for gauge values
    * when they already exist (i.e., when rescheduling after a config update).
    * This is critical because Micrometer holds a reference to the original
    * AtomicReference — creating a new one would leave Micrometer reading
    * the old (stale) reference while the scraper updates the new one.</p>
+   *
+   * @param config            the metrics config entity with parameters
+   * @param availableModelIds set of model IDs present on the device, or null to skip filtering
    */
-  private void registerGauges(MetricsConfigEntity config) {
+  private void registerGauges(MetricsConfigEntity config, Set<Integer> availableModelIds) {
     Long deviceId = config.device.id;
     String deviceName = config.device.name;
 
@@ -225,6 +287,13 @@ public class MetricsScrapingService {
 
     for (MetricsParameterEntity param : config.parameters) {
       if (!param.enabled) {
+        continue;
+      }
+
+      // Skip parameters for models not present on the device
+      if (availableModelIds != null && !availableModelIds.contains(param.sunspecModelId)) {
+        LOG.debugf("Skipping gauge registration for model %d (%s) on device %d: not present on device",
+          param.sunspecModelId, SunSpecConstants.modelName(param.sunspecModelId), deviceId);
         continue;
       }
 
@@ -246,7 +315,9 @@ public class MetricsScrapingService {
 
       // Register gauge only once per unique combination of metric name + tags
       String gaugeKey = metricName + "|" + deviceId + "|" + fieldKey;
-      if (registeredGauges.putIfAbsent(gaugeKey, Boolean.TRUE) == null) {
+      Map<String, Meter.Id> deviceMeterIds =
+        registeredGauges.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
+      if (!deviceMeterIds.containsKey(gaugeKey)) {
         Gauge.Builder<?> builder = Gauge.builder(metricName, gaugeValue, AtomicReference::get)
           .tag("device_id", String.valueOf(deviceId))
           .tag("device_name", deviceName)
@@ -266,7 +337,8 @@ public class MetricsScrapingService {
           builder = builder.tag("field", param.fieldName);
         }
 
-        builder.register(meterRegistry);
+        Gauge gauge = builder.register(meterRegistry);
+        deviceMeterIds.put(gaugeKey, gauge.getId());
       }
     }
   }
@@ -338,6 +410,40 @@ public class MetricsScrapingService {
       if (paramsByModel.isEmpty()) {
         return;
       }
+
+      // Run SunSpec discovery to determine which models are actually present
+      // on the device, then filter out configured models that don't exist.
+      // This prevents noisy warnings and false partial-failure status when
+      // users have selected models from the static registry fallback that
+      // don't match the device (e.g. Float models on an Int+SF device,
+      // or three-phase meter models on a single-phase meter).
+      Set<Integer> availableModelIds = discoverAvailableModels(address, deviceId);
+      if (availableModelIds != null) {
+        Map<Integer, List<MetricsParameterEntity>> filteredParams = new java.util.LinkedHashMap<>();
+        for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : paramsByModel.entrySet()) {
+          int modelId = entry.getKey();
+          if (availableModelIds.contains(modelId)) {
+            filteredParams.put(modelId, entry.getValue());
+          } else {
+            LOG.debugf("Skipping model %d (%s) for device %d: not present on device",
+              modelId, SunSpecConstants.modelName(modelId), deviceId);
+          }
+        }
+        paramsByModel = filteredParams;
+
+        if (paramsByModel.isEmpty()) {
+          LOG.warnf("No configured models are available on device %d after discovery filtering", deviceId);
+          try {
+            updateScrapeStatus(config.id, ScrapeStatus.FAILED,
+              "None of the configured models are available on this device");
+          } catch (Exception e) {
+            LOG.warnf(e, "Failed to update scrape status for device %d", deviceId);
+          }
+          return;
+        }
+      }
+      // If discovery failed (availableModelIds == null), proceed with all
+      // configured models and let individual readModel calls fail gracefully.
 
       boolean anySuccess = false;
       boolean anyFailed = false;
@@ -434,6 +540,28 @@ public class MetricsScrapingService {
       } catch (Exception e) {
         LOG.warnf(e, "Failed to persist metrics data for device %d model %d", deviceId, modelId);
       }
+    }
+  }
+
+  /**
+   * Discovers which SunSpec models are actually present on the device.
+   *
+   * <p>Uses the cached SunSpec discovery result (via {@link SunSpecService#getOrDiscover})
+   * to determine which model IDs are available. Returns null if discovery fails,
+   * allowing the scraper to fall back to attempting all configured models.</p>
+   *
+   * @param address  device address
+   * @param deviceId device ID (for logging)
+   * @return set of available model IDs, or null if discovery failed
+   */
+  private Set<Integer> discoverAvailableModels(DeviceAddress address, Long deviceId) {
+    try {
+      SunSpecDiscoveryResult discovery = sunSpecService.getOrDiscover(address);
+      return new java.util.HashSet<>(discovery.modelIds());
+    } catch (Exception e) {
+      LOG.debugf("SunSpec discovery failed for device %d during scrape, " +
+        "will attempt all configured models: %s", deviceId, e.getMessage());
+      return null;
     }
   }
 

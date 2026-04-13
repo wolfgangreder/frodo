@@ -16,6 +16,9 @@ dependencies {
     implementation 'io.quarkus:quarkus-rest-jackson'
     implementation 'io.quarkus:quarkus-smallrye-openapi'
 
+    // REST Client for Solar API integration
+    implementation 'io.quarkus:quarkus-rest-client-jackson'
+
     // Health checks
     implementation 'io.quarkus:quarkus-smallrye-health'
 

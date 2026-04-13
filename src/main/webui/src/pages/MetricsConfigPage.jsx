@@ -143,6 +143,8 @@ function MetricsConfigPage() {
     return availableParams?.parameters || [];
   }, [availableParams]);
 
+  const isDiscoveryBased = availableParams?.discoveryBased ?? true;
+
   // Loading state
   const isLoading = isDeviceLoading || isConfigLoading;
 
@@ -296,6 +298,7 @@ function MetricsConfigPage() {
               selectedParameters={selectedParameters}
               onSelectionChange={handleParameterSelectionChange}
               disabled={false}
+              discoveryBased={isDiscoveryBased}
             />
           )}
         </CardContent>

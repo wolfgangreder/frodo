@@ -1,5 +1,6 @@
 package at.or.reder.frodo.solarapi.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Collections;
@@ -20,6 +21,7 @@ import java.util.Map;
  *
  * <p><b>API Reference:</b> {@code refdoc/solar_api.pdf}</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record PowerFlowRealtimeData(
   @JsonProperty("Inverters") Map<String, InverterData> inverters,
   @JsonProperty("Site") SiteData site,
@@ -33,6 +35,7 @@ public record PowerFlowRealtimeData(
    *
    * <p>Map key is the DeviceId (e.g. "1").</p>
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public record InverterData(
     @JsonProperty("Battery_Mode") String batteryMode,
     @JsonProperty("DT") Integer deviceType,
@@ -81,6 +84,7 @@ public record PowerFlowRealtimeData(
   /**
    * Site-level aggregated data.
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
   public record SiteData(
     @JsonProperty("BackupMode") Boolean backupMode,
     @JsonProperty("BatteryStandby") Boolean batteryStandby,

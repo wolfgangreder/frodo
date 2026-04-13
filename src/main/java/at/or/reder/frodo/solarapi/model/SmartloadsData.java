@@ -1,5 +1,6 @@
 package at.or.reder.frodo.solarapi.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Collections;
@@ -25,6 +26,7 @@ import java.util.Map;
  * }
  * </pre>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record SmartloadsData(
   @JsonProperty("Ohmpilots") Map<String, OhmpilotData> ohmpilots,
   @JsonProperty("OhmpilotEcos") Map<String, OhmpilotData> ohmpilotEcos
