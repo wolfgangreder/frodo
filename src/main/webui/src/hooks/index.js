@@ -38,3 +38,8 @@ export {
   useSunSpecMppt,
   sunspecKeys,
 } from './useSunSpec';
+
+export {
+  useSolarApiStatus,
+  solarApiKeys,
+} from './useSolarApi';

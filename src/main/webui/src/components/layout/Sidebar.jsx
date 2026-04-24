@@ -17,6 +17,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import DevicesIcon from '@mui/icons-material/Devices';
 import DescriptionIcon from '@mui/icons-material/Description';
 import InsightsIcon from '@mui/icons-material/Insights';
+import SolarPowerIcon from '@mui/icons-material/SolarPower';
 import SettingsIcon from '@mui/icons-material/Settings';
 import InfoIcon from '@mui/icons-material/Info';
 import { useUiStore } from '../../stores';
@@ -44,6 +45,11 @@ const navItems = [
     title: 'Grafana',
     path: '/grafana',
     icon: <InsightsIcon />,
+  },
+  {
+    title: 'Solar API',
+    path: '/solar-api',
+    icon: <SolarPowerIcon />,
   },
   {
     title: 'Settings',

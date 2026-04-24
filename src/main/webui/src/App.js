@@ -7,6 +7,7 @@ import {
   MetricsConfigPage,
   MetricsDocsPage,
   GrafanaPage,
+  SolarApiPage,
   SettingsPage,
   AboutPage,
   NotFoundPage,
@@ -35,6 +36,9 @@ function App() {
 
         {/* Grafana dashboards */}
         <Route path="grafana" element={<GrafanaPage />} />
+
+        {/* Solar API */}
+        <Route path="solar-api" element={<SolarApiPage />} />
 
         {/* Settings */}
         <Route path="settings" element={<SettingsPage />} />

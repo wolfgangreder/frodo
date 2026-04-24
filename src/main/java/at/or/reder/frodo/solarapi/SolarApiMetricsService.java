@@ -104,6 +104,12 @@ public class SolarApiMetricsService {
   // --- Tracks registered Meter.Ids for cleanup ---
   private final Map<String, Meter.Id> registeredMeters = new ConcurrentHashMap<>();
 
+  // --- Last raw data snapshot for API consumers ---
+  private final AtomicReference<PowerFlowRealtimeData> lastData = new AtomicReference<>();
+  private final AtomicReference<java.time.Instant> lastScrapeTime = new AtomicReference<>();
+  private volatile int scrapeCount;
+  private volatile int errorCount;
+
   void onStart(@Observes StartupEvent event) {
     if (!solarApiEnabled) {
       LOG.debug("Solar API metrics disabled (frodo.solar-api.enabled=false)");
@@ -140,6 +146,52 @@ public class SolarApiMetricsService {
    */
   public boolean isActive() {
     return scheduledFuture != null && !scheduledFuture.isCancelled();
+  }
+
+  /**
+   * Returns the last raw power flow data snapshot, or {@code null} if no
+   * successful scrape has occurred yet.
+   *
+   * @return last scraped data, may be null
+   */
+  public PowerFlowRealtimeData getLastData() {
+    return lastData.get();
+  }
+
+  /**
+   * Returns the timestamp of the last successful scrape, or {@code null}.
+   *
+   * @return last scrape instant
+   */
+  public java.time.Instant getLastScrapeTime() {
+    return lastScrapeTime.get();
+  }
+
+  /**
+   * Returns the configured scrape interval in seconds.
+   *
+   * @return interval seconds
+   */
+  public int getScrapeIntervalSeconds() {
+    return scrapeIntervalSeconds;
+  }
+
+  /**
+   * Returns the total number of successful scrapes since startup.
+   *
+   * @return scrape count
+   */
+  public int getScrapeCount() {
+    return scrapeCount;
+  }
+
+  /**
+   * Returns the total number of failed scrapes since startup.
+   *
+   * @return error count
+   */
+  public int getErrorCount() {
+    return errorCount;
   }
 
   // ========== Internal ==========
@@ -199,10 +251,14 @@ public class SolarApiMetricsService {
       }
 
       PowerFlowRealtimeData data = response.getData();
+      lastData.set(data);
+      lastScrapeTime.set(java.time.Instant.now());
+      scrapeCount++;
       updateSiteMetrics(data.getSite());
       updateInverterMetrics(data.getInverters());
       updateOhmpilotMetrics(data);
     } catch (Exception e) {
+      errorCount++;
       LOG.debugf("Solar API metrics scrape failed: %s", e.getMessage());
     }
   }
