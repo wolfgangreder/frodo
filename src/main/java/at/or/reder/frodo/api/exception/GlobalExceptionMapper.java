@@ -1,6 +1,7 @@
 package at.or.reder.frodo.api.exception;
 
 import at.or.reder.frodo.api.dto.ErrorResponse;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
@@ -27,6 +28,8 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
   public Response toResponse(Exception exception) {
     if (exception instanceof DeviceNotFoundException) {
       return handleNotFound((DeviceNotFoundException) exception);
+    } else if (exception instanceof NotFoundException) {
+      return handleJaxRsNotFound((NotFoundException) exception);
     } else if (exception instanceof DeviceConnectionException) {
       return handleConnectionError((DeviceConnectionException) exception);
     } else if (exception instanceof IllegalStateException) {
@@ -44,6 +47,18 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
       404,
       "Not Found",
       exception.getMessage(),
+      Instant.now(),
+      getRequestPath()
+    );
+    return Response.status(Response.Status.NOT_FOUND).entity(error).build();
+  }
+
+  private Response handleJaxRsNotFound(NotFoundException exception) {
+    LOG.debugf("Resource not found: %s", getRequestPath());
+    ErrorResponse error = new ErrorResponse(
+      404,
+      "Not Found",
+      "No resource found at " + getRequestPath(),
       Instant.now(),
       getRequestPath()
     );

@@ -169,4 +169,50 @@ public class ModbusDeviceRepository implements PanacheRepository<ModbusDeviceEnt
   public List<ModbusDeviceEntity> listAutoDiscovered() {
     return list("autoDiscovered", Sort.by("id").ascending(), true);
   }
+
+  /**
+   * Finds the first enabled Smart Meter for the given parent device.
+   *
+   * <p>Strategy (child-first, same-gateway fallback):</p>
+   * <ol>
+   *   <li>Look for an enabled {@link DeviceType#SMART_METER} among the
+   *       child devices of {@code parentDeviceId}.</li>
+   *   <li>If none is found, look for any enabled device on the same Modbus
+   *       TCP gateway ({@code host:port}) that either has
+   *       {@code deviceType = SMART_METER} or has no device type set
+   *       ({@code deviceType IS NULL}).  The parent device itself is excluded.
+   *       This covers the common case where a Smart Meter was manually added to
+   *       the DB without setting a device type or a parent-device link.</li>
+   * </ol>
+   *
+   * @param parentDeviceId the inverter device ID
+   * @return first matching Smart Meter, or empty if none is found
+   */
+  public Optional<ModbusDeviceEntity> findSmartMeterForDevice(Long parentDeviceId) {
+    // 1. Child-device lookup (preferred — explicit relationship)
+    Optional<ModbusDeviceEntity> child = listChildDevices(parentDeviceId).stream()
+      .filter(d -> DeviceType.SMART_METER == d.deviceType && d.enabled)
+      .findFirst();
+    if (child.isPresent()) {
+      return child;
+    }
+
+    // 2. Same-gateway fallback — typed SMART_METER or untyped device on same host:port,
+    // excluding the parent inverter. Prefer typed (SMART_METER) over untyped (null).
+    ModbusDeviceEntity parent = findById(parentDeviceId);
+    if (parent == null) {
+      return Optional.empty();
+    }
+
+    List<ModbusDeviceEntity> candidates = list(
+      "(deviceType = ?1 OR deviceType IS NULL) AND enabled = ?2 AND host = ?3 AND port = ?4 AND id <> ?5",
+      Sort.by("id").ascending(),
+      DeviceType.SMART_METER, Boolean.TRUE, parent.host, parent.port, parentDeviceId);
+
+    // Prefer explicitly typed SMART_METER; fall back to null-typed (unclassified) device
+    return candidates.stream()
+      .filter(d -> DeviceType.SMART_METER == d.deviceType)
+      .findFirst()
+      .or(() -> candidates.stream().findFirst());
+  }
 }

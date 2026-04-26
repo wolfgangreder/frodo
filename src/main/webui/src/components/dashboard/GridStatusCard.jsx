@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -7,10 +7,34 @@ import {
   Skeleton,
   Alert,
   Stack,
+  Switch,
+  Tooltip,
+  Collapse,
+  IconButton,
+  TextField,
+  Button,
+  Divider,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import ElectricalServicesIcon from '@mui/icons-material/ElectricalServices';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import BlockIcon from '@mui/icons-material/Block';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import DeleteIcon from '@mui/icons-material/Delete';
+import {
+  useSunSpecControls,
+  useSetPowerLimit,
+  useExportSchedule,
+  useSetExportSchedule,
+  useDeleteExportSchedule,
+} from '../../hooks/useSunSpec';
 
 /**
  * Formats a Wh value with appropriate scaling
@@ -25,53 +49,130 @@ function formatEnergy(value) {
 }
 
 /**
- * Determines grid status from connection bits and power values
+ * Determines grid status from connection bits
  */
-function getGridStatus(pvConn, ecpConn) {
-  // PVConn and ECPConn are bitfields
-  const connected = ecpConn != null && ecpConn > 0;
-  return connected;
+function getGridStatus(_pvConn, ecpConn) {
+  return ecpConn != null && ecpConn > 0;
 }
 
 /**
- * GridStatusCard - shows grid connection status and energy totals from Model 122
+ * GridStatusCard - shows grid connection status, energy totals, and controls.
  *
- * @param {Object} props
- * @param {Object} props.statusData - SunSpec Status model (122) response
- * @param {Object} props.inverterData - Inverter model data (for current grid power estimate)
- * @param {boolean} props.isLoading - Whether data is still loading
- * @param {boolean} props.isError - Whether a fetch error occurred
+ * When Model 123 (Immediate Controls) is available the card shows:
+ *   • A toggle to manually block / allow grid export immediately.
+ *   • A collapsible "Schedule" section to configure a daily recurring window
+ *     during which export is automatically blocked.
+ *
+ * @param {Object}  props
+ * @param {number}  props.deviceId      - Device ID (required for control mutations)
+ * @param {Object}  props.statusData    - SunSpec Status model (122) response
+ * @param {Object}  props.inverterData  - Inverter model data (for current power)
+ * @param {boolean} props.isLoading     - Whether status data is still loading
+ * @param {boolean} props.isError       - Whether a status fetch error occurred
+ * @param {boolean} props.hasControls   - Whether the device has Model 123
  */
-function GridStatusCard({ statusData, inverterData, isLoading, isError }) {
+function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError, hasControls }) {
   const statusFields = statusData?.fields || {};
   const inverterFields = inverterData?.fields || {};
 
-  const pvConn = statusFields.PVConn;
+  const pvConn  = statusFields.PVConn;
   const ecpConn = statusFields.ECPConn;
   const storConn = statusFields.StorConn;
-  const actWh = statusFields.ActWh;
-  const actVAh = statusFields.ActVAh;
+  const actWh   = statusFields.ActWh;
+  const actVAh  = statusFields.ActVAh;
 
-  // Current AC power from inverter as proxy for grid interaction
-  const acPower = inverterFields.W != null ? parseFloat(inverterFields.W) : null;
+  const acPower    = inverterFields.W != null ? parseFloat(inverterFields.W) : null;
   const isExporting = acPower != null && acPower > 0;
   const gridConnected = getGridStatus(pvConn, ecpConn);
 
   const gridStatusLabel = gridConnected
-    ? isExporting
-      ? 'Exporting'
-      : 'Connected'
+    ? isExporting ? 'Exporting' : 'Connected'
     : 'Disconnected';
-
   const gridStatusColor = gridConnected
-    ? isExporting
-      ? 'success.main'
-      : 'info.main'
+    ? isExporting ? 'success.main' : 'info.main'
     : 'error.main';
+
+  // ── Model 123 state ──────────────────────────────────────────────────────
+  const controlsQuery = useSunSpecControls(deviceId, hasControls);
+  const controlsFields = controlsQuery.data?.fields || {};
+  const exportBlocked  = hasControls && Number(controlsFields.WMaxLim_Ena) === 1;
+  const controlsLoading = hasControls && controlsQuery.isLoading;
+
+  const setPowerLimitMutation = useSetPowerLimit(deviceId);
+  const isToggling = setPowerLimitMutation.isPending;
+
+  const handleToggleExport = () => {
+    if (exportBlocked) {
+      setPowerLimitMutation.mutate({ enable: false });
+    } else {
+      // Use the current form strategy (which reflects the saved schedule once loaded,
+      // or the default FIXED_LIMIT for new devices without a schedule).
+      // For FIXED_LIMIT: pass the watt cap so the server converts it to % of WMax
+      //   without needing a Smart Meter.
+      // For ZERO_EXPORT_DYNAMIC: omit limitWatts so the server reads the Smart Meter.
+      const opts = { enable: true };
+      if (formStrategy === 'FIXED_LIMIT') {
+        opts.limitWatts = formLimitWatts || 500;
+      }
+      setPowerLimitMutation.mutate(opts);
+    }
+  };
+
+  // ── Schedule section ─────────────────────────────────────────────────────
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  const scheduleQuery      = useExportSchedule(deviceId, hasControls);
+  const setScheduleMutation    = useSetExportSchedule(deviceId);
+  const deleteScheduleMutation = useDeleteExportSchedule(deviceId);
+
+  const existingSchedule = scheduleQuery.data; // null = no schedule, object = has schedule
+
+  // Local form state, initialised from server data when available
+  const [formEnabled,    setFormEnabled]    = useState(true);
+  const [formBlockFrom,  setFormBlockFrom]  = useState('11:00');
+  const [formEnableFrom, setFormEnableFrom] = useState('15:00');
+  const [formStrategy,   setFormStrategy]   = useState('FIXED_LIMIT');
+  const [formLimitWatts, setFormLimitWatts] = useState(500);
+
+  // Keep form in sync when server data arrives or the panel is opened
+  useEffect(() => {
+    if (existingSchedule) {
+      setFormEnabled(existingSchedule.enabled);
+      setFormBlockFrom(existingSchedule.blockFrom);
+      setFormEnableFrom(existingSchedule.enableFrom);
+      setFormStrategy(existingSchedule.strategy || 'ZERO_EXPORT_DYNAMIC');
+      setFormLimitWatts(existingSchedule.limitWatts || 500);
+    }
+  }, [existingSchedule]);
+
+  const handleSaveSchedule = () => {
+    const payload = {
+      enabled:    formEnabled,
+      blockFrom:  formBlockFrom,
+      enableFrom: formEnableFrom,
+      strategy:   formStrategy,
+    };
+    if (formStrategy === 'FIXED_LIMIT') {
+      payload.limitWatts = Math.max(1, parseInt(formLimitWatts, 10) || 500);
+    }
+    setScheduleMutation.mutate(payload);
+  };
+
+  const handleDeleteSchedule = () => {
+    deleteScheduleMutation.mutate();
+  };
+
+  const isSaving   = setScheduleMutation.isPending;
+  const isDeleting = deleteScheduleMutation.isPending;
+
+  // Active schedule indicator shown next to the section toggle
+  const scheduleActive = existingSchedule?.enabled;
+  const scheduledBlocked = existingSchedule?.currentlyBlocked;
 
   return (
     <Card sx={{ height: '100%' }}>
       <CardContent>
+        {/* Header */}
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Stack direction="row" spacing={1} alignItems="center">
             <ElectricalServicesIcon
@@ -81,11 +182,20 @@ function GridStatusCard({ statusData, inverterData, isLoading, isError }) {
               Grid
             </Typography>
           </Stack>
-          <Typography variant="caption" sx={{ color: gridStatusColor, fontWeight: 600 }}>
-            {gridStatusLabel}
-          </Typography>
+
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            {exportBlocked && (
+              <Tooltip title="Grid export is currently blocked">
+                <BlockIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+              </Tooltip>
+            )}
+            <Typography variant="caption" sx={{ color: gridStatusColor, fontWeight: 600 }}>
+              {gridStatusLabel}
+            </Typography>
+          </Stack>
         </Stack>
 
+        {/* Body */}
         {isLoading ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {[...Array(4)].map((_, i) => (
@@ -98,7 +208,7 @@ function GridStatusCard({ statusData, inverterData, isLoading, isError }) {
           </Alert>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {/* Current AC power with direction indicator */}
+            {/* Current AC power */}
             {acPower != null && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2" color="text.secondary">
@@ -112,11 +222,8 @@ function GridStatusCard({ statusData, inverterData, isLoading, isError }) {
                   )}
                   <Typography
                     variant="subtitle1"
-                    sx={{
-                      fontWeight: 700,
-                      fontFamily: 'monospace',
-                      color: isExporting ? 'success.main' : 'warning.main',
-                    }}
+                    sx={{ fontWeight: 700, fontFamily: 'monospace',
+                      color: isExporting ? 'success.main' : 'warning.main' }}
                   >
                     {Math.abs(acPower) >= 1000
                       ? `${(Math.abs(acPower) / 1000).toFixed(1)} kW`
@@ -136,22 +243,230 @@ function GridStatusCard({ statusData, inverterData, isLoading, isError }) {
               value={ecpConn != null && ecpConn > 0 ? 'Yes' : ecpConn != null ? 'No' : '-'}
             />
             {storConn != null && (
-              <MetricRow
-                label="Storage Connected"
-                value={storConn > 0 ? 'Yes' : 'No'}
-              />
+              <MetricRow label="Storage Connected" value={storConn > 0 ? 'Yes' : 'No'} />
             )}
 
             {/* Lifetime energy */}
             {actWh != null && (
               <Box sx={{ mt: 1 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                <Typography variant="caption" color="text.secondary"
+                  sx={{ mb: 0.5, display: 'block' }}>
                   Lifetime Energy
                 </Typography>
                 <MetricRow label="Active Energy" value={formatEnergy(actWh)} />
                 {actVAh != null && (
                   <MetricRow label="Apparent Energy" value={formatEnergy(actVAh)} />
                 )}
+              </Box>
+            )}
+
+            {/* ── Controls section (Model 123) ─────────────────────────── */}
+            {hasControls && (
+              <Box sx={{ mt: 1.5 }}>
+                <Divider sx={{ mb: 1.5 }} />
+
+                {/* Manual toggle */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Block export
+                  </Typography>
+                  <Tooltip
+                    title={
+                      controlsLoading ? 'Loading…'
+                        : exportBlocked
+                          ? 'Export blocked — click to re-enable'
+                          : 'Export active — click to block'
+                    }
+                  >
+                    <span>
+                      <Switch
+                        size="small"
+                        checked={exportBlocked}
+                        onChange={handleToggleExport}
+                        disabled={controlsLoading || isToggling}
+                        color="warning"
+                        inputProps={{ 'aria-label': 'Block grid export' }}
+                      />
+                    </span>
+                  </Tooltip>
+                </Box>
+
+                {/* Schedule toggle row */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mt: 0.5,
+                  }}
+                >
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <ScheduleIcon
+                      sx={{
+                        fontSize: 16,
+                        color: scheduleActive ? 'primary.main' : 'text.disabled',
+                      }}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      Schedule
+                    </Typography>
+                    {scheduledBlocked && (
+                      <Tooltip title="Schedule is currently blocking export">
+                        <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
+                          active
+                        </Typography>
+                      </Tooltip>
+                    )}
+                    {scheduleActive && !scheduledBlocked && (
+                      <Typography variant="caption" color="text.disabled">
+                        {existingSchedule.blockFrom}–{existingSchedule.enableFrom}
+                      </Typography>
+                    )}
+                  </Stack>
+                  <IconButton
+                    size="small"
+                    onClick={() => setScheduleOpen((o) => !o)}
+                    aria-label={scheduleOpen ? 'Collapse schedule' : 'Expand schedule'}
+                  >
+                    {scheduleOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                  </IconButton>
+                </Box>
+
+                {/* Collapsible schedule form */}
+                <Collapse in={scheduleOpen}>
+                  <Box
+                    sx={{
+                      mt: 1,
+                      p: 1.5,
+                      bgcolor: 'action.hover',
+                      borderRadius: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1.5,
+                    }}
+                  >
+                    {scheduleQuery.isLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                        <CircularProgress size={20} />
+                      </Box>
+                    ) : (
+                      <>
+                        {/* Enable schedule toggle */}
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="body2">Enable schedule</Typography>
+                          <Switch
+                            size="small"
+                            checked={formEnabled}
+                            onChange={(e) => setFormEnabled(e.target.checked)}
+                            color="primary"
+                          />
+                        </Box>
+
+                        {/* Time fields */}
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <TextField
+                            type="time"
+                            label="Block from"
+                            value={formBlockFrom}
+                            onChange={(e) => setFormBlockFrom(e.target.value)}
+                            size="small"
+                            fullWidth
+                            disabled={!formEnabled}
+                            slotProps={{ inputLabel: { shrink: true } }}
+                          />
+                          <TextField
+                            type="time"
+                            label="Enable from"
+                            value={formEnableFrom}
+                            onChange={(e) => setFormEnableFrom(e.target.value)}
+                            size="small"
+                            fullWidth
+                            disabled={!formEnabled}
+                            slotProps={{ inputLabel: { shrink: true } }}
+                          />
+                        </Box>
+
+                        {/* Strategy selector */}
+                        <FormControl size="small" fullWidth disabled={!formEnabled}>
+                          <InputLabel id="strategy-label">Strategy</InputLabel>
+                          <Select
+                            labelId="strategy-label"
+                            value={formStrategy}
+                            label="Strategy"
+                            onChange={(e) => setFormStrategy(e.target.value)}
+                          >
+                            <MenuItem value="ZERO_EXPORT_DYNAMIC">
+                              Zero-export dynamic (Solar API)
+                            </MenuItem>
+                            <MenuItem value="FIXED_LIMIT">
+                              Hard block (no Smart Meter)
+                            </MenuItem>
+                          </Select>
+                        </FormControl>
+
+                        {/* Fixed watt cap input — only shown for FIXED_LIMIT */}
+                        {formStrategy === 'FIXED_LIMIT' && (
+                          <TextField
+                            label="Power cap (W)"
+                            type="number"
+                            size="small"
+                            value={formLimitWatts}
+                            onChange={(e) => setFormLimitWatts(e.target.value)}
+                            inputProps={{ min: 1, step: 100 }}
+                            helperText="Max inverter output during the block window (default: 500 W)"
+                            sx={{ mt: 1 }}
+                          />
+                        )}
+
+                        <Typography variant="caption" color="text.secondary">
+                          {formStrategy === 'FIXED_LIMIT'
+                            ? <>Cap to{' '}
+                                <strong>{Math.max(1, parseInt(formLimitWatts, 10) || 500)} W</strong> from{' '}
+                                <strong>{formBlockFrom}</strong> until{' '}
+                                <strong>{formEnableFrom}</strong>
+                                {formBlockFrom > formEnableFrom && ' (crosses midnight)'}
+                              </>
+                            : <>Zero-export (dynamic) from{' '}
+                                <strong>{formBlockFrom}</strong> until{' '}
+                                <strong>{formEnableFrom}</strong>
+                                {formBlockFrom > formEnableFrom && ' (crosses midnight)'}
+                              </>
+                          }
+                        </Typography>
+
+                        {/* Action buttons */}
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          {existingSchedule && (
+                            <Tooltip title="Delete schedule">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={handleDeleteSchedule}
+                                  disabled={isDeleting || isSaving}
+                                  aria-label="Delete schedule"
+                                >
+                                  {isDeleting
+                                    ? <CircularProgress size={16} />
+                                    : <DeleteIcon fontSize="small" />}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={handleSaveSchedule}
+                            disabled={isSaving || isDeleting}
+                            startIcon={isSaving ? <CircularProgress size={14} /> : null}
+                          >
+                            Save
+                          </Button>
+                        </Stack>
+                      </>
+                    )}
+                  </Box>
+                </Collapse>
               </Box>
             )}
           </Box>

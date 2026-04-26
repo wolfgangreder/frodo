@@ -71,6 +71,11 @@ function DeviceDashboard({ device }) {
     return discovery.models.some((m) => m.modelId === 122);
   }, [discovery]);
 
+  const hasControls = useMemo(() => {
+    if (!discovery?.models) return false;
+    return discovery.models.some((m) => m.modelId === 123);
+  }, [discovery]);
+
   // Model queries — only enabled when discovery has succeeded
   const onlineAndReady = !!deviceId && discoveryQuery.isSuccess;
 
@@ -216,10 +221,12 @@ function DeviceDashboard({ device }) {
           {/* Grid Status - shown if device has status model */}
           <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
             <GridStatusCard
+              deviceId={deviceId}
               statusData={statusQuery.data}
               inverterData={inverterQuery.data}
               isLoading={(statusQuery.isLoading && hasStatus) || isDiscovering}
               isError={statusQuery.isError && hasStatus}
+              hasControls={hasControls}
             />
           </Grid>
         </Grid>

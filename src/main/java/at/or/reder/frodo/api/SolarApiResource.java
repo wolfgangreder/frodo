@@ -30,7 +30,7 @@ import java.util.Map;
  * <p>Exposes the current Solar API scraping status and latest power flow
  * values that are collected by {@link SolarApiMetricsService}.</p>
  */
-@Path("/api/solar-api")
+@Path("/solar-api")
 @Tag(name = "Solar API", description = "Fronius Solar API status and live metrics")
 public class SolarApiResource {
 

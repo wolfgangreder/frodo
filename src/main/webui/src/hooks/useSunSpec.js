@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { sunspecApi } from '../services';
+import useUiStore from '../stores/useUiStore';
 
 /**
  * Query key factory for SunSpec data
@@ -9,6 +10,7 @@ export const sunspecKeys = {
   discovery: (deviceId) => [...sunspecKeys.all, 'discovery', deviceId],
   common: (deviceId) => [...sunspecKeys.all, 'common', deviceId],
   inverter: (deviceId) => [...sunspecKeys.all, 'inverter', deviceId],
+  controls: (deviceId) => [...sunspecKeys.all, 'controls', deviceId],
   storage: (deviceId) => [...sunspecKeys.all, 'storage', deviceId],
   status: (deviceId) => [...sunspecKeys.all, 'status', deviceId],
   nameplate: (deviceId) => [...sunspecKeys.all, 'nameplate', deviceId],
@@ -146,5 +148,161 @@ export function useSunSpecMppt(deviceId, options = {}) {
     refetchOnWindowFocus: false,
     refetchInterval: 15 * 1000,
     ...options,
+  });
+}
+
+/**
+ * Hook to fetch Immediate Controls model (Model 123).
+ * Contains power limit state: WMaxLimPct, WMaxLim_Ena, PF control settings.
+ * @param {number}  deviceId - Device ID
+ * @param {boolean} enabled  - Whether to run the query (default true)
+ * @param {Object}  options  - React Query options
+ */
+export function useSunSpecControls(deviceId, enabled = true, options = {}) {
+  return useQuery({
+    queryKey: sunspecKeys.controls(deviceId),
+    queryFn: () => sunspecApi.getControls(deviceId),
+    enabled: !!deviceId && enabled,
+    staleTime: 10 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: 30 * 1000, // 30 s – control state changes rarely on its own
+    ...options,
+  });
+}
+
+/**
+ * Mutation hook to set the inverter power output limit via Model 123.
+ *
+ * On success, invalidates the controls query so callers see the latest state.
+ * On error, shows an error notification via the global UI store.
+ *
+ * @param {number} deviceId - Device ID
+ * @returns {import('@tanstack/react-query').UseMutationResult}
+ *   Call mutate({ enable, limitWatts?, rampSeconds?, revertSeconds? }) to trigger.
+ *   When enable=true and limitWatts is provided (≥ 1) a fixed watt cap is applied;
+ *   otherwise the server uses the Smart Meter for closed-loop zero-export control.
+ */
+export function useSetPowerLimit(deviceId) {
+  const queryClient = useQueryClient();
+  const showError = useUiStore((s) => s.showError);
+  const showSuccess = useUiStore((s) => s.showSuccess);
+
+  return useMutation({
+    mutationFn: ({ enable, limitWatts, rampSeconds = 0, revertSeconds = 0 }) =>
+      sunspecApi.setPowerLimit(deviceId, enable, limitWatts, rampSeconds, revertSeconds),
+
+    onSuccess: (_data, variables) => {
+      // Refresh controls so the displayed WMaxLim_Ena state is up-to-date
+      queryClient.invalidateQueries({ queryKey: sunspecKeys.controls(deviceId) });
+      let msg;
+      if (variables.enable) {
+        msg = variables.limitWatts != null
+          ? `Grid export capped at ${variables.limitWatts} W`
+          : 'Grid export blocked (zero-export active)';
+      } else {
+        msg = 'Grid export re-enabled';
+      }
+      showSuccess(msg);
+    },
+
+    onError: (error) => {
+      const status = error?.response?.status;
+      const serverMsg = error?.response?.data?.message;
+      if (status === 409) {
+        showError('Write operations are disabled. Set frodo.modbus.write-enabled=true to allow control commands.');
+      } else if (status === 404) {
+        // Server provides a specific message (e.g. "No Smart Meter found", "Model 123 not found")
+        showError(serverMsg ?? 'Device or required model not found.');
+      } else {
+        showError(`Failed to set power limit: ${serverMsg ?? error.message}`);
+      }
+    },
+  });
+}
+
+// ========== Export Schedule ==========
+
+export const scheduleKeys = {
+  all: ['export-schedule'],
+  forDevice: (deviceId) => [...scheduleKeys.all, deviceId],
+};
+
+/**
+ * Fetches the daily recurring grid-export schedule for a device.
+ * Returns null (no error) when no schedule is configured (HTTP 404).
+ *
+ * @param {number}  deviceId - Device ID
+ * @param {boolean} enabled  - Whether to run the query (default true)
+ */
+export function useExportSchedule(deviceId, enabled = true) {
+  return useQuery({
+    queryKey: scheduleKeys.forDevice(deviceId),
+    queryFn: () => sunspecApi.getExportSchedule(deviceId),
+    enabled: !!deviceId && enabled,
+    staleTime: 30 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Mutation to create or replace the grid-export schedule for a device.
+ * Invalidates the schedule query on success.
+ *
+ * @param {number} deviceId - Device ID
+ * @returns {import('@tanstack/react-query').UseMutationResult}
+ *   Call mutate({ enabled, blockFrom, enableFrom, strategy?, limitWatts? }) to trigger.
+ */
+export function useSetExportSchedule(deviceId) {
+  const queryClient = useQueryClient();
+  const showError = useUiStore((s) => s.showError);
+  const showSuccess = useUiStore((s) => s.showSuccess);
+
+  return useMutation({
+    mutationFn: ({ enabled, blockFrom, enableFrom, strategy, limitWatts }) =>
+      sunspecApi.setExportSchedule(deviceId, enabled, blockFrom, enableFrom, strategy, limitWatts),
+
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: scheduleKeys.forDevice(deviceId) });
+      showSuccess(
+        variables.enabled
+          ? `Schedule saved: block ${variables.blockFrom} – ${variables.enableFrom}`
+          : 'Schedule saved (disabled)'
+      );
+    },
+
+    onError: (error) => {
+      showError(
+        `Failed to save schedule: ${error?.response?.data?.message ?? error.message}`
+      );
+    },
+  });
+}
+
+/**
+ * Mutation to delete the grid-export schedule for a device.
+ * Invalidates the schedule query on success.
+ *
+ * @param {number} deviceId - Device ID
+ */
+export function useDeleteExportSchedule(deviceId) {
+  const queryClient = useQueryClient();
+  const showError = useUiStore((s) => s.showError);
+  const showSuccess = useUiStore((s) => s.showSuccess);
+
+  return useMutation({
+    mutationFn: () => sunspecApi.deleteExportSchedule(deviceId),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: scheduleKeys.forDevice(deviceId) });
+      showSuccess('Export schedule deleted');
+    },
+
+    onError: (error) => {
+      showError(
+        `Failed to delete schedule: ${error?.response?.data?.message ?? error.message}`
+      );
+    },
   });
 }

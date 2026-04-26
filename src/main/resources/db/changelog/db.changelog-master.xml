@@ -9,5 +9,6 @@
   <include file="db/changelog/v1.1.0-metrics-config.xml"/>
   <include file="db/changelog/v1.1.1-fix-interval-constraint.xml"/>
   <include file="db/changelog/v1.2.0-add-device-discovery.xml"/>
+  <include file="db/changelog/v1.3.0-export-schedule.xml"/>
 
 </databaseChangeLog>

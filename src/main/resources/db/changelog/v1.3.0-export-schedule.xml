@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    Add grid export schedule table.
+
+    Stores one optional daily recurring schedule per device that controls
+    when the inverter's grid export should be blocked (WMaxLim_Ena = 1) and
+    when it should be re-enabled (WMaxLim_Ena = 0).  This is used to
+    automatically block grid feed-in during negative electricity spot-price
+    windows (Nulleinspeisung).
+
+    One row per device (unique constraint on device_id).
+    The scheduler checks every minute and applies the target state when it
+    detects a transition.
+  -->
+
+  <changeSet id="10" author="frodo">
+    <comment>Create FroExportSchedule table for daily recurring grid-export block windows</comment>
+
+    <createTable tableName="FroExportSchedule">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroExportSchedule"/>
+      </column>
+
+      <!-- FK to FroModbusDevice — unique: one schedule per device -->
+      <column name="device_id" type="BIGINT">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Whether this schedule is currently active -->
+      <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Daily start time for blocking grid export (inclusive) -->
+      <column name="block_from" type="TIME">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Daily end time for re-enabling grid export (exclusive) -->
+      <column name="enable_from" type="TIME">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="updated_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroExportSchedule_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <!-- One schedule per device -->
+    <addUniqueConstraint
+      tableName="FroExportSchedule"
+      columnNames="device_id"
+      constraintName="uk_FroExpSched_device"/>
+
+    <addForeignKeyConstraint
+      baseTableName="FroExportSchedule"
+      baseColumnNames="device_id"
+      constraintName="fk_FroExpSched_device"
+      referencedTableName="FroModbusDevice"
+      referencedColumnNames="id"
+      onDelete="CASCADE"/>
+
+    <createIndex tableName="FroExportSchedule" indexName="idx_FroExpSched_device">
+      <column name="device_id"/>
+    </createIndex>
+
+    <createIndex tableName="FroExportSchedule" indexName="idx_FroExpSched_enabled">
+      <column name="enabled"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!--
+    Add blocking strategy and optional fixed watt-cap to FroExportSchedule.
+
+    strategy     - VARCHAR(20) NOT NULL DEFAULT 'ZERO_EXPORT_DYNAMIC'
+                   Either ZERO_EXPORT_DYNAMIC (closed-loop, requires Smart Meter)
+                   or FIXED_LIMIT (static watt cap, no Smart Meter needed).
+
+    limit_watts  - INTEGER nullable
+                   Fixed power cap in Watts; only used when strategy = FIXED_LIMIT.
+  -->
+
+  <changeSet id="11" author="frodo">
+    <comment>Add strategy and limit_watts columns to FroExportSchedule for FIXED_LIMIT support</comment>
+
+    <sql>ALTER TABLE FroExportSchedule ADD strategy VARCHAR(20) DEFAULT 'ZERO_EXPORT_DYNAMIC' NOT NULL</sql>
+    <sql>ALTER TABLE FroExportSchedule ADD limit_watts INTEGER</sql>
+
+  </changeSet>
+
+</databaseChangeLog>
