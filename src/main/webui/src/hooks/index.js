@@ -29,6 +29,12 @@ export {
 } from './useMetricsDocs';
 
 export {
+  usePriceControl,
+  useSetPriceControl,
+  priceControlKeys,
+} from './usePriceControl';
+
+export {
   useSunSpecDiscovery,
   useSunSpecCommon,
   useSunSpecInverter,

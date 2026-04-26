@@ -25,6 +25,7 @@ import DeviceStatusCard from './DeviceStatusCard';
 import PowerMetricsCard from './PowerMetricsCard';
 import BatteryStatusCard from './BatteryStatusCard';
 import GridStatusCard from './GridStatusCard';
+import SitePowerFlowCard from './SitePowerFlowCard';
 
 /**
  * Formats a relative time string from an ISO timestamp
@@ -215,6 +216,15 @@ function DeviceDashboard({ device }) {
               isLoading={(storageQuery.isLoading && hasStorage) || isDiscovering}
               isError={storageQuery.isError}
               hasStorage={hasStorage}
+            />
+          </Grid>
+
+          {/* Site Power Flow - always shown when Solar API is enabled */}
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+            <SitePowerFlowCard
+              deviceId={deviceId}
+              statusData={statusQuery.data}
+              hasControls={hasControls}
             />
           </Grid>
 

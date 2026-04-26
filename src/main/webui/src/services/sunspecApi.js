@@ -167,18 +167,17 @@ const sunspecApi = {
   /**
    * Create or replace the daily recurring grid-export schedule.
    *
-   * @param {number}  deviceId   - Device ID
-   * @param {boolean} enabled    - Whether the schedule is active
-   * @param {string}  blockFrom  - "HH:mm" time to start blocking
-   * @param {string}  enableFrom - "HH:mm" time to re-enable export
-   * @param {string}  [strategy] - "ZERO_EXPORT_DYNAMIC" (default) or "FIXED_LIMIT"
-   * @param {number}  [limitWatts] - Fixed power cap in Watts (required for FIXED_LIMIT)
+   * @param {number}  deviceId          - Device ID
+   * @param {Object}  body              - Schedule payload
+   * @param {boolean} body.enabled      - Whether the schedule is active
+   * @param {string}  [body.blockFrom]  - "HH:mm" time to start blocking (omit for PRICE_CONTROLLED)
+   * @param {string}  [body.enableFrom] - "HH:mm" time to re-enable export (omit for PRICE_CONTROLLED)
+   * @param {string}  [body.strategy]   - Strategy enum value
+   * @param {number}  [body.limitWatts] - Fixed power cap in Watts (FIXED_LIMIT only)
+   * @param {number}  [body.exportToleranceWatts] - Export buffer in Watts (PRICE_CONTROLLED only)
    * @returns {Promise<Object>} Saved schedule
    */
-  setExportSchedule: async (deviceId, enabled, blockFrom, enableFrom, strategy, limitWatts) => {
-    const body = { enabled, blockFrom, enableFrom };
-    if (strategy) body.strategy = strategy;
-    if (limitWatts != null) body.limitWatts = limitWatts;
+  setExportSchedule: async (deviceId, body) => {
     const response = await apiClient.put(
       `/devices/${deviceId}/sunspec/controls/power-limit/schedule`,
       body

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    Global price-controlled export setting.
+
+    A singleton table (at most one row) that enables market-price-based export
+    limiting for ALL inverter devices that do not have their own per-device
+    export schedule.  When enabled and the aWATTar AT market price is negative,
+    the scheduler applies a dynamic limit (load + battery demand + tolerance) to
+    every enabled inverter that has no schedule row.
+
+    Introduced in v1.5.0 to replace the per-device PRICE_CONTROLLED schedule
+    strategy with a simpler global toggle that works without any schedule
+    configuration.
+  -->
+
+  <changeSet id="22" author="frodo">
+    <comment>Create FroPriceControl singleton table for global price-controlled export</comment>
+
+    <createTable tableName="FroPriceControl">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroPriceControl"/>
+      </column>
+
+      <!-- Whether global price control is currently active -->
+      <column name="enabled" type="BOOLEAN" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+
+      <!--
+        Allowed grid export above load + battery demand when price is negative.
+        0 = strict zero-export; default 50 W = small intentional buffer.
+      -->
+      <column name="export_tolerance_watts" type="INTEGER" defaultValueNumeric="50">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="updated_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroPriceControl_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+  </changeSet>
+
+</databaseChangeLog>

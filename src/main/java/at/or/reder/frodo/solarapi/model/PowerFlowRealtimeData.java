@@ -126,9 +126,13 @@ public record PowerFlowRealtimeData(
     }
 
     /**
-     * Gets the current battery power in watts (positive = charging, negative = discharging).
+     * Gets the current battery power in watts (negative = charging, positive = discharging).
      *
-     * @return battery power in W
+     * <p>Fronius convention mirrors the load sign: negative means the battery is
+     * consuming power (charging), positive means it is providing power (discharging).
+     * This is the raw {@code P_Akku} value from the Solar API.</p>
+     *
+     * @return battery power in W; negative = charging, positive = discharging
      */
     public Double getBatteryPowerWatts() {
       return powerBattery;

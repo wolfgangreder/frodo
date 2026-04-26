@@ -52,12 +52,13 @@ public class ExportScheduleRepository implements PanacheRepository<ExportSchedul
    *                    {@link ExportBlockStrategy#ZERO_EXPORT_DYNAMIC})
    * @param limitWatts  fixed watt cap (required when strategy is
    *                    {@link ExportBlockStrategy#FIXED_LIMIT}, otherwise ignored)
+   * @param exportToleranceWatts max allowed grid export in Watts for PRICE_CONTROLLED strategy
    * @return the persisted entity
    */
   @Transactional
   public ExportScheduleEntity upsert(Long deviceId, boolean enabled,
     LocalTime blockFrom, LocalTime enableFrom,
-    ExportBlockStrategy strategy, Integer limitWatts) {
+    ExportBlockStrategy strategy, Integer limitWatts, Integer exportToleranceWatts) {
 
     ExportScheduleEntity entity = findByDeviceId(deviceId)
       .orElseGet(ExportScheduleEntity::new);
@@ -68,6 +69,7 @@ public class ExportScheduleRepository implements PanacheRepository<ExportSchedul
     entity.enableFrom = enableFrom;
     entity.strategy   = strategy != null ? strategy : ExportBlockStrategy.ZERO_EXPORT_DYNAMIC;
     entity.limitWatts = limitWatts;
+    entity.exportToleranceWatts = exportToleranceWatts != null ? exportToleranceWatts : 50;
     persist(entity);
     return entity;
   }

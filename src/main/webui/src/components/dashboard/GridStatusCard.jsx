@@ -34,6 +34,7 @@ import {
   useExportSchedule,
   useSetExportSchedule,
   useDeleteExportSchedule,
+  useCurrentMarketPrice,
 } from '../../hooks/useSunSpec';
 
 /**
@@ -128,11 +129,12 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
   const existingSchedule = scheduleQuery.data; // null = no schedule, object = has schedule
 
   // Local form state, initialised from server data when available
-  const [formEnabled,    setFormEnabled]    = useState(true);
-  const [formBlockFrom,  setFormBlockFrom]  = useState('11:00');
-  const [formEnableFrom, setFormEnableFrom] = useState('15:00');
-  const [formStrategy,   setFormStrategy]   = useState('FIXED_LIMIT');
-  const [formLimitWatts, setFormLimitWatts] = useState(500);
+  const [formEnabled,        setFormEnabled]        = useState(true);
+  const [formBlockFrom,      setFormBlockFrom]      = useState('11:00');
+  const [formEnableFrom,     setFormEnableFrom]     = useState('15:00');
+  const [formStrategy,       setFormStrategy]       = useState('FIXED_LIMIT');
+  const [formLimitWatts,     setFormLimitWatts]     = useState(500);
+  const [formToleranceWatts, setFormToleranceWatts] = useState(50);
 
   // Keep form in sync when server data arrives or the panel is opened
   useEffect(() => {
@@ -142,18 +144,24 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
       setFormEnableFrom(existingSchedule.enableFrom);
       setFormStrategy(existingSchedule.strategy || 'ZERO_EXPORT_DYNAMIC');
       setFormLimitWatts(existingSchedule.limitWatts || 500);
+      setFormToleranceWatts(existingSchedule.exportToleranceWatts ?? 50);
     }
   }, [existingSchedule]);
 
   const handleSaveSchedule = () => {
     const payload = {
-      enabled:    formEnabled,
-      blockFrom:  formBlockFrom,
-      enableFrom: formEnableFrom,
-      strategy:   formStrategy,
+      enabled:  formEnabled,
+      strategy: formStrategy,
     };
+    if (formStrategy !== 'PRICE_CONTROLLED') {
+      payload.blockFrom  = formBlockFrom;
+      payload.enableFrom = formEnableFrom;
+    }
     if (formStrategy === 'FIXED_LIMIT') {
       payload.limitWatts = Math.max(1, parseInt(formLimitWatts, 10) || 500);
+    }
+    if (formStrategy === 'PRICE_CONTROLLED') {
+      payload.exportToleranceWatts = Math.max(0, parseInt(formToleranceWatts, 10) || 50);
     }
     setScheduleMutation.mutate(payload);
   };
@@ -164,6 +172,12 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
 
   const isSaving   = setScheduleMutation.isPending;
   const isDeleting = deleteScheduleMutation.isPending;
+
+  // Current market price — only fetched when a PRICE_CONTROLLED schedule is active
+  const isPriceControlled = existingSchedule?.strategy === 'PRICE_CONTROLLED'
+    || formStrategy === 'PRICE_CONTROLLED';
+  const marketPriceQuery = useCurrentMarketPrice(isPriceControlled && scheduleOpen);
+  const currentPrice = marketPriceQuery.data ?? null;
 
   // Active schedule indicator shown next to the section toggle
   const scheduleActive = existingSchedule?.enabled;
@@ -319,7 +333,9 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
                     )}
                     {scheduleActive && !scheduledBlocked && (
                       <Typography variant="caption" color="text.disabled">
-                        {existingSchedule.blockFrom}–{existingSchedule.enableFrom}
+                        {existingSchedule.strategy === 'PRICE_CONTROLLED'
+                          ? 'price-controlled'
+                          : `${existingSchedule.blockFrom}–${existingSchedule.enableFrom}`}
                       </Typography>
                     )}
                   </Stack>
@@ -362,29 +378,31 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
                           />
                         </Box>
 
-                        {/* Time fields */}
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <TextField
-                            type="time"
-                            label="Block from"
-                            value={formBlockFrom}
-                            onChange={(e) => setFormBlockFrom(e.target.value)}
-                            size="small"
-                            fullWidth
-                            disabled={!formEnabled}
-                            slotProps={{ inputLabel: { shrink: true } }}
-                          />
-                          <TextField
-                            type="time"
-                            label="Enable from"
-                            value={formEnableFrom}
-                            onChange={(e) => setFormEnableFrom(e.target.value)}
-                            size="small"
-                            fullWidth
-                            disabled={!formEnabled}
-                            slotProps={{ inputLabel: { shrink: true } }}
-                          />
-                        </Box>
+                        {/* Time fields — hidden for PRICE_CONTROLLED */}
+                        {formStrategy !== 'PRICE_CONTROLLED' && (
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <TextField
+                              type="time"
+                              label="Block from"
+                              value={formBlockFrom}
+                              onChange={(e) => setFormBlockFrom(e.target.value)}
+                              size="small"
+                              fullWidth
+                              disabled={!formEnabled}
+                              slotProps={{ inputLabel: { shrink: true } }}
+                            />
+                            <TextField
+                              type="time"
+                              label="Enable from"
+                              value={formEnableFrom}
+                              onChange={(e) => setFormEnableFrom(e.target.value)}
+                              size="small"
+                              fullWidth
+                              disabled={!formEnabled}
+                              slotProps={{ inputLabel: { shrink: true } }}
+                            />
+                          </Box>
+                        )}
 
                         {/* Strategy selector */}
                         <FormControl size="small" fullWidth disabled={!formEnabled}>
@@ -399,7 +417,7 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
                               Zero-export dynamic (Solar API)
                             </MenuItem>
                             <MenuItem value="FIXED_LIMIT">
-                              Hard block (no Smart Meter)
+                              Hard block (fixed watt cap)
                             </MenuItem>
                           </Select>
                         </FormControl>
@@ -414,23 +432,71 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
                             onChange={(e) => setFormLimitWatts(e.target.value)}
                             inputProps={{ min: 1, step: 100 }}
                             helperText="Max inverter output during the block window (default: 500 W)"
-                            sx={{ mt: 1 }}
+                            disabled={!formEnabled}
                           />
                         )}
 
+                        {/* Export tolerance input — only shown for PRICE_CONTROLLED */}
+                        {formStrategy === 'PRICE_CONTROLLED' && (
+                          <TextField
+                            label="Export tolerance (W)"
+                            type="number"
+                            size="small"
+                            value={formToleranceWatts}
+                            onChange={(e) => setFormToleranceWatts(e.target.value)}
+                            inputProps={{ min: 0, step: 10 }}
+                            helperText="Allowed grid export above load demand when price is negative (default: 50 W)"
+                            disabled={!formEnabled}
+                          />
+                        )}
+
+                        {/* Current market price — only shown for PRICE_CONTROLLED */}
+                        {formStrategy === 'PRICE_CONTROLLED' && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="body2" color="text.secondary">
+                              Current price
+                            </Typography>
+                            {marketPriceQuery.isLoading ? (
+                              <CircularProgress size={14} />
+                            ) : currentPrice == null ? (
+                              <Typography variant="caption" color="text.disabled">
+                                not available
+                              </Typography>
+                            ) : (
+                              <Tooltip title={`Valid ${currentPrice.startTime} – ${currentPrice.endTime}`}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontFamily: 'monospace',
+                                    fontWeight: 700,
+                                    color: currentPrice.priceCt < 0 ? 'warning.main' : 'success.main',
+                                  }}
+                                >
+                                  {currentPrice.priceCt.toFixed(2)} ct/kWh
+                                  {currentPrice.priceCt < 0 ? ' (blocking)' : ' (normal)'}
+                                </Typography>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        )}
+
                         <Typography variant="caption" color="text.secondary">
-                          {formStrategy === 'FIXED_LIMIT'
-                            ? <>Cap to{' '}
-                                <strong>{Math.max(1, parseInt(formLimitWatts, 10) || 500)} W</strong> from{' '}
-                                <strong>{formBlockFrom}</strong> until{' '}
-                                <strong>{formEnableFrom}</strong>
-                                {formBlockFrom > formEnableFrom && ' (crosses midnight)'}
-                              </>
-                            : <>Zero-export (dynamic) from{' '}
-                                <strong>{formBlockFrom}</strong> until{' '}
-                                <strong>{formEnableFrom}</strong>
-                                {formBlockFrom > formEnableFrom && ' (crosses midnight)'}
-                              </>
+                          {formStrategy === 'PRICE_CONTROLLED'
+                            ? <>Price-controlled: allow up to{' '}
+                                <strong>{Math.max(0, parseInt(formToleranceWatts, 10) || 50)} W</strong>{' '}
+                                above load demand when aWATTar AT price is negative</>
+                            : formStrategy === 'FIXED_LIMIT'
+                              ? <>Cap to{' '}
+                                  <strong>{Math.max(1, parseInt(formLimitWatts, 10) || 500)} W</strong> from{' '}
+                                  <strong>{formBlockFrom}</strong> until{' '}
+                                  <strong>{formEnableFrom}</strong>
+                                  {formBlockFrom > formEnableFrom && ' (crosses midnight)'}
+                                </>
+                              : <>Zero-export (dynamic) from{' '}
+                                  <strong>{formBlockFrom}</strong> until{' '}
+                                  <strong>{formEnableFrom}</strong>
+                                  {formBlockFrom > formEnableFrom && ' (crosses midnight)'}
+                                </>
                           }
                         </Typography>
 

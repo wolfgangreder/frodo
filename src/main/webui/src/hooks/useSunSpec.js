@@ -228,6 +228,39 @@ export const scheduleKeys = {
   forDevice: (deviceId) => [...scheduleKeys.all, deviceId],
 };
 
+// ========== Market Prices ==========
+
+export const marketPriceKeys = {
+  current: ['market-price', 'current'],
+};
+
+/**
+ * Fetches the current aWATTar AT market price from the server DB.
+ * Returns null when no price is available yet (first run, before cron fires).
+ *
+ * @param {boolean} enabled - Whether to run the query (default true)
+ */
+export function useCurrentMarketPrice(enabled = true) {
+  return useQuery({
+    queryKey: marketPriceKeys.current,
+    queryFn: async () => {
+      try {
+        const response = await import('../services').then((m) =>
+          m.apiClient.get('/market-prices/current')
+        );
+        return response.data ?? null;
+      } catch (err) {
+        if (err?.response?.status === 404) return null;
+        throw err;
+      }
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,  // price changes hourly — 5 min cache is fine
+    refetchInterval: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+}
+
 /**
  * Fetches the daily recurring grid-export schedule for a device.
  * Returns null (no error) when no schedule is configured (HTTP 404).
@@ -260,16 +293,19 @@ export function useSetExportSchedule(deviceId) {
   const showSuccess = useUiStore((s) => s.showSuccess);
 
   return useMutation({
-    mutationFn: ({ enabled, blockFrom, enableFrom, strategy, limitWatts }) =>
-      sunspecApi.setExportSchedule(deviceId, enabled, blockFrom, enableFrom, strategy, limitWatts),
+    mutationFn: (payload) => sunspecApi.setExportSchedule(deviceId, payload),
 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: scheduleKeys.forDevice(deviceId) });
-      showSuccess(
-        variables.enabled
-          ? `Schedule saved: block ${variables.blockFrom} – ${variables.enableFrom}`
-          : 'Schedule saved (disabled)'
-      );
+      let msg;
+      if (!variables.enabled) {
+        msg = 'Schedule saved (disabled)';
+      } else if (variables.strategy === 'PRICE_CONTROLLED') {
+        msg = 'Schedule saved: price-controlled (aWATTar AT)';
+      } else {
+        msg = `Schedule saved: block ${variables.blockFrom} – ${variables.enableFrom}`;
+      }
+      showSuccess(msg);
     },
 
     onError: (error) => {

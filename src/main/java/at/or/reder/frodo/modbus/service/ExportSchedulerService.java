@@ -4,14 +4,19 @@ import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.entity.ExportBlockStrategy;
 import at.or.reder.frodo.modbus.entity.ExportScheduleEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
+import at.or.reder.frodo.modbus.entity.PriceControlEntity;
+import at.or.reder.frodo.modbus.model.DeviceType;
 import at.or.reder.frodo.modbus.repository.ExportScheduleRepository;
+import at.or.reder.frodo.modbus.repository.MarketPriceRepository;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
+import at.or.reder.frodo.modbus.repository.PriceControlRepository;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
 import at.or.reder.frodo.solarapi.SolarApiMetricsService;
 import at.or.reder.frodo.solarapi.model.PowerFlowRealtimeData;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -20,6 +25,7 @@ import org.jboss.logging.Logger;
 
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -103,7 +109,13 @@ public class ExportSchedulerService {
   ModbusDeviceRepository deviceRepository;
 
   @Inject
+  MarketPriceRepository marketPriceRepository;
+
+  @Inject
   SunSpecService sunSpecService;
+
+  @Inject
+  PriceControlRepository priceControlRepository;
 
   @Inject
   SolarApiMetricsService solarApiMetricsService;
@@ -152,17 +164,119 @@ public class ExportSchedulerService {
 
     // Transaction 1: read schedule rows only — closed before any Modbus I/O
     List<ExportScheduleEntity> schedules = loadEnabledSchedules();
-    if (schedules.isEmpty()) {
+
+    // Build set of device IDs that have an explicit per-device schedule so that
+    // the global price-control path can skip them to avoid double-applying limits.
+    Set<Long> scheduledDeviceIds = new HashSet<>();
+    for (ExportScheduleEntity s : schedules) {
+      scheduledDeviceIds.add(s.deviceId);
+    }
+
+    // Apply per-device schedules
+    if (!schedules.isEmpty()) {
+      LocalTime now = LocalTime.now().truncatedTo(ChronoUnit.MINUTES);
+      LOG.debugf("Export schedule check: %d active schedule(s), time=%s", schedules.size(), now);
+      for (ExportScheduleEntity schedule : schedules) {
+        if (shuttingDown) break;
+        applyScheduleIfChanged(schedule, now);
+      }
+    }
+
+    // Apply global price-controlled export limiting to all enabled inverter devices
+    // that do not have their own per-device schedule.
+    if (!shuttingDown) {
+      PriceControlEntity globalConfig = loadGlobalPriceControl();
+      if (globalConfig != null) {
+        applyGlobalPriceControl(globalConfig, scheduledDeviceIds);
+      }
+    }
+  }
+
+  /**
+   * Called by {@link SolarApiMetricsService} after every successful Solar API scrape
+   * (default: every 15 s). Immediately recalculates and re-applies the dynamic power
+   * limit for all devices that are <em>currently blocking</em> and whose strategy
+   * tracks changing house load in real time:
+   * {@link ExportBlockStrategy#ZERO_EXPORT_DYNAMIC}, {@link ExportBlockStrategy#PRICE_CONTROLLED},
+   * and the global price-control mechanism.
+   *
+   * <p>{@link ExportBlockStrategy#FIXED_LIMIT} devices are deliberately skipped because
+   * their limit is constant — re-affirming it every 15 s would generate unnecessary
+   * Modbus writes. The 1-minute scheduler tick ({@link #checkSchedules()}) already
+   * re-affirms fixed limits at a reasonable cadence.</p>
+   *
+   * <p>Only devices where {@code lastApplied == true} (currently blocking) are processed.
+   * Re-enable transitions are handled exclusively by {@link #checkSchedules()} to
+    * avoid duplicate Modbus writes.</p>
+   */
+  @ActivateRequestContext
+  public void onSolarDataUpdated() {
+    if (shuttingDown || !hibernateEnabled || !modbusEnabled || !sunSpecService.isWriteEnabled()) {
       return;
     }
 
-    // Truncate to minute for stable comparison throughout the loop
-    LocalTime now = LocalTime.now().truncatedTo(ChronoUnit.MINUTES);
-    LOG.debugf("Export schedule check: %d active schedule(s), time=%s", schedules.size(), now);
+    List<ExportScheduleEntity> schedules = loadEnabledSchedules();
 
+    Set<Long> scheduledDeviceIds = new HashSet<>();
+    for (ExportScheduleEntity s : schedules) {
+      scheduledDeviceIds.add(s.deviceId);
+    }
+
+    // Recalculate dynamic limits for currently-blocking per-device schedules
     for (ExportScheduleEntity schedule : schedules) {
       if (shuttingDown) break;
-      applyScheduleIfChanged(schedule, now);
+      Long deviceId = schedule.deviceId;
+
+      // Only recalculate if currently blocking; re-enable handled by 1-min tick
+      if (!Boolean.TRUE.equals(lastApplied.get(deviceId))) {
+        continue;
+      }
+      if (manuallyEnabled.contains(deviceId)) {
+        continue;
+      }
+      // FIXED_LIMIT: constant limit; re-affirmation at 1-min cadence is sufficient
+      if (schedule.strategy == ExportBlockStrategy.FIXED_LIMIT) {
+        continue;
+      }
+
+      if (schedule.strategy == ExportBlockStrategy.PRICE_CONTROLLED) {
+        applyPriceControlledBlock(schedule);
+      } else {
+        // ZERO_EXPORT_DYNAMIC
+        applyDynamicBlock(schedule);
+      }
+    }
+
+    if (shuttingDown) return;
+
+    // Global price-control: recalculate for currently-blocking non-scheduled inverters
+    PriceControlEntity globalConfig = loadGlobalPriceControl();
+    if (globalConfig == null || !globalConfig.enabled) {
+      return;
+    }
+
+    var priceOpt = marketPriceRepository.findCurrent();
+    if (priceOpt.isEmpty() || !shouldBlockForPrice(priceOpt.get().priceCt)) {
+      return;
+    }
+
+    double priceCt     = priceOpt.get().priceCt;
+    int toleranceWatts = globalConfig.exportToleranceWatts;
+    List<ModbusDeviceEntity> inverters = loadEnabledInverters();
+
+    for (ModbusDeviceEntity device : inverters) {
+      if (shuttingDown) break;
+      Long deviceId = device.id;
+
+      if (scheduledDeviceIds.contains(deviceId)) continue;
+      if (manuallyEnabled.contains(deviceId)) continue;
+      // Only recalculate if currently blocking; re-enable handled by 1-min tick
+      if (!Boolean.TRUE.equals(lastApplied.get(deviceId))) continue;
+
+      String strategyLabel = String.format(
+        "GLOBAL_PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W",
+        priceCt, Integer.valueOf(toleranceWatts));
+      applyDynamicLimitWithTolerance(deviceId, device, toleranceWatts, strategyLabel);
     }
   }
 
@@ -197,6 +311,30 @@ public class ExportSchedulerService {
   @Transactional
   ModbusDeviceEntity loadSmartMeter(Long parentDeviceId) {
     return deviceRepository.findSmartMeterForDevice(parentDeviceId).orElse(null);
+  }
+
+  /**
+   * Loads the global price-control singleton in a short read-only transaction.
+   * Returns {@code null} if the feature has never been configured (treat as disabled).
+   */
+  @Transactional
+  PriceControlEntity loadGlobalPriceControl() {
+    return priceControlRepository.findSingleton().orElse(null);
+  }
+
+  /**
+   * Loads enabled inverter candidates in a short read-only transaction.
+   *
+   * <p>Includes devices explicitly typed as {@link DeviceType#INVERTER} as well as
+   * root-level devices with no type set (manually configured before automatic
+   * type-detection was introduced). See
+   * {@link at.or.reder.frodo.modbus.repository.ModbusDeviceRepository#listEnabledInverterCandidates()}.</p>
+   *
+   * @return list of enabled inverter candidates, sorted by ID
+   */
+  @Transactional
+  List<ModbusDeviceEntity> loadEnabledInverters() {
+    return deviceRepository.listEnabledInverterCandidates();
   }
 
   // ========== Package-private helpers (called by REST resource) ==========
@@ -242,6 +380,76 @@ public class ExportSchedulerService {
   // ========== Static helpers ==========
 
   /**
+   * Determines whether export should be blocked based on the current market price.
+   *
+   * <p>Export is blocked whenever the price is strictly negative — i.e. the grid
+   * operator is paying producers to consume. When the price is zero or positive the
+   * inverter may export freely.</p>
+   *
+   * <p>Note: the allowed export <em>amount</em> during a negative-price period is
+   * controlled separately by {@code exportToleranceWatts} in
+   * {@link at.or.reder.frodo.modbus.entity.ExportScheduleEntity}, which sets a small
+   * Watt cap rather than a hard zero cutoff.</p>
+   *
+   * @param priceCt current market price in ct/kWh (may be negative)
+   * @return {@code true} if export should be capped (price is negative)
+   */
+  public static boolean shouldBlockForPrice(double priceCt) {
+    return priceCt < 0;
+  }
+
+  /**
+   * Applies the grid-import dead-band to suppress noise near zero-export.
+   *
+   * <p>Small positive grid imports ({@code 0 < gridW < toleranceWatts}) are
+   * treated as zero so the controller does not chase measurement noise.
+   * Negative values (grid export) and large positive imports are used as-is.</p>
+   *
+   * @param gridW          grid power in W (positive = import, negative = export)
+   * @param toleranceWatts dead-band threshold in W (same as export tolerance)
+   * @return effective grid power after dead-band suppression
+   */
+  static double computeEffectiveGridW(double gridW, int toleranceWatts) {
+    return (gridW > 0.0 && gridW < toleranceWatts) ? 0.0 : gridW;
+  }
+
+  /**
+   * Primary formula: target inverter output to cover load and battery demand
+   * plus a small export buffer.
+   *
+   * <pre>
+   *   targetWatts = -P_Load - P_Battery + toleranceWatts
+   * </pre>
+   * <p>Both {@code loadW} and {@code battW} are negative in the Fronius API when
+   * consuming/charging, so their negated sum equals total demand.</p>
+   *
+   * @param loadW          site load power in W (negative = consuming)
+   * @param battW          battery power in W (negative = charging, positive = discharging)
+   * @param toleranceWatts additional export buffer in W
+   * @return target inverter output in W
+   */
+  static double computeTargetWatts(double loadW, double battW, int toleranceWatts) {
+    return -loadW - battW + toleranceWatts;
+  }
+
+  /**
+   * Fallback formula: target inverter output estimated from PV output and
+   * effective grid power (used when {@code P_Load} is unavailable).
+   *
+   * <pre>
+   *   targetWatts = P_PV + effectiveGridW + toleranceWatts
+   * </pre>
+   *
+   * @param pvW            PV production power in W
+   * @param effectiveGridW grid power after dead-band suppression (from {@link #computeEffectiveGridW})
+   * @param toleranceWatts additional export buffer in W
+   * @return target inverter output in W
+   */
+  static double computeTargetWattsFallback(double pvW, double effectiveGridW, int toleranceWatts) {
+    return pvW + effectiveGridW + toleranceWatts;
+  }
+
+  /**
    * Determines whether the given time falls inside a block window.
    *
    * <p>Three cases:</p>
@@ -274,6 +482,18 @@ public class ExportSchedulerService {
   // ========== Private ==========
 
   private void applyScheduleIfChanged(ExportScheduleEntity schedule, LocalTime now) {
+    // PRICE_CONTROLLED uses market price instead of a time window — evaluated every tick
+    if (schedule.strategy == ExportBlockStrategy.PRICE_CONTROLLED) {
+      if (manuallyEnabled.contains(schedule.deviceId)) {
+        LOG.debugf(
+          "Skipping scheduler block for device %d: user has manually re-enabled export",
+          schedule.deviceId);
+        return;
+      }
+      applyPriceControlledBlock(schedule);
+      return;
+    }
+
     boolean shouldBlock = isInBlockWindow(now, schedule.blockFrom, schedule.enableFrom);
     Boolean wasBlocked = lastApplied.get(schedule.deviceId);
 
@@ -284,7 +504,7 @@ public class ExportSchedulerService {
       if (Boolean.FALSE.equals(wasBlocked)) {
         return; // already enabled, nothing to do
       }
-      applyReEnable(schedule);
+      applyReEnable(schedule.deviceId);
     } else {
       // Inside block window: skip if the user has manually re-enabled export
       if (manuallyEnabled.contains(schedule.deviceId)) {
@@ -305,50 +525,34 @@ public class ExportSchedulerService {
   /**
    * Deactivates the power limit ({@code WMaxLim_Ena = 0}) to re-enable grid export.
    * Only called on the first tick after a transition from blocked to unblocked.
+   *
+   * @param deviceId the inverter device ID to re-enable
    */
-  private void applyReEnable(ExportScheduleEntity schedule) {
-    ModbusDeviceEntity device = loadDevice(schedule.deviceId);
+  private void applyReEnable(Long deviceId) {
+    ModbusDeviceEntity device = loadDevice(deviceId);
     if (device == null || !device.enabled) {
-      LOG.debugf("Skipping re-enable for device %d: not found or disabled", schedule.deviceId);
+      LOG.debugf("Skipping re-enable for device %d: not found or disabled", deviceId);
       return;
     }
     DeviceAddress address = DeviceAddress.fromEntity(device);
     try {
       sunSpecService.setPowerLimit(address, 0, false);
-      lastApplied.put(schedule.deviceId, false);
+      lastApplied.put(deviceId, false);
       LOG.infof("Schedule applied: device=%d (%s), export=ENABLED",
-        schedule.deviceId, device.name);
+        deviceId, device.name);
     } catch (Exception ex) {
       // Do not update cache — will retry on next tick
       LOG.errorf(ex, "Failed to re-enable export for device %d (%s): %s",
-        schedule.deviceId, device.name, ex.getMessage());
+        deviceId, device.name, ex.getMessage());
     }
   }
 
   /**
    * Computes the dynamic zero-export limit from Fronius Solar API site data and
-   * writes it to the inverter. Called every scheduler tick while the block window
-   * is active.
+   * writes it to the inverter. Delegates to
+   * {@link #applyDynamicLimitWithTolerance} with {@code toleranceWatts = 0}.
    *
-   * <p><b>Primary formula</b> (used when {@code P_Load} is available):</p>
-   * <pre>
-   *   targetWatts = -P_Load + (P_Battery ?? 0)
-   * </pre>
-   * <ul>
-   *   <li>{@code -P_Load} = house consumption (P_Load is typically negative)</li>
-   *   <li>{@code +P_Battery} positive = battery charging → inverter must cover more;
-   *       negative = battery discharging → inverter needs to cover less</li>
-   * </ul>
-   *
-   * <p><b>Fallback formula</b> (used when {@code P_Load} is null):</p>
-   * <pre>
-   *   houseLoad = P_PV + effectiveGridW
-   * </pre>
-   * where {@code effectiveGridW = 0} when {@code 0 &lt; P_Grid &lt; 100 W}
-   * (100 W dead-band on grid import to suppress noise near zero-export).
-   *
-   * <p>If the Solar API has not delivered data yet, the tick is skipped with an
-   * error log.</p>
+   * <p>See {@link #applyDynamicLimitWithTolerance} for full formula documentation.</p>
    */
   private void applyDynamicBlock(ExportScheduleEntity schedule) {
     ModbusDeviceEntity device = loadDevice(schedule.deviceId);
@@ -356,14 +560,59 @@ public class ExportSchedulerService {
       LOG.debugf("Skipping block for device %d: not found or disabled", schedule.deviceId);
       return;
     }
+    applyDynamicLimitWithTolerance(schedule.deviceId, device, 0, "ZERO_EXPORT_DYNAMIC");
+  }
 
+  /**
+   * Shared helper: computes the dynamic inverter power limit from Fronius Solar API
+   * site data and writes it to the inverter. Called every scheduler tick while a
+   * block window is active.
+   *
+   * <p><b>Primary formula</b> (used when {@code P_Load} is available):</p>
+   * <pre>
+   *   targetWatts = -(P_Load + P_Battery) + toleranceWatts
+   * </pre>
+   * <p>Both {@code P_Load} and {@code P_Battery} are negative in the Fronius API
+   * when consuming/charging, so their negated sum is the total demand the inverter
+   * must cover, and adding {@code toleranceWatts} allows a small controlled export
+   * on top:</p>
+   * <ul>
+   *   <li>{@code -P_Load}: house consumption in W (P_Load is negative = consuming)</li>
+   *   <li>{@code -P_Battery}: battery charging demand in W (negative when charging,
+   *       so negating adds that demand; positive when discharging, negating subtracts
+   *       it — the battery covers that portion of the load)</li>
+   *   <li>{@code +toleranceWatts}: allowed export buffer (0 = strict zero-export;
+   *       &gt;0 = small intentional export, e.g. 50 W for price-controlled mode)</li>
+   * </ul>
+   *
+   * <p><b>Fallback formula</b> (used when {@code P_Load} is null):</p>
+   * <pre>
+   *   targetWatts = P_PV + effectiveGridW + toleranceWatts
+   * </pre>
+    * where {@code effectiveGridW = 0} when {@code 0 &lt; P_Grid &lt; toleranceWatts}
+    * (dead-band on grid import to suppress noise near zero-export).
+   *
+   * <p>If the Solar API has not delivered data yet, the tick is skipped with an
+   * error log.</p>
+   *
+   * @param deviceId       the inverter device ID (used for caching and logging)
+   * @param device         the loaded, enabled inverter device
+   * @param toleranceWatts additional watts added on top of the computed target
+   *                       (0 = strict zero-export; &gt;0 = small allowed export buffer)
+   * @param strategyLabel  label embedded in the log line (e.g. "ZERO_EXPORT_DYNAMIC"
+   *                       or "PRICE_CONTROLLED, price=−0.05 ct/kWh, tol=50 W")
+   */
+  private void applyDynamicLimitWithTolerance(Long deviceId,
+                                              ModbusDeviceEntity device,
+                                              int toleranceWatts,
+                                              String strategyLabel) {
     PowerFlowRealtimeData solarData = solarApiMetricsService.getLastData();
     if (solarData == null || solarData.getSite() == null) {
       LOG.errorf(
         "No Solar API data available for device %d (%s) — "
           + "enable frodo.solar-api.enabled=true and verify the inverter host is reachable. "
           + "Skipping dynamic zero-export limit.",
-        schedule.deviceId, device.name);
+        deviceId, device.name);
       return;
     }
 
@@ -371,7 +620,7 @@ public class ExportSchedulerService {
     Double gridW = site.getGridPowerWatts();
     if (gridW == null) {
       LOG.errorf("Solar API P_Grid unavailable for device %d (%s) — skipping tick.",
-        schedule.deviceId, device.name);
+        deviceId, device.name);
       return;
     }
 
@@ -379,9 +628,9 @@ public class ExportSchedulerService {
     Double batteryW = site.getBatteryPowerWatts();
     double pvW      = site.getPVPowerWatts() != null ? site.getPVPowerWatts() : 0.0;
 
-    // 100 W dead-band: small grid imports (< 100 W) are treated as zero to avoid
+    // dead-band: small grid imports (< toleranceWatts) are treated as zero to avoid
     // chasing noise near zero-export. Exports (negative P_Grid) are always used as-is.
-    double effectiveGridW = (gridW > 0.0 && gridW < 100.0) ? 0.0 : gridW;
+    double effectiveGridW = computeEffectiveGridW(gridW, toleranceWatts);
 
     DeviceAddress address = DeviceAddress.fromEntity(device);
     try {
@@ -389,31 +638,36 @@ public class ExportSchedulerService {
       final String formulaDesc;
 
       if (loadW != null) {
-        // Primary: target = house consumption + battery charging demand
+        // Primary: target = -(P_Load + P_Battery) + toleranceWatts
+        // Both are negative in the Fronius API when consuming/charging,
+        // so their negated sum is the total watts the inverter must produce.
+        // When battery is discharging (battW > 0), negating it subtracts the
+        // discharge contribution — the battery covers that portion of the load.
         double battW       = batteryW != null ? batteryW : 0.0;
-        double targetWatts = -loadW + battW;
+        double targetWatts = computeTargetWatts(loadW, battW, toleranceWatts);
         limitPct    = sunSpecService.computeLimitPctFromWatts(address, targetWatts);
         formulaDesc = String.format(
-          "PRIMARY -P_Load(%.1f)+P_Batt(%.1f)=%.1f W [P_Grid=%.1f W eff=%.1f W, P_PV=%.1f W]",
-          loadW, battW, targetWatts, gridW, effectiveGridW, pvW);
+          "PRIMARY -(P_Load(%.1f)+P_Batt(%.1f))+tol(%d)=%.1f W [P_Grid=%.1f W eff=%.1f W, P_PV=%.1f W]",
+          loadW, battW, Integer.valueOf(toleranceWatts), targetWatts, gridW, effectiveGridW, pvW);
       } else {
         // Fallback: houseLoad estimate from PV output + effective grid power
-        limitPct    = sunSpecService.computeZeroExportLimitPct(address, effectiveGridW, pvW);
+        double targetWatts = computeTargetWattsFallback(pvW, effectiveGridW, toleranceWatts);
+        limitPct    = sunSpecService.computeLimitPctFromWatts(address, targetWatts);
         formulaDesc = String.format(
-          "FALLBACK P_PV(%.1f)+P_Grid_eff(%.1f) [P_Grid=%.1f W, P_Battery=%s W]",
-          pvW, effectiveGridW, gridW,
+          "FALLBACK P_PV(%.1f)+P_Grid_eff(%.1f)+tol(%d)=%.1f W [P_Grid=%.1f W, P_Battery=%s W]",
+          pvW, effectiveGridW, Integer.valueOf(toleranceWatts), targetWatts, gridW,
           batteryW != null ? String.format("%.1f", batteryW) : "n/a");
       }
 
       sunSpecService.setPowerLimit(address, limitPct, true);
-      lastApplied.put(schedule.deviceId, true);
+      lastApplied.put(deviceId, true);
       LOG.infof(
-        "Schedule applied: device=%d (%s), export=BLOCKED (ZERO_EXPORT_DYNAMIC, %s → %d%%)",
-        schedule.deviceId, device.name, formulaDesc, Integer.valueOf(limitPct));
+        "Schedule applied: device=%d (%s), export=BLOCKED (%s, %s → %d%%)",
+        deviceId, device.name, strategyLabel, formulaDesc, Integer.valueOf(limitPct));
     } catch (Exception ex) {
       // Do not update cache — will retry on next tick
       LOG.errorf(ex, "Failed to apply dynamic export limit for device %d (%s): %s",
-        schedule.deviceId, device.name, ex.getMessage());
+        deviceId, device.name, ex.getMessage());
     }
   }
 
@@ -447,6 +701,132 @@ public class ExportSchedulerService {
       // Do not update cache — will retry on next tick
       LOG.errorf(ex, "Failed to apply fixed-limit export for device %d (%s): %s",
         schedule.deviceId, device.name, ex.getMessage());
+    }
+  }
+
+  /**
+   * Applies price-controlled export blocking based on aWATTar AT market prices.
+   *
+   * <p>Every scheduler tick while inside the block window, the current market price
+   * is fetched from the database. If the price is negative, the dynamic limit is
+   * computed via {@link #applyDynamicLimitWithTolerance} using
+   * {@link at.or.reder.frodo.modbus.entity.ExportScheduleEntity#exportToleranceWatts}
+   * as the export buffer on top of house load + battery demand — so the inverter
+   * covers all consumption and may export up to {@code exportToleranceWatts} extra
+   * (default 50 W). When the price is zero or positive, export is re-enabled fully.</p>
+   *
+   * <p><b>Logic:</b></p>
+   * <pre>
+   *   if priceCt &lt; 0  → targetWatts = -(P_Load + P_Battery) + exportToleranceWatts
+   *   if priceCt &ge; 0  → re-enable export (WMaxLim_Ena = 0)
+   * </pre>
+   */
+  private void applyPriceControlledBlock(ExportScheduleEntity schedule) {
+    ModbusDeviceEntity device = loadDevice(schedule.deviceId);
+    if (device == null || !device.enabled) {
+      LOG.debugf("Skipping price-controlled block for device %d: not found or disabled",
+        schedule.deviceId);
+      return;
+    }
+
+    var priceOpt = marketPriceRepository.findCurrent();
+    if (priceOpt.isEmpty()) {
+      LOG.warnf(
+        "No market price available for device %d (%s) — skipping price-controlled block. "
+          + "Verify the market price scheduler is running.",
+        schedule.deviceId, device.name);
+      return;
+    }
+
+    double priceCt = priceOpt.get().priceCt;
+
+    if (!shouldBlockForPrice(priceCt)) {
+      // Price is zero or positive — clear manual override and re-enable on transition only
+      manuallyEnabled.remove(schedule.deviceId);
+      if (!Boolean.FALSE.equals(lastApplied.get(schedule.deviceId))) {
+        applyReEnable(schedule.deviceId);
+      }
+      return;
+    }
+
+    // Price is negative — use dynamic load+battery demand plus a small export buffer
+    int toleranceWatts = schedule.exportToleranceWatts != null ? schedule.exportToleranceWatts : 50;
+    String strategyLabel = String.format(
+      "PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W", priceCt, Integer.valueOf(toleranceWatts));
+    applyDynamicLimitWithTolerance(schedule.deviceId, device, toleranceWatts, strategyLabel);
+  }
+
+  /**
+   * Applies the global price-controlled export limit to all enabled inverter devices
+   * that do not have an explicit per-device schedule configured.
+   *
+   * <p>Called at the end of every scheduler tick. This method is a no-op when:</p>
+   * <ul>
+   *   <li>{@link PriceControlEntity#enabled} is {@code false}</li>
+   *   <li>No current market price is available in the database</li>
+   *   <li>No enabled inverter devices exist</li>
+   * </ul>
+   *
+   * <p>Devices present in {@code scheduledDeviceIds} are skipped to avoid conflicting
+   * with their per-device schedule logic.</p>
+   *
+   * @param config             the global price-control configuration (never null)
+   * @param scheduledDeviceIds set of device IDs that have an explicit per-device schedule
+   */
+  private void applyGlobalPriceControl(PriceControlEntity config, Set<Long> scheduledDeviceIds) {
+    if (!config.enabled) {
+      return;
+    }
+
+    var priceOpt = marketPriceRepository.findCurrent();
+    if (priceOpt.isEmpty()) {
+      LOG.debug("Global price control: no current market price — skipping tick");
+      return;
+    }
+
+    double priceCt      = priceOpt.get().priceCt;
+    boolean shouldBlock = shouldBlockForPrice(priceCt);
+    int toleranceWatts  = config.exportToleranceWatts;
+
+    List<ModbusDeviceEntity> inverters = loadEnabledInverters();
+    if (inverters.isEmpty()) {
+      return;
+    }
+
+    LOG.debugf(
+      "Global price control: price=%.4f ct/kWh, block=%b, tolerance=%d W, inverters=%d",
+      priceCt, Boolean.valueOf(shouldBlock), Integer.valueOf(toleranceWatts),
+      Integer.valueOf(inverters.size()));
+
+    for (ModbusDeviceEntity device : inverters) {
+      if (shuttingDown) break;
+      Long deviceId = device.id;
+
+      // Skip devices with their own per-device schedule (avoid double-applying)
+      if (scheduledDeviceIds.contains(deviceId)) {
+        continue;
+      }
+
+      if (manuallyEnabled.contains(deviceId)) {
+        LOG.debugf(
+          "Global price control: skipping device %d — user has manually re-enabled export",
+          deviceId);
+        continue;
+      }
+
+      if (!shouldBlock) {
+        // Price is zero or positive — clear manual override and re-enable on transition only
+        manuallyEnabled.remove(deviceId);
+        if (!Boolean.FALSE.equals(lastApplied.get(deviceId))) {
+          applyReEnable(deviceId);
+        }
+      } else {
+        // Price is negative — apply dynamic load+battery demand limit
+        String strategyLabel = String.format(
+          "GLOBAL_PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W",
+          priceCt, Integer.valueOf(toleranceWatts));
+        applyDynamicLimitWithTolerance(deviceId, device, toleranceWatts, strategyLabel);
+      }
     }
   }
 }

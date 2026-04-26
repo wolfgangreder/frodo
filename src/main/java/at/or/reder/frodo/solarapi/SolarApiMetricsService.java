@@ -1,5 +1,6 @@
 package at.or.reder.frodo.solarapi;
 
+import at.or.reder.frodo.modbus.service.ExportSchedulerService;
 import at.or.reder.frodo.solarapi.model.OhmpilotData;
 import at.or.reder.frodo.solarapi.model.PowerFlowRealtimeData;
 import at.or.reder.frodo.solarapi.model.PowerFlowRealtimeData.InverterData;
@@ -73,6 +74,9 @@ public class SolarApiMetricsService {
 
   @Inject
   MeterRegistry meterRegistry;
+
+  @Inject
+  ExportSchedulerService exportSchedulerService;
 
   @ConfigProperty(name = "frodo.solar-api.enabled", defaultValue = "false")
   boolean solarApiEnabled;
@@ -257,6 +261,11 @@ public class SolarApiMetricsService {
       updateSiteMetrics(data.getSite());
       updateInverterMetrics(data.getInverters());
       updateOhmpilotMetrics(data);
+      try {
+        exportSchedulerService.onSolarDataUpdated();
+      } catch (Exception e) {
+        LOG.debugf("Export scheduler update after scrape failed: %s", e.getMessage());
+      }
     } catch (Exception e) {
       errorCount++;
       LOG.debugf("Solar API metrics scrape failed: %s", e.getMessage());

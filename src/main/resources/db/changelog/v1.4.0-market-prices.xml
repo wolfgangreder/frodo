@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    Add market price table for aWATTar AT stock exchange prices.
+
+    Stores hourly market prices retrieved from https://api.awattar.at/v1/marketdata
+    Prices are fetched every hour at minute 55 for the next hour.
+    Used for automatic grid export control during negative price periods.
+
+    Columns:
+      start_time   - TIMESTAMP NOT NULL: Start of the hour this price applies to
+      end_time   - TIMESTAMP NOT NULL: End of the hour this price applies to
+      price_eur  - DOUBLE NOT NULL: Market price in EUR/MWh
+      created_at - TIMESTAMP NOT NULL: When this record was fetched
+  -->
+
+  <changeSet id="20" author="frodo">
+    <comment>Create FroMarketPrice table for aWATTar AT hourly market prices</comment>
+
+    <createTable tableName="FroMarketPrice">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroMarketPrice"/>
+      </column>
+
+      <!-- Start of the hour this price applies to -->
+      <column name="start_time" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- End of the hour this price applies to -->
+      <column name="end_time" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Market price in EUR/MWh -->
+      <column name="price_eur" type="DOUBLE">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- When this record was fetched from aWATTar -->
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroMarketPrice_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <!-- Unique constraint: one price per hour -->
+    <addUniqueConstraint
+      tableName="FroMarketPrice"
+      columnNames="start_time"
+      constraintName="uk_FroMarketPrice_start"/>
+
+    <createIndex tableName="FroMarketPrice" indexName="idx_FroMarketPrice_start">
+      <column name="start_time"/>
+    </createIndex>
+
+    <createIndex tableName="FroMarketPrice" indexName="idx_FroMarketPrice_created">
+      <column name="created_at"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!--
+    Add price-controlled export strategy to FroExportSchedule.
+
+    New strategy value: PRICE_CONTROLLED
+    When market price is negative (excluding grace tolerance of 50 EUR/MWh),
+    export is blocked to avoid feeding back cheap electricity.
+  -->
+
+  <changeSet id="21" author="frodo">
+    <comment>Add export_tolerance_watts to FroExportSchedule for PRICE_CONTROLLED strategy</comment>
+
+    <!--
+      When strategy is PRICE_CONTROLLED and the market price is negative,
+      this Watt value is used as the maximum allowed grid export (power cap).
+      Smaller is better — default 50 W keeps a small safety margin.
+    -->
+    <sql>ALTER TABLE FroExportSchedule ADD export_tolerance_watts INTEGER DEFAULT 50</sql>
+
+  </changeSet>
+
+</databaseChangeLog>

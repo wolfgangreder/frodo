@@ -96,6 +96,17 @@ public class ExportScheduleEntity extends PanacheEntity {
   public Integer limitWatts;
 
   /**
+   * Maximum allowed grid export in Watts when {@link #strategy} is
+   * {@code PRICE_CONTROLLED} and the market price is negative.
+   *
+   * <p>Instead of a hard zero-export cutoff, the inverter is limited to this
+   * watt cap. Smaller values are preferable (less export during negative-price
+   * periods). Default: 50 W.</p>
+   */
+  @Column(name = "export_tolerance_watts")
+  public Integer exportToleranceWatts = 50;
+
+  /**
    * Timestamp when this schedule was first created.
    */
   @Column(name = "created_at", nullable = false, updatable = false)

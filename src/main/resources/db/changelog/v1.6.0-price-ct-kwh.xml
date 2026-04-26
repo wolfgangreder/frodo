@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    Rename price_eur column to price_ct in FroMarketPrice.
+
+    Prices are now stored in ct/kWh (euro-cents per kilowatt-hour) instead of
+    EUR/MWh for a more intuitive unit at the scale of household electricity
+    costs.  Conversion: ct/kWh = EUR/MWh / 10.
+
+    Existing rows are updated in the same changeSet so the stored values remain
+    correct after the rename.
+  -->
+
+  <changeSet id="23" author="frodo">
+    <comment>Rename FroMarketPrice.price_eur to price_ct and convert existing values from EUR/MWh to ct/kWh</comment>
+
+    <!-- Rename the column (Firebird syntax) -->
+    <sql>ALTER TABLE FroMarketPrice ALTER COLUMN price_eur TO price_ct</sql>
+
+    <!-- Convert existing EUR/MWh values to ct/kWh (divide by 10) -->
+    <sql>UPDATE FroMarketPrice SET price_ct = price_ct / 10</sql>
+
+  </changeSet>
+
+</databaseChangeLog>

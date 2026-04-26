@@ -152,6 +152,26 @@ public class ModbusDeviceRepository implements PanacheRepository<ModbusDeviceEnt
   }
 
   /**
+   * Lists enabled devices that are inverter candidates.
+   *
+   * <p>Returns all enabled devices where either:</p>
+   * <ul>
+   *   <li>{@code deviceType = INVERTER} — explicitly classified inverters, or</li>
+   *   <li>{@code deviceType IS NULL AND parentDevice IS NULL} — root-level untyped
+   *       devices (manually configured before automatic device-type detection was
+   *       introduced; the main inverter is always a root-level device).</li>
+   * </ul>
+   *
+   * @return list of enabled inverter candidates, sorted by ID
+   */
+  public List<ModbusDeviceEntity> listEnabledInverterCandidates() {
+    return list(
+      "(deviceType = ?1 OR (deviceType IS NULL AND parentDevice IS NULL)) AND enabled = true",
+      Sort.by("id").ascending(),
+      DeviceType.INVERTER);
+  }
+
+  /**
    * Lists child devices of a parent device.
    *
    * @param parentDeviceId the parent device ID

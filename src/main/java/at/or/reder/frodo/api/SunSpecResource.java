@@ -14,6 +14,7 @@ import at.or.reder.frodo.modbus.entity.ExportBlockStrategy;
 import at.or.reder.frodo.modbus.entity.ExportScheduleEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
 import at.or.reder.frodo.modbus.repository.ExportScheduleRepository;
+import at.or.reder.frodo.modbus.repository.MarketPriceRepository;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.service.ExportSchedulerService;
 import at.or.reder.frodo.modbus.sunspec.SunSpecConstants;
@@ -83,6 +84,9 @@ public class SunSpecResource {
 
   @Inject
   ExportScheduleRepository scheduleRepository;
+
+  @Inject
+  MarketPriceRepository marketPriceRepository;
 
   @Inject
   ExportSchedulerService exportSchedulerService;
@@ -721,17 +725,21 @@ public class SunSpecResource {
       throw new IllegalArgumentException("Request body is required");
     }
 
-    LocalTime blockFrom  = parseTime(request.blockFrom(),  "blockFrom");
-    LocalTime enableFrom = parseTime(request.enableFrom(), "enableFrom");
-
-    // Resolve and validate strategy
+    // Resolve strategy first — needed to determine whether time fields are required
     ExportBlockStrategy strategy = request.strategy() != null
       ? request.strategy()
       : ExportBlockStrategy.ZERO_EXPORT_DYNAMIC;
 
+    // For PRICE_CONTROLLED the time window is not used — default to midnight when omitted
+    LocalTime blockFrom  = (strategy == ExportBlockStrategy.PRICE_CONTROLLED && request.blockFrom() == null)
+      ? LocalTime.MIDNIGHT : parseTime(request.blockFrom(),  "blockFrom");
+    LocalTime enableFrom = (strategy == ExportBlockStrategy.PRICE_CONTROLLED && request.enableFrom() == null)
+      ? LocalTime.MIDNIGHT : parseTime(request.enableFrom(), "enableFrom");
+
     requireDevice(id);
     ExportScheduleEntity entity = scheduleRepository.upsert(
-      id, request.enabled(), blockFrom, enableFrom, strategy, request.limitWatts());
+      id, request.enabled(), blockFrom, enableFrom, strategy,
+      request.limitWatts(), request.exportToleranceWatts());
     exportSchedulerService.invalidateCache(id);
 
     LOG.infof(
@@ -1001,12 +1009,27 @@ public class SunSpecResource {
 
   /**
    * Converts an {@link ExportScheduleEntity} to an {@link ExportScheduleResponse},
-   * computing whether the current wall-clock time falls inside the block window.
+   * computing whether the schedule is currently enforcing a block.
+   *
+   * <p>For time-based strategies ({@link ExportBlockStrategy#ZERO_EXPORT_DYNAMIC} and
+   * {@link ExportBlockStrategy#FIXED_LIMIT}), {@code currentlyBlocked} reflects whether
+   * the current wall-clock time falls inside the configured block window.</p>
+   *
+   * <p>For {@link ExportBlockStrategy#PRICE_CONTROLLED}, {@code currentlyBlocked} reflects
+   * whether the current market price (as stored in the DB) is negative — the same condition
+   * the scheduler evaluates each tick.</p>
    */
-  private static ExportScheduleResponse toResponse(ExportScheduleEntity entity) {
+  private ExportScheduleResponse toResponse(ExportScheduleEntity entity) {
     LocalTime now = LocalTime.now().truncatedTo(ChronoUnit.MINUTES);
-    boolean currentlyBlocked = entity.enabled
-      && ExportSchedulerService.isInBlockWindow(now, entity.blockFrom, entity.enableFrom);
+    boolean currentlyBlocked;
+    if (entity.strategy == ExportBlockStrategy.PRICE_CONTROLLED) {
+      currentlyBlocked = entity.enabled && marketPriceRepository.findCurrent()
+        .map(p -> ExportSchedulerService.shouldBlockForPrice(p.priceCt))
+        .orElse(false);
+    } else {
+      currentlyBlocked = entity.enabled
+        && ExportSchedulerService.isInBlockWindow(now, entity.blockFrom, entity.enableFrom);
+    }
 
     return new ExportScheduleResponse(
       entity.deviceId,
@@ -1015,7 +1038,8 @@ public class SunSpecResource {
       entity.enableFrom.format(TIME_FMT),
       currentlyBlocked,
       entity.strategy,
-      entity.limitWatts
+      entity.limitWatts,
+      entity.exportToleranceWatts
     );
   }
 
