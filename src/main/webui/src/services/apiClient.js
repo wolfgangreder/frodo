@@ -26,7 +26,7 @@ apiClient.interceptors.response.use(
   (response) => {
     // Calculate request duration for debugging
     const duration = new Date() - response.config.metadata.startTime;
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.debug(`API ${response.config.method?.toUpperCase()} ${response.config.url} - ${duration}ms`);
     }
     return response;
@@ -42,7 +42,7 @@ apiClient.interceptors.response.use(
     };
 
     // Log errors in development
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.error('API Error:', customError);
     }
 

@@ -7,7 +7,7 @@ Frodo is a **Quarkus 3.x server application** for Modbus protocol communication 
 - Modbus TCP protocol (via Vert.x raw sockets + j2mod library)
 - MQTT messaging (SmallRye Reactive Messaging) — disabled in all profiles by default
 - FirebirdSQL 5.0 database (Jaybird JDBC driver, Hibernate ORM/Panache, Liquibase)
-- React 18 frontend (via Quinoa extension — Node.js 20.11.0 auto-downloaded, no manual install needed)
+- React 19 frontend with **Vite 6** (via Quinoa extension — Node.js 20.11.0 auto-downloaded, no manual install needed)
 
 ## Build & Run Commands
 
@@ -26,6 +26,16 @@ Frodo is a **Quarkus 3.x server application** for Modbus protocol communication 
 sudo apt install gitleaks
 # or from https://github.com/gitleaks/gitleaks#installing
 ```
+
+### Frontend (Vite)
+
+The React frontend lives in `src/main/webui/` and is managed by Quinoa (Node.js 20.11.0 auto-downloaded to `.quinoa/node/`).
+
+- **Build tool:** Vite 6 — config in `src/main/webui/vite.config.js`
+- **Dev server port:** 3001 (`quarkus.quinoa.dev-server.port=3001`)
+- **Build output:** `dist/` (mapped via `quarkus.quinoa.build-dir=dist`)
+- **JSX caveat:** source files use `.js` extension with JSX syntax. `vite.config.js` contains a `treat-js-files-as-jsx` pre-plugin (using `transformWithEsbuild`) that handles this; do **not** remove it.
+- Run frontend-only: `export PATH="$PWD/.quinoa/node:$PATH" && npm run build` from `src/main/webui/`
 
 ### Dev Mode Prerequisites
 

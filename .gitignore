@@ -46,6 +46,7 @@ build/
 # React UI (built artifacts)
 src/main/webui/node_modules/
 src/main/webui/build/
+src/main/webui/dist/
 src/main/webui/.env.local
 src/main/webui/.env.development.local
 src/main/webui/.env.test.local
