@@ -1,76 +1,98 @@
 # AGENTS.md - Frodo Modbus Protocol Connector
 
-This file provides guidance for AI coding agents working on this codebase.
-
-## Project Overview
-
 Frodo is a **Quarkus 3.x server application** for Modbus protocol communication with PV (photovoltaic) devices. It collects information and provides control capabilities via REST APIs, MQTT messaging, and a React frontend.
 
 **Key Technologies:**
-- Java 21, Quarkus 3.34.x, Gradle (Groovy DSL)
+- Java **25**, Quarkus 3.34.x, Gradle (Groovy DSL)
 - Modbus TCP protocol (via Vert.x raw sockets + j2mod library)
-- MQTT messaging (SmallRye Reactive Messaging)
-- FirebirdSQL database (Jaybird JDBC driver)
-- React 18 frontend (via Quinoa extension)
-
-**Reference Documentation:**
-- `refdoc/modbus.pdf` - Fronius Modbus TCP protocol specification
-- `refdoc/solar_api.pdf` - Fronius Solar API documentation
-- `refdoc/sunspec/` - SunSpec Alliance specifications:
-  - `SunSpec_Information_Model_Reference_20240701_-1.xlsx` - Complete model reference
-  - `SunSpec-Device-Information-Model-Specificiation-V1-4.pdf` - Core device models
-  - `SunSpec-DER-Information-Model-Specification-V1-2.pdf` - DER (inverter) models
-  - `SunSpec-Modbus-FactSheet-RevA-2019-07-web.pdf` - Quick reference
-- `refdoc/gen24-modbus-api-external-docs/` - Fronius Gen24 register maps
-- GitHub Repository: https://github.com/sunspec/models - Official SunSpec model definitions (JSON/XML)
+- MQTT messaging (SmallRye Reactive Messaging) — disabled in all profiles by default
+- FirebirdSQL 5.0 database (Jaybird JDBC driver, Hibernate ORM/Panache, Liquibase)
+- React 18 frontend (via Quinoa extension — Node.js 20.11.0 auto-downloaded, no manual install needed)
 
 ## Build & Run Commands
 
 ```bash
-./gradlew quarkusDev          # Development mode with hot reload
-./gradlew build               # Build the project
-./gradlew clean build         # Clean build
-./gradlew build -Dquarkus.container-image.build=true  # Build Docker image
+./gradlew quarkusDev          # Dev mode with hot reload (requires Firebird running)
+./gradlew build               # Clean compile + test + gitleaks secret scan
+./gradlew clean build         # Full clean build
+./gradlew test                # Run unit/integration tests (no Firebird needed)
+./gradlew testNative          # Native integration tests
 ```
 
-## Testing Commands
+**CRITICAL: `build` depends on `scanSecrets` (gitleaks)**. `./gradlew build` will **fail** if
+`gitleaks` is not installed. Install it before building:
+```bash
+# Debian/Ubuntu
+sudo apt install gitleaks
+# or from https://github.com/gitleaks/gitleaks#installing
+```
+
+### Dev Mode Prerequisites
+
+Tests run without external services (`%test.*` disables datasource, Hibernate, Liquibase, MQTT, Quinoa).
+
+Dev mode requires a running Firebird database:
+```bash
+docker compose up -d firebird           # start Firebird 5.0 on port 3050
+# first time only: create the database
+./scripts/setup-firebird-docker.sh
+./gradlew quarkusDev
+```
+
+### Testing Commands
 
 ```bash
-./gradlew test                # Run all tests
-./gradlew test --tests "at.or.reder.frodo.modbus.ModbusTcpServiceTest"           # Single test class
-./gradlew test --tests "at.or.reder.frodo.modbus.ModbusTcpServiceTest.testBuildMbapFrame"  # Single method
-./gradlew test --tests "*ModbusTest*"   # Pattern matching
-./gradlew testNative          # Integration tests (native mode)
+./gradlew test --tests "at.or.reder.frodo.modbus.ModbusTcpServiceTest"               # single class
+./gradlew test --tests "at.or.reder.frodo.modbus.ModbusTcpServiceTest.testBuildMbapFrame"  # single method
+./gradlew test --tests "*ModbusTest*"   # pattern matching
 ```
 
 In Quarkus dev mode, press `r` to re-run tests.
 
-## Code Style Guidelines
+### Release & Docker
 
-### Package Structure
+```bash
+DOCKER_TOKEN=<token> ./release.sh       # full automated release (strips -SNAPSHOT, tags, pushes image)
+DOCKER_TOKEN=<token> ./docker-push.sh   # manual Docker image push (linux/amd64 + linux/arm64)
+```
+
+Version is in `gradle.properties` as **`projectVersion`** (e.g. `1.0.2-SNAPSHOT`).
+
+## Runtime Configuration
+
+- **HTTP port: 8082** (not default 8080) — `quarkus.http.port=8082`
+- REST API root: `/api` — all REST endpoints are under `/api/*`; Quinoa handles everything else (SPA routing)
+- Container image: `docker.io/wolfgangreder/at.or.reder.frodo`
+
+## Package Structure
+
 ```
 at.or.reder.frodo/
 ├── api/                        # REST endpoints (JAX-RS resources)
-│   ├── FrodoResource            # /api/info
-│   ├── DeviceResource           # /api/devices CRUD + info
+│   ├── FrodoResource            # GET /api/info
+│   ├── DeviceResource           # /api/devices CRUD
 │   ├── DeviceDiscoveryResource  # /api/devices/discover, sub-devices
 │   ├── SunSpecResource          # /api/devices/{id}/sunspec/*
+│   ├── MetricsConfigResource    # /api/devices/{id}/metrics/* (scraping config + data)
+│   ├── MetricsDocsResource      # /api/metrics-docs (available metric definitions)
+│   ├── MarketPriceResource      # /api/market-prices (aWATTar AT prices)
+│   ├── PriceControlResource     # /api/price-control (auto export limit on neg. prices)
+│   ├── SolarApiResource         # /api/solar-api/status (live Solar API data)
 │   ├── dto/                     # Request/response DTOs (records)
 │   └── exception/               # Exception mappers
 ├── solarapi/                   # Fronius Solar API integration
-│   ├── SolarApiClient           # HTTP client for Solar API
-│   ├── model/                   # Solar API data models
-│   │   ├── PowerFlowRealtimeData # Power flow response
-│   │   ├── SmartloadsData       # Ohmpilot/smartload data
-│   │   └── SolarApiResponse     # Generic response wrapper
-│   └── SolarApiHealthCheck      # Solar API health monitoring
+│   ├── SolarApiClient           # CDI facade (inject this, not SolarApiRestClient)
+│   ├── SolarApiRestClient       # MicroProfile REST Client implementation
+│   ├── SolarApiMetricsService   # Scrapes Solar API, publishes Micrometer metrics
+│   ├── SolarApiHealthCheck      # Readiness probe
+│   └── model/                   # PowerFlowRealtimeData, OhmpilotData, SmartloadsData, SolarApiResponse
 ├── health/                     # Health & monitoring
 │   ├── FrodoHealthCheck         # Application readiness
 │   ├── ModbusHealthCheck        # Modbus connection pool health
 │   ├── SunSpecHealthCheck       # SunSpec discovery cache health
 │   └── ModbusMetrics            # Micrometer gauges, counters, timers
 ├── modbus/                     # Modbus TCP protocol core
-│   ├── ModbusTcpService         # Core Modbus service (FC 0x03/0x06/0x10/0x2B)
+│   ├── ModbusTcpService         # Core service (FC 0x03/0x06/0x10/0x2B); static helpers for testing
 │   ├── ModbusResource           # Raw register access endpoint
 │   ├── ModbusException          # Protocol error exceptions
 │   ├── connection/              # Connection pool & request queue
@@ -78,149 +100,144 @@ at.or.reder.frodo/
 │   │   ├── ModbusConnection      # Single TCP connection
 │   │   ├── ModbusRequestQueue    # Bounded request queue
 │   │   ├── ModbusRequest         # Request envelope
-│   │   ├── QueuedRequest         # Queued request wrapper
+│   │   ├── DeviceAddress         # host+port+unitId record
 │   │   ├── ConnectionStats       # Pool statistics record
 │   │   └── ConnectionState       # Connection state enum
-│   ├── service/                 # Device info collection & discovery
-│   │   ├── DeviceDiscoveryService   # Multi-source device discovery
-│   │   ├── DiscoveredDevice         # Discovery result record
-│   │   ├── DeviceInfoCollectorService  # Scheduled collection
-│   │   └── DeviceInfoCacheService      # In-memory cache
+│   ├── service/                 # Business services
+│   │   ├── DeviceDiscoveryService    # Multi-source device discovery
+│   │   ├── DeviceInfoCollectorService # Scheduled FC 0x2B collection
+│   │   ├── DeviceInfoCacheService    # In-memory cache
+│   │   ├── ConnectionTestService     # One-shot connection test
+│   │   ├── MetricsScrapingService    # Scheduled SunSpec parameter polling
+│   │   ├── MetricsRetentionService   # Prunes old metrics data
+│   │   ├── ExportSchedulerService    # Grid export control by schedule
+│   │   ├── MarketPriceSchedulerService # Fetches aWATTar AT hourly prices
+│   │   ├── AwattarClient            # CDI facade for aWATTar REST client
+│   │   ├── AwattarRestClient        # MicroProfile REST Client implementation
+│   │   └── DiscoveredDevice         # Discovery result record
 │   ├── entity/                  # JPA entities
-│   │   ├── ModbusDeviceEntity    # Device configuration
-│   │   └── ModbusDeviceInfoEntity # Device identification cache
+│   │   ├── ModbusDeviceEntity        # Device configuration
+│   │   ├── ModbusDeviceInfoEntity    # Device identification cache
+│   │   ├── MetricsConfigEntity       # Per-device scraping config
+│   │   ├── MetricsParameterEntity    # Which SunSpec parameters to scrape
+│   │   ├── MetricsDataEntity         # Time-series scrape results
+│   │   ├── MarketPriceEntity         # aWATTar hourly price records
+│   │   ├── ExportScheduleEntity      # Per-device export schedule windows
+│   │   ├── ExportBlockStrategy       # Strategy enum (LIMIT_ZERO, etc.)
+│   │   └── PriceControlEntity        # Global price-controlled export flag
+│   ├── metrics/                 # Metrics metadata
+│   │   ├── MetricMetadataRegistry    # Registry of all scrapeable SunSpec fields
+│   │   └── MetricMetadata            # Field display name, unit, data type
 │   ├── repository/              # Panache repositories
-│   ├── config/                  # Device config initializer
-│   ├── model/                   # Domain models
-│   │   ├── DeviceIdentification  # FC 0x2B result
-│   │   ├── ReadDeviceIdCode      # Read Device ID codes enum
-│   │   └── ModbusObjectId        # Modbus object ID enum
-│   ├── cache/                   # Cache models
-│   │   └── CachedDeviceInfo      # Cached device info record
+│   ├── config/                  # DeviceConfigInitializer (seeds device from properties)
+│   ├── model/                   # DeviceIdentification, ReadDeviceIdCode, ModbusObjectId, DeviceType
+│   ├── cache/                   # CachedDeviceInfo record
 │   └── sunspec/                 # SunSpec protocol support
-│       ├── SunSpecService         # Discovery, model reading, caching
-│       ├── SunSpecModelRegistry   # Model definitions (all supported)
-│       ├── SunSpecModelDataDecoder # Model data decoder
-│       ├── SunSpecRegisterDecoder  # Data type decoder
-│       ├── SunSpecConstants       # Model IDs, base addresses
-│       ├── SunSpecDataType        # Data type enum
-│       ├── SunSpecDiscoveryResult  # Discovery result record
-│       ├── SunSpecModelBlock      # Model location record
-│       ├── SunSpecModelData       # Decoded model data record
-│       ├── SunSpecModelDefinition  # Model metadata record
-│       └── SunSpecFieldDefinition  # Field metadata record
-└── mqtt/                       # MQTT messaging service
-    └── MqttService              # Publish/subscribe
+│       ├── SunSpecService            # Discovery, model reading, caching
+│       ├── SunSpecModelRegistry      # All supported model definitions
+│       ├── SunSpecModelDataDecoder   # Decodes raw registers to SunSpecModelData
+│       ├── SunSpecRegisterDecoder    # Per-field data type decoder
+│       ├── SunSpecConstants          # Model IDs, base address (40000)
+│       ├── SunSpecDataType           # Data type enum
+│       ├── SunSpecModelFormat        # INT_SF vs FLOAT variant selector
+│       └── model/                   # SunSpecDiscoveryResult, ModelBlock, ModelData, ModelDefinition, FieldDefinition
+└── mqtt/
+    └── MqttService              # Publish/subscribe (disabled by default in all profiles)
 ```
 
-### Import Order
-1. `io.vertx.*`, `io.smallrye.*`, `io.quarkus.*` (framework imports)
-2. `jakarta.*` (Jakarta EE APIs)
-3. `org.eclipse.microprofile.*` (MicroProfile APIs)
-4. `org.jboss.logging.*` (logging)
-5. `java.*` (standard library - last)
+## Code Style
 
-Static imports go after regular imports.
+### Import Order
+1. `io.vertx.*`, `io.smallrye.*`, `io.quarkus.*`
+2. `jakarta.*`
+3. `org.eclipse.microprofile.*`
+4. `org.jboss.logging.*`
+5. `java.*`
+
+Static imports after regular imports.
 
 ### Formatting
-- **Indentation:** 2 spaces (no tabs)
-- **Encoding:** UTF-8
-- **Braces:** Opening brace on same line (K&R style)
+- 2-space indent, UTF-8, K&R braces
 
 ### Naming Conventions
 | Element | Convention | Example |
 |---------|------------|---------|
 | Classes | PascalCase | `ModbusTcpService` |
-| Methods/Variables | camelCase | `readHoldingRegisters`, `startAddr` |
+| Methods/Variables | camelCase | `readHoldingRegisters` |
 | Constants | UPPER_SNAKE_CASE | `LOG`, `DEFAULT_PORT` |
 | Config properties | kebab-case | `frodo.modbus.host` |
 | REST paths | kebab-case | `/api/modbus/{unitId}/holding-registers` |
 
 ### Type Conventions
-- Use Java **records** for DTOs and response objects
-- Use `Uni<T>` for async operations (Mutiny reactive type)
-- Use primitive types (`int`, `boolean`) for simple values
-- Use `int[]` internally, `List<Integer>` in JSON responses
-
-### CDI & Dependency Injection
-```java
-@ApplicationScoped
-public class ModbusTcpService {
-    @Inject
-    Vertx vertx;
-
-    @ConfigProperty(name = "frodo.modbus.host", defaultValue = "localhost")
-    String modbusHost;
-}
-```
-
-### REST Resources (JAX-RS)
-```java
-@Path("/api/modbus")
-@Tag(name = "Modbus", description = "Modbus TCP device access endpoints")
-public class ModbusResource {
-    @GET
-    @Path("/{unitId}/holding-registers")
-    @Produces(MediaType.APPLICATION_JSON)
-    @Operation(summary = "Read holding registers")
-    public Uni<ModbusRegisterResponse> readHoldingRegisters(...) { }
-}
-```
-
-### Logging
-- Use `org.jboss.logging.Logger` (not SLF4J)
-- Static logger: `private static final Logger LOG = Logger.getLogger(ClassName.class);`
-- Formatted logging: `LOG.debugf("Message: %s", value);`
-
-### Error Handling
-- Throw `IllegalArgumentException` for invalid input
-- Use `Uni.onFailure()` for async error handling
-- Log errors: `LOG.errorf(exception, "Message: %s", context);`
+- Java **records** for DTOs and response objects
+- `Uni<T>` for async operations (Mutiny)
+- Primitive types for simple values; `int[]` internally, `List<Integer>` in JSON
+- Logging: `org.jboss.logging.Logger` (not SLF4J); `LOG.debugf("msg: %s", val);`
 
 ### Database Naming Convention
 
-To support integration into pre-existing databases without schema support, **all database objects use "Fro" prefix**:
+All DB objects use the **`Fro` prefix** (FirebirdSQL pre-3.0 has no schema support; prefix prevents collisions):
 
-| Object Type | Naming Convention | Example |
-|-------------|-------------------|---------|
-| Tables | `Fro<EntityName>` | `FroModbusDevice`, `FroModbusDeviceInfo` |
-| Sequences | `Fro<EntityName>_SEQ` | `FroModbusDevice_SEQ`, `FroModbusDeviceInfo_SEQ` |
-| Indexes | `idx_Fro<EntityName>_<column>` | `idx_FroModbusDevice_enabled` |
-| Unique constraints | `uk_Fro<Short>_<purpose>` | `uk_FroDevice_connection` |
-| Foreign keys | `fk_Fro<Short>_<reference>` | `fk_FroDeviceInfo_device` |
-| Check constraints | `ck_Fro<Short>_<purpose>` | `ck_FroDevice_port_range` |
+| Type | Convention | Example |
+|------|------------|---------|
+| Tables | `Fro<EntityName>` | `FroModbusDevice`, `FroMarketPrice` |
+| Sequences | `Fro<EntityName>_SEQ` | `FroModbusDevice_SEQ` |
+| Indexes | `idx_Fro<EntityName>_<col>` | `idx_FroModbusDevice_enabled` |
+| Unique | `uk_Fro<Short>_<purpose>` | `uk_FroDevice_connection` |
+| FK | `fk_Fro<Short>_<ref>` | `fk_FroDeviceInfo_device` |
+| Check | `ck_Fro<Short>_<purpose>` | `ck_FroDevice_port_range` |
 
-**Rationale:** FirebirdSQL versions before 3.0 do not support database schemas. The "Fro" prefix allows Frodo tables to coexist safely with other application data in shared databases, preventing name collisions.
+Use `@Table(name = "Fro...")` on entities. Liquibase changesets in `src/main/resources/db/changelog/`.
 
-**Implementation:**
-- Entity classes use `@Table(name = "Fro...")` annotations
-- Liquibase changesets use prefixed table/constraint names
-- See `src/main/resources/db/changelog/v1.0.1-rename-tables-fro-prefix.xml` for migration from legacy names
+## Protocol & Domain Notes
 
-## Git Workflow Guidelines
+### Modbus Protocol
+- MBAP header: Transaction ID (2) + Protocol ID (2) + Length (2) + Unit ID (1)
+- Function codes: 0x03 (read holding), 0x06 (write single), 0x10 (write multiple), 0x2B/0x0E (read device ID)
+- Write operations controlled by `frodo.modbus.write-enabled=true`
+- Use **static** helper methods in `ModbusTcpService` for frame building/parsing (testable without Vert.x)
+- Reference: `refdoc/modbus.pdf`
 
-### CRITICAL: Code Review Before Commit
+### SunSpec Protocol
+- "SunS" signature at register 40000 (`0x53756e53`); model chain scanned sequentially
+- Supported models: Common (1), Inverter (101-103 INT+SF, 111-113 FLOAT), Nameplate (120), Settings (121), Status (122), Controls (123), Storage (124), MPPT (160), Meter (201-204, 211-214)
+- Model format preference: `frodo.sunspec.model-format=INT_SF`
+- Reference: `refdoc/sunspec/`, `refdoc/gen24-modbus-api-external-docs/`, `docs/SUNSPEC_MODELS.md`
+- Upstream model JSON/XML: https://github.com/sunspec/models
 
-**IMPORTANT:** Before creating any git commit, you MUST:
+### aWATTar API Integration
+- Fetches Austrian hourly electricity market prices; stored in `FroMarketPrice`, retained 48h
+- Config: `frodo.awattar.enabled=true`, `frodo.awattar.retention-hours=48`
+- REST client: `AwattarClient` (inject this) → `AwattarRestClient` (MicroProfile, URL: `https://api.awattar.at`)
+- Price-controlled export: `PriceControlResource` / `PriceControlEntity` — when enabled, `ExportSchedulerService` blocks export on negative prices
 
-1. **Perform a self-review:**
-   - Run `git status` and `git diff --stat` to see what changed
-   - Review the changes using `git diff` for key files
-   - Verify all tests pass with `./gradlew test`
-   - Verify build succeeds with `./gradlew build`
+### Metrics Scraping System
+- Configurable per-device SunSpec parameter polling, stored as time-series in Firebird
+- `MetricMetadataRegistry` — registry of all scrapeable fields with display name and unit
+- Config API: `GET /api/devices/{id}/metrics/config`, `PUT /api/devices/{id}/metrics/config`
+- Data API: `GET /api/devices/{id}/metrics/data?parameter=...&from=...&to=...`
+- `MetricsRetentionService` prunes old data based on configured retention period
 
-2. **Present changes to user for review:**
-   - Show a summary of what was implemented
-   - List all files created, modified, or deleted
-   - Highlight key changes and design decisions
-   - **WAIT for user approval before committing**
+### Configuration Profiles
+- `%dev.` — development overrides; Firebird/Solar API enabled
+- `%test.` — disables datasource, Hibernate, Liquibase, Quinoa, MQTT, Solar API client bound to `localhost:19999`
+- External services (MQTT) disabled in all profiles by default
 
-3. **Only commit after user approval:**
-   - Use conventional commit format: `type(scope): description`
-   - Include detailed commit body explaining the changes
-   - Reference any issues or plan documents
+### Device Discovery
+- Config: `frodo.discovery.*`, unit ID ranges `1,200-203` (comma-separated + dash ranges)
+- Device type by SunSpec models: 101-103/111-113 → INVERTER, 201-204/211-214 → SMART_METER, 124 → STORAGE
+- FC 0x2B with "ohmpilot"/"smartload" → OHMPILOT; Solar API Smartloads.Ohmpilots → OHMPILOT
+- See `docs/DEVICE_DISCOVERY.md`
 
-**Never commit without explicit user approval!**
+## Git Workflow
+
+**Never commit without explicit user approval.** Before any commit:
+1. Run `git diff --stat` + `git diff` on changed files
+2. Verify tests pass: `./gradlew test`
+3. Verify build succeeds: `./gradlew build` (also runs gitleaks)
+4. Present a summary of all changes to the user and **wait for approval**
+
+Commit format: `type(scope): description` with a body explaining the why.
 
 ## Testing Guidelines
 
@@ -229,150 +246,50 @@ To support integration into pre-existing databases without schema support, **all
 | Unit tests | `*Test.java` | `src/test/java/` |
 | Integration tests | `*IT.java` | `src/native-test/java/` |
 
-### Unit Test Style (pure logic)
-```java
-class ModbusTcpServiceTest {
-    @Test
-    void testBuildMbapFrame() {
-        byte[] frame = ModbusTcpService.buildMbapFrame(42, 1, pdu);
-        assertEquals(12, frame.length);
-    }
-}
-```
-
-### Endpoint Test Style (QuarkusTest + RestAssured)
-```java
-@QuarkusTest
-class FrodoResourceTest {
-    @Test
-    void testInfoEndpoint() {
-        given()
-            .when().get("/api/info")
-            .then()
-            .statusCode(200)
-            .body("name", is("frodo"));
-    }
-}
-```
-
-## Project-Specific Patterns
-
-### Modbus Protocol
-- MBAP header: Transaction ID (2) + Protocol ID (2) + Length (2) + Unit ID (1)
-- Function codes: 0x03 (read holding), 0x06 (write single), 0x10 (write multiple), 0x2B/0x0E (read device identification)
-- Use static helper methods for frame building/parsing (testable without Vert.x)
-- Protocol reference: `refdoc/modbus.pdf` (Modbus Application Protocol V1.1b3)
-
-### SunSpec Protocol
-- SunSpec "SunS" signature at register 40000 (0x53756e53)
-- Model chain discovery: scan sequentially from base address
-- Supported models: 
-  - Common (1)
-  - Inverter (101-103, 111-113)
-  - Nameplate (120), Settings (121), Status (122), Controls (123), Storage (124)
-  - MPPT (160)
-  - Meter (201-204, 211-214) - for Smart Meter devices (Single Phase, Split Phase, 3-Phase WYE/Delta)
-- Float and Int+SF register map variants supported
-- Official SunSpec model definitions: https://github.com/sunspec/models (JSON/XML/SMDX formats)
-- Register maps: `refdoc/gen24-modbus-api-external-docs/` (Fronius Gen24 Excel files)
-- SunSpec specifications: `refdoc/sunspec/` (PDF documentation and Excel reference)
-- See `docs/SUNSPEC_MODELS.md` for detailed model documentation
-- See `docs/DEVICE_DISCOVERY_PLAN.md` for multi-device architecture
-
-### Fronius Solar API
-- **Base URL**: `http://{inverter-ip}/solar_api/v1/` (HTTP, port 80)
-- **Configuration**: `frodo.solar-api.*` properties (disabled by default, host, port, timeout)
-- **Implementation**: JAX-RS Client with CDI producer, async Mutiny `Uni<T>` wrapper
-- **Key Endpoints**:
-  - `GET /solar_api/v1/GetPowerFlowRealtimeData.fcgi` - Unified power flow data (all devices)
-  - `GET /solar_api/v1/GetOhmPilotRealtimeData.cgi` - Ohmpilot-specific data (deprecated, use PowerFlowRealtimeData)
-  - `GET /solar_api/v1/GetActiveDeviceInfo.cgi?DeviceClass={class}` - Device discovery
-- **PowerFlowRealtimeData Structure**:
-  - `Inverters` - Map of inverter data by DeviceId (String → InverterData)
-  - `Site` - Aggregated site-level metrics (P_Grid, P_Load, P_PV, P_Akku)
-  - `Smartloads.Ohmpilots` - Map of Ohmpilot data by ComponentId (String → OhmpilotData)
-    - `P_AC_Total` - Power consumption [W]
-    - `State` - Operating state (normal, boost, fault, startup, standby)
-    - `Temperature` - Tank/storage temperature [°C]
-    - `CodeOfState` - Numeric state code
-  - `Smartloads.OhmpilotEcos` - Ohmpilot Eco devices (dual heating rods)
-  - `SecondaryMeters` - Additional meter data (map by MeterId)
-  - `Version` - API version (e.g., "13")
-- **Client Usage**:
-  ```java
-  @Inject
-  SolarApiClient solarApiClient;
-  
-  Uni<PowerFlowRealtimeData> data = solarApiClient.getPowerFlowRealtimeData();
-  ```
-- **Health Check**: `SolarApiHealthCheck` monitors API availability (readiness probe)
-- **Use Case**: Device discovery and metrics collection without Modbus complexity
-- **Integration**: Complementary to Modbus (Solar API for discovery, Modbus for control)
-- **ComponentId vs Unit ID**: ComponentId from Solar API doesn't map to Modbus Unit ID (requires testing)
-
-### Async/Reactive
-- Use Vert.x Mutiny APIs (`io.vertx.mutiny.*`)
-- Return `Uni<T>` from async methods
-- Chain: `.onItem().transform()`, `.onFailure().invoke()`
-- Close resources: `socket.closeAndForget()`
-
-### Configuration Profiles
-- `%dev.` prefix for development overrides
-- `%test.` prefix for test overrides
-- External services disabled in dev/test by default
-
-### Device Discovery
-- **Configuration**: `frodo.discovery.*` properties
-- **Unit ID Ranges**: Comma-separated values and dash-separated ranges (e.g. `1,200-203`)
-- **Default Ranges**: Unit ID 1 (inverter), 200-203 (up to 4 smart meters)
-- **Multi-Source Strategy**: Combines Modbus/SunSpec scanning with Solar API discovery
-  - SunSpec: Scans unit IDs, reads model chain, determines device type from models
-  - FC 0x2B: Fallback for non-SunSpec devices, reads device identification
-  - Solar API: Discovers Ohmpilot devices by ComponentId (when enabled)
-- **Device Type Detection**: 
-  - SunSpec models 101-103, 111-113 → INVERTER
-  - SunSpec models 201-204, 211-214 → SMART_METER
-  - SunSpec model 124 → STORAGE
-  - FC 0x2B with "ohmpilot"/"smartload" → OHMPILOT
-  - Solar API Smartloads.Ohmpilots → OHMPILOT
-- **Persistence**: Auto-discovered devices saved with `autoDiscovered=true` and parent-child relationships
-- **Usage**:
-  ```java
-  @Inject
-  DeviceDiscoveryService discoveryService;
-  
-  List<DiscoveredDevice> devices = discoveryService.discoverDevices("192.168.1.160", 502);
-  discoveryService.saveDiscoveredDevices(parentDeviceId, devices);
-  ```
+- Tests run without Firebird (`%test.*` disables all DB/external services)
+- Use `@QuarkusTest` + RestAssured for endpoint tests; plain JUnit 5 for pure logic
+- `%test.quarkus.http.test-port=0` — random port; RestAssured picks it up automatically
 
 ## Key Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/info` | Application info |
-| `GET /api/devices` | List devices (supports `?deviceType=` and `?parentId=` filters) |
-| `POST /api/devices` | Create a device |
+| `GET /api/devices` | List devices (`?deviceType=`, `?parentId=`) |
+| `POST /api/devices` | Create device |
 | `POST /api/devices/discover` | Discover devices on host:port |
-| `GET /api/devices/{id}` | Get device details |
-| `PUT /api/devices/{id}` | Update a device |
-| `DELETE /api/devices/{id}` | Delete a device (fails if sub-devices exist) |
-| `POST /api/devices/{id}/discover-sub-devices` | Discover sub-devices for existing device |
-| `GET /api/devices/{id}/sub-devices` | List sub-devices of a parent device |
-| `GET /api/devices/{id}/info` | Cached device identification (FC 0x2B) |
-| `POST /api/devices/{id}/info/refresh` | Force refresh device identification |
-| `GET /api/devices/{id}/sunspec/discovery` | SunSpec model chain discovery |
-| `GET /api/devices/{id}/sunspec/common` | SunSpec Common model (1) |
+| `GET /api/devices/{id}` | Device details |
+| `PUT /api/devices/{id}` | Update device |
+| `DELETE /api/devices/{id}` | Delete (fails if sub-devices exist) |
+| `POST /api/devices/{id}/discover-sub-devices` | Discover sub-devices |
+| `GET /api/devices/{id}/sub-devices` | List sub-devices |
+| `GET /api/devices/{id}/info` | Cached FC 0x2B identification |
+| `POST /api/devices/{id}/info/refresh` | Force refresh FC 0x2B |
+| `GET /api/devices/{id}/sunspec/discovery` | SunSpec model chain |
 | `GET /api/devices/{id}/sunspec/inverter` | Auto-detect inverter model |
 | `GET /api/devices/{id}/sunspec/meter` | Auto-detect meter model |
-| `GET /api/devices/{id}/sunspec/nameplate` | Nameplate ratings (120) |
-| `GET /api/devices/{id}/sunspec/settings` | Basic settings (121) |
-| `GET /api/devices/{id}/sunspec/status` | Extended measurements & status (122) |
-| `GET /api/devices/{id}/sunspec/controls` | Immediate controls (123) |
-| `GET /api/devices/{id}/sunspec/storage` | Basic storage controls (124) |
-| `GET /api/devices/{id}/sunspec/mppt` | Multiple MPPT extension (160) |
-| `GET /api/devices/{id}/sunspec/model/{modelId}` | Read any model by ID |
-| `GET /api/devices/{id}/sunspec/models` | List all available models |
-| `GET /api/modbus/{unitId}/holding-registers` | Read Modbus registers (FC 0x03) |
+| `GET /api/devices/{id}/sunspec/model/{modelId}` | Any model by ID |
+| `GET /api/devices/{id}/sunspec/models` | List available models |
+| `GET /api/devices/{id}/metrics/config` | Scraping config |
+| `PUT /api/devices/{id}/metrics/config` | Update scraping config |
+| `GET /api/devices/{id}/metrics/data` | Time-series data |
+| `GET /api/devices/{id}/metrics/latest` | Latest values |
+| `GET /api/devices/{id}/metrics/status` | Scraping status |
+| `GET /api/metrics-docs` | Available metric field definitions |
+| `GET /api/market-prices` | aWATTar AT market prices |
+| `POST /api/market-prices/refresh` | Force price refresh |
+| `GET /api/price-control` | Price-controlled export settings |
+| `PUT /api/price-control` | Update price control |
+| `GET /api/solar-api/status` | Solar API live data |
+| `GET /api/modbus/{unitId}/holding-registers` | Raw FC 0x03 access |
 | `GET /q/health` | Health check |
 | `GET /q/metrics` | Prometheus metrics |
 | `GET /swagger-ui` | Swagger UI |
+
+## Reference Documentation
+
+- `refdoc/modbus.pdf` — Modbus Application Protocol V1.1b3
+- `refdoc/solar_api.pdf` — Fronius Solar API
+- `refdoc/sunspec/` — SunSpec Alliance specs (PDF + Excel reference)
+- `refdoc/gen24-modbus-api-external-docs/` — Fronius Gen24 register maps (Excel)
+- `docs/` — Architecture plans, DB setup, metrics, testing notes
