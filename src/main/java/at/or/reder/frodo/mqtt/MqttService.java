@@ -16,11 +16,11 @@ public class MqttService {
     private static final Logger LOG = Logger.getLogger(MqttService.class);
 
     @Inject
-    @Channel("frodo-out")
+    @Channel("frodo_out")
     Emitter<String> emitter;
 
     /**
-     * Publishes a message to the MQTT topic configured as "frodo-out".
+     * Publishes a message to the MQTT topic configured as "frodo_out".
      *
      * @param message the message payload to publish
      */
@@ -30,11 +30,11 @@ public class MqttService {
     }
 
     /**
-     * Consumes messages from the MQTT topic configured as "frodo-in".
+     * Consumes messages from the MQTT topic configured as "frodo_in".
      *
      * @param message the received message payload
      */
-    @Incoming("frodo-in")
+    @Incoming("frodo_in")
     public void onMessage(String message) {
         LOG.infof("Received MQTT message: %s", message);
     }
