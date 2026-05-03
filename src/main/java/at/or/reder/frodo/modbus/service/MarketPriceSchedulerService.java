@@ -3,6 +3,7 @@ package at.or.reder.frodo.modbus.service;
 import at.or.reder.frodo.modbus.repository.MarketPriceRepository;
 import at.or.reder.frodo.modbus.service.model.MarketDataResponse;
 import io.quarkus.runtime.ShutdownEvent;
+import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -19,17 +20,23 @@ import java.util.List;
 /**
  * Scheduled service that fetches hourly market prices from aWATTar AT.
  *
- * <p>Runs every hour at minute 55 to retrieve prices for the next hour.
- * Prices are saved to the database for use by price-controlled export.</p>
+ * <p>Prices are fetched:</p>
+ * <ol>
+ *   <li><b>At startup</b> — if no price for the current hour is in the database yet.</li>
+ *   <li><b>Every hour at minute 55</b> — to pre-load prices for the next hour before
+ *       it begins.</li>
+ * </ol>
  *
- * <p>When prices are negative (minus tolerance), the export scheduler
- * can automatically block grid export to avoid feeding back cheap electricity.</p>
+ * <p>aWATTar AT allows at most 100 API calls per day. With one call per hour plus an
+ * occasional startup call, daily usage stays well under that limit.</p>
+ *
+ * <p>When prices are negative the export scheduler can automatically cap grid export
+ * to avoid feeding back cheap electricity.</p>
  *
  * <p><b>Configuration:</b></p>
  * <ul>
- *   <li>{@code frodo.awattar.enabled} - Enable/disable price fetching</li>
- *   <li>{@code frodo.awattar.fetch-interval} - How often to fetch (default: 1h)</li>
- *   <li>{@code frodo.awattar.retention-hours} - Hours to keep prices (default: 48)</li>
+ *   <li>{@code frodo.awattar.enabled} — enable/disable price fetching</li>
+ *   <li>{@code frodo.awattar.retention-hours} — hours to keep prices (default: 48)</li>
  * </ul>
  */
 @ApplicationScoped
@@ -52,6 +59,33 @@ public class MarketPriceSchedulerService {
   @ConfigProperty(name = "frodo.awattar.retention-hours", defaultValue = "48")
   int retentionHours;
 
+  /**
+   * Fetches prices at startup if the current hour has no price in the database.
+   *
+   * <p>Skipped when aWATTar is disabled or the DB already has a valid entry for
+   * the current hour — avoids wasting one of the 100 daily API calls on a hot
+   * restart.</p>
+   */
+  void onStart(@Observes StartupEvent event) {
+    if (!awattarEnabled) {
+      LOG.debug("Skipping startup market price fetch: aWATTar disabled");
+      return;
+    }
+    try {
+      if (marketPriceRepository.findCurrent().isPresent()) {
+        LOG.debug("Startup market price fetch skipped: current-hour price already in database");
+        return;
+      }
+    } catch (Exception ex) {
+      // Database may not be available (e.g. test mode, datasource inactive).
+      // Skip the startup fetch — persistPrices() would fail for the same reason.
+      LOG.warnf("Startup market price fetch skipped: could not query database (%s)", ex.getMessage());
+      return;
+    }
+    LOG.info("No current-hour price found at startup — fetching from aWATTar AT");
+    fetchMarketPrices();
+  }
+
   void onStop(@Observes ShutdownEvent event) {
     shuttingDown = true;
     LOG.info("Shutdown received, stopping market price scheduler");
@@ -60,10 +94,10 @@ public class MarketPriceSchedulerService {
   /**
    * Fetches market prices every hour at minute 55.
    *
-   * <p>Retrieves prices for the next 24 hours and persists them to the database.
-   * Also cleans up expired entries.</p>
+   * <p>Runs one minute before the top of the hour so the next hour's price is
+   * available as soon as it begins. Also cleans up expired entries.</p>
    *
-   * <p>The HTTP call is made reactively and awaited on the scheduler worker thread.
+   * <p>The HTTP call is made on the scheduler worker thread (blocking).
    * The DB writes happen in a separate short transaction via
    * {@link #persistPrices(List)} so no DB connection is held open during the
    * network call.</p>
@@ -78,18 +112,14 @@ public class MarketPriceSchedulerService {
       LOG.debug("Skipping market price fetch: aWATTar disabled");
       return;
     }
-    if (!awattarClient.isEnabled()) {
-      LOG.debug("Skipping market price fetch: aWATTar client disabled");
-      return;
-    }
 
     LOG.info("Fetching market prices from aWATTar AT");
 
-    // Await the HTTP response on the scheduler worker thread.
+    // Blocking HTTP call on the scheduler worker thread.
     // Do NOT hold a DB transaction open across this network call.
     final MarketDataResponse response;
     try {
-      response = awattarClient.getMarketData().await().indefinitely();
+      response = awattarClient.getMarketData();
     } catch (Exception ex) {
       LOG.errorf(ex, "Failed to fetch market data from aWATTar");
       lastFetchSuccess = false;
@@ -143,7 +173,7 @@ public class MarketPriceSchedulerService {
   /**
    * Triggers an immediate market price fetch outside of the regular schedule.
    *
-   * <p>Delegates to {@link #fetchMarketPrices()} — same logic, same transaction.
+   * <p>Delegates to {@link #fetchMarketPrices()} — same logic, same flow.
    * Intended for use by the REST resource to allow on-demand refresh.</p>
    *
    * @throws IllegalStateException if aWATTar is disabled

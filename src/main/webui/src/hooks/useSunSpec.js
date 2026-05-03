@@ -250,7 +250,8 @@ export function useCurrentMarketPrice(enabled = true) {
         );
         return response.data ?? null;
       } catch (err) {
-        if (err?.response?.status === 404) return null;
+        // apiClient.js transforms errors into plain objects with .status (not .response.status)
+        if (err?.status === 404) return null;
         throw err;
       }
     },

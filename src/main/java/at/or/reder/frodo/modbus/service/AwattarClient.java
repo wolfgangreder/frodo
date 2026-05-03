@@ -1,7 +1,6 @@
 package at.or.reder.frodo.modbus.service;
 
 import at.or.reder.frodo.modbus.service.model.MarketDataResponse;
-import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -9,8 +8,6 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -44,52 +41,53 @@ public class AwattarClient {
   AwattarRestClient restClient;
 
   /**
-   * Fetches market data for the next 24 hours from aWATTar AT.
+   * Fetches market data for the next 24 hours from aWATTar AT (blocking).
    *
    * <p><b>Endpoint:</b> {@code GET https://api.awattar.at/v1/marketdata}</p>
    *
-   * @return async response with market price list
+   * @return market price response
+   * @throws IllegalStateException if aWATTar is disabled
+   * @throws RuntimeException      if the HTTP call fails
    */
-  public Uni<MarketDataResponse> getMarketData() {
+  public MarketDataResponse getMarketData() {
     if (!awattarEnabled) {
-      return Uni.createFrom().failure(
-        new IllegalStateException("aWATTar is disabled (frodo.awattar.enabled=false)")
-      );
+      throw new IllegalStateException("aWATTar is disabled (frodo.awattar.enabled=false)");
     }
 
     LOG.debugf("Fetching market data from %s%s", BASE_URL, RESOURCE_PATH);
-
-    return restClient.getMarketData()
-      .onItem().invoke(response -> {
-        List<MarketDataResponse.MarketPrice> prices = response.data();
-        LOG.debugf("Received market data: %d price entries", prices != null ? prices.size() : 0);
-      })
-      .onFailure().invoke(ex -> {
-        LOG.errorf(ex, "Failed to fetch market data from %s%s", BASE_URL, RESOURCE_PATH);
-      });
+    try {
+      MarketDataResponse response = restClient.getMarketData();
+      List<MarketDataResponse.MarketPrice> prices = response != null ? response.data() : null;
+      LOG.debugf("Received market data: %d price entries", prices != null ? prices.size() : 0);
+      return response;
+    } catch (Exception ex) {
+      LOG.errorf(ex, "Failed to fetch market data from %s%s", BASE_URL, RESOURCE_PATH);
+      throw ex;
+    }
   }
 
   /**
-   * Fetches market data for a specific time window.
+   * Fetches market data for a specific time window (blocking).
    *
    * @param start start time in epoch milliseconds
    * @param end   end time in epoch milliseconds
-   * @return async response with market price list
+   * @return market price response
+   * @throws IllegalStateException if aWATTar is disabled
+   * @throws RuntimeException      if the HTTP call fails
    */
-  public Uni<MarketDataResponse> getMarketData(long start, long end) {
+  public MarketDataResponse getMarketData(long start, long end) {
     if (!awattarEnabled) {
-      return Uni.createFrom().failure(
-        new IllegalStateException("aWATTar is disabled (frodo.awattar.enabled=false)")
-      );
+      throw new IllegalStateException("aWATTar is disabled (frodo.awattar.enabled=false)");
     }
 
     LOG.debugf("Fetching market data from %s to %s",
       Instant.ofEpochMilli(start), Instant.ofEpochMilli(end));
-
-    return restClient.getMarketData(start, end)
-      .onFailure().invoke(ex -> {
-        LOG.errorf(ex, "Failed to fetch market data for time range %d-%d", start, end);
-      });
+    try {
+      return restClient.getMarketData(start, end);
+    } catch (Exception ex) {
+      LOG.errorf(ex, "Failed to fetch market data for time range %d-%d", start, end);
+      throw ex;
+    }
   }
 
   /**

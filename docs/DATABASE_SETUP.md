@@ -74,7 +74,7 @@ Create `docker-compose.yml` in project root:
 version: '3.8'
 
 services:
-  firebird:
+  frodo-firebird:
     image: firebirdsql/firebird:5.0
     container_name: frodo-firebird
     environment:
@@ -102,23 +102,19 @@ Start the database:
 
 ```bash
 # Start Firebird container
-docker-compose up -d
+docker compose up -d
 
 # Wait for container to be ready (watch logs)
-docker-compose logs -f firebird
+docker compose logs -f frodo-firebird
 
 # Create database with UTF-8 and 32K page size
-docker-compose exec firebird isql -user sysdba -password masterkey << 'EOF'
-CREATE DATABASE '/firebird/data/frodo.fdb'
-  PAGE_SIZE 32768
-  DEFAULT CHARACTER SET UTF8
-  USER 'sysdba'
-  PASSWORD 'masterkey';
+docker compose exec frodo-firebird isql -user sysdba -password masterkey << 'EOF'
+CREATE DATABASE '/firebird/data/frodo.fdb' USER 'sysdba' PASSWORD 'masterkey' PAGE_SIZE 32768  DEFAULT CHARACTER SET UTF8;
 QUIT;
 EOF
 
 # Verify database
-docker-compose exec firebird isql -user sysdba -password masterkey /firebird/data/frodo.fdb -q << 'EOF'
+docker compose exec frodo-firebird isql -user sysdba -password masterkey /firebird/data/frodo.fdb -q << 'EOF'
 SELECT MON$PAGE_SIZE AS PAGE_SIZE, RDB$CHARACTER_SET_NAME AS DEFAULT_CHARSET
 FROM MON$DATABASE CROSS JOIN RDB$DATABASE;
 EOF

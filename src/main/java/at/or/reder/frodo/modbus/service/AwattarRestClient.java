@@ -1,7 +1,6 @@
 package at.or.reder.frodo.modbus.service;
 
 import at.or.reder.frodo.modbus.service.model.MarketDataResponse;
-import io.smallrye.mutiny.Uni;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.QueryParam;
@@ -13,7 +12,8 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
  * MicroProfile REST Client interface for aWATTar AT market data API.
  *
  * <p>This interface defines the aWATTar API endpoints using standard JAX-RS
- * annotations.</p>
+ * annotations. Uses the classic (blocking) REST client backed by
+ * {@code quarkus-rest-client-jackson}.</p>
  *
  * <p><b>Base URL:</b> {@code https://api.awattar.at}</p>
  *
@@ -40,7 +40,7 @@ public interface AwattarRestClient {
   @GET
   @Path("/marketdata")
   @Produces(MediaType.APPLICATION_JSON)
-  Uni<MarketDataResponse> getMarketData();
+  MarketDataResponse getMarketData();
 
   /**
    * Fetches market data for a specific time window.
@@ -54,7 +54,7 @@ public interface AwattarRestClient {
   @GET
   @Path("/marketdata")
   @Produces(MediaType.APPLICATION_JSON)
-  Uni<MarketDataResponse> getMarketData(
+  MarketDataResponse getMarketData(
     @QueryParam("start") long start,
     @QueryParam("end") long end
   );

@@ -413,12 +413,15 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
                             label="Strategy"
                             onChange={(e) => setFormStrategy(e.target.value)}
                           >
-                            <MenuItem value="ZERO_EXPORT_DYNAMIC">
-                              Zero-export dynamic (Solar API)
-                            </MenuItem>
-                            <MenuItem value="FIXED_LIMIT">
-                              Hard block (fixed watt cap)
-                            </MenuItem>
+                             <MenuItem value="ZERO_EXPORT_DYNAMIC">
+                               Zero-export dynamic (Solar API)
+                             </MenuItem>
+                             <MenuItem value="FIXED_LIMIT">
+                               Hard block (fixed watt cap)
+                             </MenuItem>
+                             <MenuItem value="PRICE_CONTROLLED">
+                               Price-controlled (aWATTar AT)
+                             </MenuItem>
                           </Select>
                         </FormControl>
 
