@@ -23,8 +23,12 @@ if [[ -z "${DOCKER_TOKEN:-}" ]]; then
   exit 1
 fi
 
-# 'latest' is always added; append the extra tag when supplied.
-ADDITIONAL_TAGS="latest"
+# Read version from gradle.properties
+PROJECT_VERSION=$(grep '^projectVersion=' gradle.properties | cut -d= -f2)
+RELEASE_VERSION="${PROJECT_VERSION%-SNAPSHOT}"
+
+# 'latest' and version tag are always added; append extra tag when supplied.
+ADDITIONAL_TAGS="latest,${RELEASE_VERSION}"
 if [[ -n "${EXTRA_TAG}" ]]; then
   ADDITIONAL_TAGS="${ADDITIONAL_TAGS},${EXTRA_TAG}"
 fi
