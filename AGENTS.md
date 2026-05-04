@@ -1,5 +1,8 @@
 # AGENTS.md - Frodo Modbus Protocol Connector
 
+**IMPORTANT: Load caveman skill on startup for token-efficient communication.**
+Use the skill tool to load "caveman" at session start. Caveman mode stays active until user says "stop caveman" or "normal mode".
+
 Frodo is a **Quarkus 3.x server application** for Modbus protocol communication with PV (photovoltaic) devices. It collects information and provides control capabilities via REST APIs, MQTT messaging, and a React frontend.
 
 **Key Technologies:**
@@ -86,6 +89,7 @@ at.or.reder.frodo/
 │   ├── MetricsConfigResource    # /api/devices/{id}/metrics/* (scraping config + data)
 │   ├── MetricsDocsResource      # /api/metrics-docs (available metric definitions)
 │   ├── MarketPriceResource      # /api/market-prices (aWATTar AT prices)
+│   ├── GpioResource             # /api/gpio/* (GPIO export control, RPi5 only)
 │   ├── PriceControlResource     # /api/price-control (auto export limit on neg. prices)
 │   ├── SolarApiResource         # /api/solar-api/status (live Solar API data)
 │   ├── dto/                     # Request/response DTOs (records)
@@ -96,8 +100,16 @@ at.or.reder.frodo/
 │   ├── SolarApiMetricsService   # Scrapes Solar API, publishes Micrometer metrics
 │   ├── SolarApiHealthCheck      # Readiness probe
 │   └── model/                   # PowerFlowRealtimeData, OhmpilotData, SmartloadsData, SolarApiResponse
+├── gpio/                       # GPIO-based export control (RPi5 only)
+│   ├── GpioConfig               # @ConfigMapping for frodo.gpio.*
+│   ├── GpioService              # FFM + ioctl, multi-pair GPIO control
+│   ├── GpioPairState            # Runtime state record (package-private)
+│   ├── GpioPairStatus           # Per-pair status snapshot (public)
+│   └── GpioStatus               # System + per-pair status (public)
 ├── health/                     # Health & monitoring
 │   ├── FrodoHealthCheck         # Application readiness
+│   ├── GpioHealthCheck          # GPIO pair readiness
+│   ├── GpioMetrics              # Micrometer gauges per GPIO pair
 │   ├── ModbusHealthCheck        # Modbus connection pool health
 │   ├── SunSpecHealthCheck       # SunSpec discovery cache health
 │   └── ModbusMetrics            # Micrometer gauges, counters, timers
@@ -134,6 +146,7 @@ at.or.reder.frodo/
 │   │   ├── MarketPriceEntity         # aWATTar hourly price records
 │   │   ├── ExportScheduleEntity      # Per-device export schedule windows
 │   │   ├── ExportBlockStrategy       # Strategy enum (LIMIT_ZERO, etc.)
+│   │   ├── GpioDeviceAssignmentEntity # GPIO pair ↔ device assignment
 │   │   └── PriceControlEntity        # Global price-controlled export flag
 │   ├── metrics/                 # Metrics metadata
 │   │   ├── MetricMetadataRegistry    # Registry of all scrapeable SunSpec fields
@@ -286,6 +299,13 @@ Commit format: `type(scope): description` with a body explaining the why.
 | `GET /api/devices/{id}/metrics/latest` | Latest values |
 | `GET /api/devices/{id}/metrics/status` | Scraping status |
 | `GET /api/metrics-docs` | Available metric field definitions |
+| `GET /api/gpio/status` | GPIO system + per-pair status |
+| `GET /api/gpio/pairs` | List configured GPIO pair names |
+| `PUT /api/gpio/pairs/{name}/output` | Manual output test override |
+| `DELETE /api/gpio/pairs/{name}/output` | Clear manual output override |
+| `GET /api/gpio/assignments` | List GPIO pair ↔ device assignments |
+| `PUT /api/gpio/assignments/{deviceId}` | Create/update GPIO assignment |
+| `DELETE /api/gpio/assignments/{deviceId}` | Remove GPIO assignment |
 | `GET /api/market-prices` | aWATTar AT market prices |
 | `POST /api/market-prices/refresh` | Force price refresh |
 | `GET /api/price-control` | Price-controlled export settings |

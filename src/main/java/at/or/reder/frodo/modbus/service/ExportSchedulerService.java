@@ -1,12 +1,15 @@
 package at.or.reder.frodo.modbus.service;
 
+import at.or.reder.frodo.gpio.GpioService;
 import at.or.reder.frodo.modbus.connection.DeviceAddress;
 import at.or.reder.frodo.modbus.entity.ExportBlockStrategy;
 import at.or.reder.frodo.modbus.entity.ExportScheduleEntity;
+import at.or.reder.frodo.modbus.entity.GpioDeviceAssignmentEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
 import at.or.reder.frodo.modbus.entity.PriceControlEntity;
 import at.or.reder.frodo.modbus.model.DeviceType;
 import at.or.reder.frodo.modbus.repository.ExportScheduleRepository;
+import at.or.reder.frodo.modbus.repository.GpioDeviceAssignmentRepository;
 import at.or.reder.frodo.modbus.repository.MarketPriceRepository;
 import at.or.reder.frodo.modbus.repository.ModbusDeviceRepository;
 import at.or.reder.frodo.modbus.repository.PriceControlRepository;
@@ -23,11 +26,13 @@ import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.io.IOException;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -119,6 +124,12 @@ public class ExportSchedulerService {
 
   @Inject
   SolarApiMetricsService solarApiMetricsService;
+
+  @Inject
+  GpioService gpioService;
+
+  @Inject
+  GpioDeviceAssignmentRepository gpioAssignmentRepository;
 
   @ConfigProperty(name = "quarkus.hibernate-orm.enabled", defaultValue = "true")
   boolean hibernateEnabled;
@@ -236,6 +247,10 @@ public class ExportSchedulerService {
       }
       // FIXED_LIMIT: constant limit; re-affirmation at 1-min cadence is sufficient
       if (schedule.strategy == ExportBlockStrategy.FIXED_LIMIT) {
+        continue;
+      }
+      // PRICE_CONTROLLED_GPIO: uses GPIO pins, not Modbus — skip Solar API recalculation
+      if (schedule.strategy == ExportBlockStrategy.PRICE_CONTROLLED_GPIO) {
         continue;
       }
 
@@ -482,6 +497,18 @@ public class ExportSchedulerService {
   // ========== Private ==========
 
   private void applyScheduleIfChanged(ExportScheduleEntity schedule, LocalTime now) {
+    // PRICE_CONTROLLED_GPIO uses GPIO pins instead of Modbus — evaluated every tick
+    if (schedule.strategy == ExportBlockStrategy.PRICE_CONTROLLED_GPIO) {
+      if (manuallyEnabled.contains(schedule.deviceId)) {
+        LOG.debugf(
+          "Skipping GPIO block for device %d: user has manually re-enabled export",
+          schedule.deviceId);
+        return;
+      }
+      applyPriceControlledGpioBlock(schedule);
+      return;
+    }
+
     // PRICE_CONTROLLED uses market price instead of a time window — evaluated every tick
     if (schedule.strategy == ExportBlockStrategy.PRICE_CONTROLLED) {
       if (manuallyEnabled.contains(schedule.deviceId)) {
@@ -754,6 +781,96 @@ public class ExportSchedulerService {
     String strategyLabel = String.format(
       "PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W", priceCt, Integer.valueOf(toleranceWatts));
     applyDynamicLimitWithTolerance(schedule.deviceId, device, toleranceWatts, strategyLabel);
+  }
+
+  /**
+   * Applies price-controlled export blocking using GPIO pins instead of Modbus.
+   *
+   * <p>Logic:</p>
+   * <ol>
+   *   <li>Load GPIO pair assignment for this device — if absent, fall back to Modbus</li>
+   *   <li>Check pair availability — if unavailable, fall back to Modbus</li>
+   *   <li>Check external override switch — if active, skip all control</li>
+   *   <li>Fetch market price, determine if export should be blocked</li>
+   *   <li>Call {@code gpioService.setBlockState()} (no-op if manual override active)</li>
+   * </ol>
+   */
+  private void applyPriceControlledGpioBlock(ExportScheduleEntity schedule) {
+    ModbusDeviceEntity device = loadDevice(schedule.deviceId);
+    if (device == null || !device.enabled) {
+      LOG.debugf("Skipping GPIO block for device %d: not found or disabled", schedule.deviceId);
+      return;
+    }
+
+    // Resolve GPIO pair assignment
+    Optional<GpioDeviceAssignmentEntity> assignmentOpt = loadGpioAssignment(schedule.deviceId);
+    if (assignmentOpt.isEmpty()) {
+      LOG.warnf(
+        "Device %d (%s) uses PRICE_CONTROLLED_GPIO but has no GPIO pair assigned "
+          + "— falling back to Modbus throttling",
+        schedule.deviceId, device.name);
+      applyPriceControlledBlock(schedule);
+      return;
+    }
+    String pairName = assignmentOpt.get().gpioPairName;
+
+    if (!gpioService.isPairAvailable(pairName)) {
+      LOG.warnf(
+        "GPIO pair '%s' for device %d (%s) is unavailable "
+          + "— falling back to Modbus throttling",
+        pairName, schedule.deviceId, device.name);
+      applyPriceControlledBlock(schedule);
+      return;
+    }
+
+    // Check external override switch
+    try {
+      if (gpioService.isExternalModeActive(pairName)) {
+        LOG.infof(
+          "External override active on pair '%s' for device %d (%s) "
+            + "— skipping all control (GPIO + Modbus)",
+          pairName, schedule.deviceId, device.name);
+        lastApplied.put(schedule.deviceId, null);
+        return;
+      }
+    } catch (IOException e) {
+      LOG.errorf(e, "Failed to read GPIO input for pair '%s': %s — treating external mode as inactive",
+        pairName, e.getMessage());
+      // Continue — treat external mode as inactive and proceed
+    }
+
+    // Fetch price
+    var priceOpt = marketPriceRepository.findCurrent();
+    if (priceOpt.isEmpty()) {
+      LOG.warnf("No market price available for device %d (%s) — skipping GPIO block",
+        schedule.deviceId, device.name);
+      return;
+    }
+
+    double priceCt = priceOpt.get().priceCt;
+    boolean shouldBlock = shouldBlockForPrice(priceCt);
+
+    try {
+      gpioService.setBlockState(pairName, shouldBlock);
+      lastApplied.put(schedule.deviceId, shouldBlock);
+      LOG.infof(
+        "GPIO applied: pair='%s' device=%d (%s) export=%s price=%.4f ct/kWh",
+        pairName, schedule.deviceId, device.name,
+        shouldBlock ? "BLOCKED" : "ENABLED", priceCt);
+    } catch (IOException e) {
+      LOG.errorf(e,
+        "GPIO setBlockState failed for pair '%s' device %d (%s): %s — falling back to Modbus",
+        pairName, schedule.deviceId, device.name, e.getMessage());
+      applyPriceControlledBlock(schedule); // fallback
+    }
+  }
+
+  /**
+   * Loads the GPIO pair assignment for a device in a short read-only transaction.
+   */
+  @Transactional
+  Optional<GpioDeviceAssignmentEntity> loadGpioAssignment(Long deviceId) {
+    return gpioAssignmentRepository.findByDeviceId(deviceId);
   }
 
   /**

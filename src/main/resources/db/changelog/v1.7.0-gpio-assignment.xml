@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    GPIO pair-to-device assignment table.
+
+    Maps a GPIO pair name (from frodo.gpio.pairs.*) to a Modbus device.
+    Used by the PRICE_CONTROLLED_GPIO export block strategy to determine
+    which GPIO pair controls which device's external relay.
+
+    Both device_id and gpio_pair_name are unique: one device maps to
+    exactly one pair, and each pair is used by at most one device.
+  -->
+
+  <changeSet id="24" author="frodo">
+    <comment>Create FroGpioAssignment table for GPIO pair to device mapping</comment>
+
+    <createTable tableName="FroGpioAssignment">
+      <column name="id" type="BIGINT">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="device_id" type="BIGINT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="gpio_pair_name" type="VARCHAR(64)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <createSequence sequenceName="FroGpioAssignment_SEQ" startValue="1" incrementBy="50"/>
+
+    <addUniqueConstraint
+      tableName="FroGpioAssignment"
+      columnNames="device_id"
+      constraintName="uk_FroGpioAssignment_device"/>
+
+    <addUniqueConstraint
+      tableName="FroGpioAssignment"
+      columnNames="gpio_pair_name"
+      constraintName="uk_FroGpioAssignment_pair"/>
+
+    <addForeignKeyConstraint
+      baseTableName="FroGpioAssignment"
+      baseColumnNames="device_id"
+      referencedTableName="FroModbusDevice"
+      referencedColumnNames="id"
+      constraintName="fk_FroGpioAssignment_device"
+      onDelete="CASCADE"/>
+  </changeSet>
+
+</databaseChangeLog>
