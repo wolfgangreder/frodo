@@ -26,10 +26,12 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -101,6 +103,17 @@ public class MetricsScrapingService {
   private final Map<Long, Map<String, Meter.Id>> registeredGauges = new ConcurrentHashMap<>();
 
   /**
+   * Per-minute accumulator for sub-minute scrape intervals.
+   *
+   * <p>When {@code scrapeIntervalSeconds < 60}, scraped values are collected here
+   * instead of being written to the DB immediately. On the first scrape in a new
+   * minute, the previous minute's accumulated values are averaged and persisted.</p>
+   *
+   * <p>Structure: deviceId → (modelId_fieldName → accumulator for current minute).</p>
+   */
+  private final Map<Long, Map<String, FieldAccumulator>> minuteAccumulators = new ConcurrentHashMap<>();
+
+  /**
    * Flag to prevent scrape tasks from executing during shutdown.
    */
   private volatile boolean shuttingDown = false;
@@ -145,6 +158,7 @@ public class MetricsScrapingService {
     }
     registeredGauges.clear();
     gaugeValues.clear();
+    minuteAccumulators.clear();
     if (totalRemoved > 0) {
       LOG.debugf("Removed %d Micrometer gauge(s) during shutdown", totalRemoved);
     }
@@ -234,6 +248,11 @@ public class MetricsScrapingService {
 
     // Clean up gauge value references
     gaugeValues.remove(deviceId);
+
+    // Discard any pending minute-accumulator state for this device.
+    // Incomplete minute windows are not persisted — they would represent
+    // a partial average and could distort the time-series.
+    minuteAccumulators.remove(deviceId);
   }
 
   /**
@@ -493,16 +512,36 @@ public class MetricsScrapingService {
 
   /**
    * Processes a successful model read: updates gauges and optionally persists data.
+   *
+   * <p>When {@code scrapeIntervalSeconds < 60}, numeric values are accumulated
+   * in a per-minute buffer instead of being written to the database immediately.
+   * On the first scrape that falls into a new calendar minute, the previous
+   * minute's accumulated values are averaged and flushed as a single DB row.
+   * This limits write amplification while preserving Prometheus gauge fidelity.</p>
+   *
+   * <p>When {@code scrapeIntervalSeconds >= 60}, data is persisted immediately
+   * on every scrape (existing behaviour — at most one write per minute anyway).</p>
+   *
+   * <p>String-typed values cannot be averaged; the last observed value within
+   * the minute is persisted instead.</p>
+   *
+   * <p>Incomplete minute windows (e.g. at shutdown or config change) are
+   * discarded — no partial averages are written.</p>
    */
   private void processModelReadSuccess(MetricsConfigEntity config, Long deviceId, int modelId,
                                         List<MetricsParameterEntity> params,
                                         SunSpecModelData modelData, Instant scrapeTime) {
     List<MetricsDataEntity> dataPoints = new ArrayList<>();
+    boolean useAccumulator = config.storeToDatabase && config.scrapeIntervalSeconds < 60;
+    Instant currentMinute = useAccumulator ? scrapeTime.truncatedTo(ChronoUnit.MINUTES) : null;
+    Map<String, FieldAccumulator> deviceAccumulators = useAccumulator
+      ? minuteAccumulators.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>())
+      : null;
 
     for (MetricsParameterEntity param : params) {
       Object value = modelData.values().get(param.fieldName);
 
-      // Update Prometheus gauge
+      // Update Prometheus gauge (always, regardless of DB interval)
       if (value instanceof Number numValue) {
         String fieldKey = modelId + "_" + param.fieldName;
         Map<String, AtomicReference<Double>> deviceGauges = gaugeValues.get(deviceId);
@@ -514,22 +553,44 @@ public class MetricsScrapingService {
         }
       }
 
-      // Prepare DB persistence if enabled
       if (config.storeToDatabase && value != null) {
-        MetricsDataEntity dataPoint = new MetricsDataEntity();
-        dataPoint.device = config.device;
-        dataPoint.parameter = param;
-        dataPoint.recordedAt = scrapeTime;
-        dataPoint.sunspecModelId = modelId;
-        dataPoint.fieldName = param.fieldName;
+        if (useAccumulator) {
+          // Sub-minute interval: accumulate values within the current calendar minute.
+          // When the minute changes, flush the previous minute's average to the DB.
+          String accKey = modelId + "_" + param.fieldName;
+          FieldAccumulator acc = deviceAccumulators.get(accKey);
 
-        if (value instanceof Number numValue) {
-          dataPoint.valueNumeric = numValue.doubleValue();
+          if (acc != null && !acc.minuteBucket.equals(currentMinute)) {
+            // Minute boundary crossed — flush previous bucket
+            MetricsDataEntity flushed = buildFromAccumulator(acc, config, param, modelId);
+            if (flushed != null) {
+              dataPoints.add(flushed);
+            }
+            acc = null;
+          }
+
+          if (acc == null) {
+            acc = new FieldAccumulator(currentMinute);
+            deviceAccumulators.put(accKey, acc);
+          }
+          acc.add(value);
         } else {
-          dataPoint.valueString = String.valueOf(value);
-        }
+          // Interval >= 60 s: persist every scrape directly (no buffering needed)
+          MetricsDataEntity dataPoint = new MetricsDataEntity();
+          dataPoint.device = config.device;
+          dataPoint.parameter = param;
+          dataPoint.recordedAt = scrapeTime;
+          dataPoint.sunspecModelId = modelId;
+          dataPoint.fieldName = param.fieldName;
 
-        dataPoints.add(dataPoint);
+          if (value instanceof Number numValue) {
+            dataPoint.valueNumeric = numValue.doubleValue();
+          } else {
+            dataPoint.valueString = String.valueOf(value);
+          }
+
+          dataPoints.add(dataPoint);
+        }
       }
     }
 
@@ -541,6 +602,42 @@ public class MetricsScrapingService {
         LOG.warnf(e, "Failed to persist metrics data for device %d model %d", deviceId, modelId);
       }
     }
+  }
+
+  /**
+   * Builds a {@link MetricsDataEntity} from a completed {@link FieldAccumulator}.
+   *
+   * <p>Numeric values are averaged over all samples collected during the minute.
+   * String values use the last observed value. Returns {@code null} when the
+   * accumulator holds no data.</p>
+   *
+   * @param acc     the accumulator for a completed minute bucket
+   * @param config  the metrics config (provides device reference)
+   * @param param   the parameter entity
+   * @param modelId SunSpec model ID (denormalized on the entity)
+   * @return a ready-to-persist entity, or {@code null} if the accumulator is empty
+   */
+  private MetricsDataEntity buildFromAccumulator(FieldAccumulator acc, MetricsConfigEntity config,
+                                                  MetricsParameterEntity param, int modelId) {
+    if (!acc.hasData()) {
+      return null;
+    }
+    MetricsDataEntity dp = new MetricsDataEntity();
+    dp.device = config.device;
+    dp.parameter = param;
+    dp.recordedAt = acc.minuteBucket;
+    dp.sunspecModelId = modelId;
+    dp.fieldName = param.fieldName;
+
+    OptionalDouble avg = acc.average();
+    if (avg.isPresent()) {
+      dp.valueNumeric = avg.getAsDouble();
+    } else if (acc.lastString != null) {
+      dp.valueString = acc.lastString;
+    } else {
+      return null;
+    }
+    return dp;
   }
 
   /**
@@ -604,5 +701,56 @@ public class MetricsScrapingService {
     configRepository.update(
       "lastScrapeTime = ?1, lastScrapeStatus = ?2, lastErrorMessage = ?3 where id = ?4",
       Instant.now(), status, errorMessage, configId);
+  }
+
+  // ========== Inner Types ==========
+
+  /**
+   * Accumulates scraped values for a single field within one calendar minute.
+   *
+   * <p>Used when the scrape interval is shorter than one minute: instead of
+   * writing every sample to the database, values are collected here and
+   * averaged at the end of each minute before being persisted.</p>
+   *
+   * <p>Package-private to allow direct unit-testing without CDI.</p>
+   */
+  static class FieldAccumulator {
+
+    /** Start of the calendar minute this accumulator covers. */
+    final Instant minuteBucket;
+
+    /** All numeric samples collected within this minute. */
+    private final List<Double> numerics = new ArrayList<>();
+
+    /** Last non-null string value observed (strings cannot be averaged). */
+    String lastString;
+
+    FieldAccumulator(Instant minuteBucket) {
+      this.minuteBucket = minuteBucket;
+    }
+
+    /** Adds a scraped value to the accumulator. */
+    void add(Object value) {
+      if (value instanceof Number n) {
+        numerics.add(n.doubleValue());
+      } else if (value != null) {
+        lastString = String.valueOf(value);
+      }
+    }
+
+    /** Returns true when at least one value has been recorded. */
+    boolean hasData() {
+      return !numerics.isEmpty() || lastString != null;
+    }
+
+    /** Returns the arithmetic mean of all numeric samples, or empty if none. */
+    OptionalDouble average() {
+      return numerics.stream().mapToDouble(Double::doubleValue).average();
+    }
+
+    /** Sample count (for logging / testing). */
+    int sampleCount() {
+      return numerics.size();
+    }
   }
 }
