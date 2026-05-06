@@ -49,3 +49,13 @@ export {
   useSolarApiStatus,
   solarApiKeys,
 } from './useSolarApi';
+
+export {
+  useGpioStatus,
+  useGpioAssignments,
+  useSetManualOutput,
+  useClearManualOutput,
+  useSetGpioAssignment,
+  useDeleteGpioAssignment,
+  gpioKeys,
+} from './useGpio';

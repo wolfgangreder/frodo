@@ -4,6 +4,7 @@ import { AppShell } from './components/layout';
 import {
   DashboardPage,
   DevicesPage,
+  GpioPage,
   MetricsConfigPage,
   MetricsDocsPage,
   GrafanaPage,
@@ -36,6 +37,9 @@ function App() {
 
         {/* Grafana dashboards */}
         <Route path="grafana" element={<GrafanaPage />} />
+
+        {/* GPIO Export Control */}
+        <Route path="gpio" element={<GpioPage />} />
 
         {/* Solar API */}
         <Route path="solar-api" element={<SolarApiPage />} />

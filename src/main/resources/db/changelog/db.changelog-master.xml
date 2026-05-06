@@ -13,5 +13,6 @@
   <include file="db/changelog/v1.4.0-market-prices.xml"/>
   <include file="db/changelog/v1.5.0-price-control.xml"/>
   <include file="db/changelog/v1.6.0-price-ct-kwh.xml"/>
+  <include file="db/changelog/v1.7.0-gpio-assignment.xml"/>
 
 </databaseChangeLog>

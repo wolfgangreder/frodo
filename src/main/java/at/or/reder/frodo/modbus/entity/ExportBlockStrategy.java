@@ -50,5 +50,30 @@ public enum ExportBlockStrategy {
    * <p>Requires the market price scheduler to be running and fetching
    * prices from aWATTar AT.</p>
    */
-  PRICE_CONTROLLED
+  PRICE_CONTROLLED,
+
+  /**
+   * GPIO-based price-controlled export (RPi5 only).
+   *
+   * <p>When the market price is negative, sets the GPIO output pin of the
+   * configured pair to the block level, controlling an external relay/switch
+   * instead of writing Modbus WMaxLim registers.  Monitors the paired GPIO
+   * input pin to detect when an external override switch has taken control —
+   * in that case, Modbus throttling is completely disabled (inverter runs at
+   * 100%) and the system only reports state.</p>
+   *
+   * <p>Uses JDK Foreign Function & Memory API with Linux GPIO character
+   * device ioctl for direct GPIO access via /dev/gpiochip* (zero external
+   * dependencies).</p>
+   *
+   * <p>Requires {@code frodo.gpio.enabled=true}, a Raspberry Pi 5 with
+   * Linux kernel 5.10+ (GPIO v2 ABI), and a GPIO pair assigned to the
+   * device in the database.  Falls back to {@code PRICE_CONTROLLED}
+   * (Modbus throttling) if GPIO is unavailable, initialisation fails, or
+   * no pair is assigned to the device.</p>
+   *
+   * <p>Manual grid supply disable via REST API is always honoured regardless
+   * of external switch state.</p>
+   */
+  PRICE_CONTROLLED_GPIO
 }

@@ -1,6 +1,7 @@
 // API Services
 export { default as apiClient } from './apiClient';
 export { default as deviceApi } from './deviceApi';
+export { default as gpioApi } from './gpioApi';
 export { default as metricsApi } from './metricsApi';
 export { default as metricsDocsApi } from './metricsDocsApi';
 export { default as priceControlApi } from './priceControlApi';

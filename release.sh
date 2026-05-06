@@ -229,7 +229,7 @@ docker buildx use "${BUILDER_NAME}"
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.push=true \
   -Dquarkus.docker.buildx.platform=linux/amd64,linux/arm64 \
-  "-Dquarkus.container-image.additional-tags=latest"
+  "-Dquarkus.container-image.additional-tags=latest,${RELEASE_VERSION}"
 
 # ---------------------------------------------------------------------------
 # Done
