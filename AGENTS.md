@@ -299,6 +299,7 @@ Commit format: `type(scope): description` with a body explaining the why.
 | `GET /api/devices/{id}/metrics/latest` | Latest values |
 | `GET /api/devices/{id}/metrics/status` | Scraping status |
 | `GET /api/metrics-docs` | Available metric field definitions |
+| `GET /api/metrics-docs/aggregation-modes` | Supported aggregation modes with descriptions |
 | `GET /api/gpio/status` | GPIO system + per-pair status |
 | `GET /api/gpio/pairs` | List configured GPIO pair names |
 | `PUT /api/gpio/pairs/{name}/output` | Manual output test override |

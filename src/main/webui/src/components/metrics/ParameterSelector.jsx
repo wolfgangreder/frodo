@@ -9,6 +9,7 @@ import {
   Checkbox,
   Chip,
   FormControlLabel,
+  MenuItem,
   TextField,
   Typography,
   InputAdornment,
@@ -20,6 +21,18 @@ import SelectAllIcon from '@mui/icons-material/SelectAll';
 import DeselectIcon from '@mui/icons-material/Deselect';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
+const AGGREGATION_MODES = [
+  { value: 'MINUTE_AVERAGE', label: '1 min avg' },
+  { value: 'MINUTE_CURRENT', label: '1 min current' },
+  { value: 'MINUTE_DIFF', label: '1 min diff' },
+  { value: 'HOUR_AVERAGE', label: '1 hr avg' },
+  { value: 'HOUR_CURRENT', label: '1 hr current' },
+  { value: 'HOUR_DIFF', label: '1 hr diff' },
+  { value: 'DAY_AVERAGE', label: '1 day avg' },
+  { value: 'DAY_CURRENT', label: '1 day current' },
+  { value: 'DAY_DIFF', label: '1 day diff' },
+];
+
 /**
  * ParameterSelector - grouped parameter selection with search and select all/deselect all
  *
@@ -29,8 +42,20 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
  * @param {Function} props.onSelectionChange - Callback when selection changes
  * @param {boolean} props.disabled - Whether the selector is disabled
  * @param {boolean} props.discoveryBased - Whether parameters came from live device discovery
+ * @param {boolean} props.showModeSelector - Show aggregation mode dropdown per selected parameter
+ * @param {Object} props.parameterModes - Map of paramKey → aggregation mode string
+ * @param {Function} props.onModeChange - Callback(key, mode) when mode changes
  */
-function ParameterSelector({ availableParameters = [], selectedParameters = [], onSelectionChange, disabled = false, discoveryBased = true }) {
+function ParameterSelector({
+  availableParameters = [],
+  selectedParameters = [],
+  onSelectionChange,
+  disabled = false,
+  discoveryBased = true,
+  showModeSelector = false,
+  parameterModes = {},
+  onModeChange = () => {},
+}) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedModels, setExpandedModels] = useState({});
 
@@ -251,7 +276,7 @@ function ParameterSelector({ availableParameters = [], selectedParameters = [], 
                   const isChecked = selectedSet.has(key);
 
                   return (
-                    <Box key={key} sx={{ pl: 1 }}>
+                    <Box key={key} sx={{ pl: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                       <FormControlLabel
                         control={
                           <Checkbox
@@ -287,8 +312,23 @@ function ParameterSelector({ availableParameters = [], selectedParameters = [], 
                             )}
                           </Box>
                         }
-                        sx={{ width: '100%' }}
+                        sx={{ flexGrow: 1 }}
                       />
+                      {showModeSelector && isChecked && (
+                        <TextField
+                          select
+                          size="small"
+                          label="Aggregation"
+                          value={parameterModes[key] || 'MINUTE_AVERAGE'}
+                          onChange={(e) => onModeChange(key, e.target.value)}
+                          disabled={disabled}
+                          sx={{ minWidth: 140, mt: 0.5, flexShrink: 0 }}
+                        >
+                          {AGGREGATION_MODES.map((m) => (
+                            <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+                          ))}
+                        </TextField>
+                      )}
                     </Box>
                   );
                 })}

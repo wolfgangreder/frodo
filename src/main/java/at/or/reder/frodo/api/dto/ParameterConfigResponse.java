@@ -1,5 +1,6 @@
 package at.or.reder.frodo.api.dto;
 
+import at.or.reder.frodo.modbus.entity.AggregationMode;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
 
 /**
@@ -10,13 +11,15 @@ import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
  * @param fieldName        field name within the model
  * @param enabled          whether this parameter is enabled
  * @param customMetricName custom Prometheus metric name (may be null)
+ * @param aggregationMode  how scraped values are reduced before DB writes
  */
 public record ParameterConfigResponse(
   Long id,
   Integer sunspecModelId,
   String fieldName,
   Boolean enabled,
-  String customMetricName
+  String customMetricName,
+  AggregationMode aggregationMode
 ) {
 
   /**
@@ -31,7 +34,8 @@ public record ParameterConfigResponse(
       entity.sunspecModelId,
       entity.fieldName,
       entity.enabled,
-      entity.customMetricName
+      entity.customMetricName,
+      entity.aggregationMode
     );
   }
 }

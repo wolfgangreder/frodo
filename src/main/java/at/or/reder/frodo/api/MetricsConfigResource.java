@@ -10,6 +10,7 @@ import at.or.reder.frodo.api.dto.MetricsStatusResponse;
 import at.or.reder.frodo.api.dto.ParameterConfigRequest;
 import at.or.reder.frodo.api.exception.DeviceNotFoundException;
 import at.or.reder.frodo.modbus.connection.DeviceAddress;
+import at.or.reder.frodo.modbus.entity.AggregationMode;
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
@@ -409,6 +410,9 @@ public class MetricsConfigResource {
         // Update in-place — preserves the database ID
         existing.enabled = paramReq.enabled();
         existing.customMetricName = paramReq.customMetricName();
+        existing.aggregationMode = paramReq.aggregationMode() != null
+          ? paramReq.aggregationMode()
+          : AggregationMode.MINUTE_AVERAGE;
       } else {
         // New parameter — add it
         MetricsParameterEntity param = new MetricsParameterEntity();
@@ -417,6 +421,9 @@ public class MetricsConfigResource {
         param.fieldName = paramReq.fieldName();
         param.enabled = paramReq.enabled();
         param.customMetricName = paramReq.customMetricName();
+        param.aggregationMode = paramReq.aggregationMode() != null
+          ? paramReq.aggregationMode()
+          : AggregationMode.MINUTE_AVERAGE;
         config.parameters.add(param);
       }
     }

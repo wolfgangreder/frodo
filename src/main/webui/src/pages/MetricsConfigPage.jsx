@@ -57,6 +57,7 @@ function MetricsConfigPage() {
   const [storeToDatabase, setStoreToDatabase] = useState(true);
   const [retentionDays, setRetentionDays] = useState(365);
   const [selectedParameters, setSelectedParameters] = useState([]);
+  const [parameterModes, setParameterModes] = useState({});
   const [isDirty, setIsDirty] = useState(false);
 
   // Initialize form from config
@@ -67,13 +68,16 @@ function MetricsConfigPage() {
       setStoreToDatabase(config.storeToDatabase ?? true);
       setRetentionDays(config.retentionDays ?? 365);
 
-      // Build selected parameter keys from config
-      if (config.parameters && config.parameters.length > 0) {
-        const keys = config.parameters
-          .filter((p) => p.enabled)
-          .map((p) => `${p.sunspecModelId}_${p.fieldName}`);
-        setSelectedParameters(keys);
-      }
+      // Build selected parameter keys and mode map from config
+      const enabledParams = (config.parameters || []).filter((p) => p.enabled);
+      const keys = enabledParams.map((p) => `${p.sunspecModelId}_${p.fieldName}`);
+      setSelectedParameters(keys);
+
+      const modes = {};
+      enabledParams.forEach((p) => {
+        modes[`${p.sunspecModelId}_${p.fieldName}`] = p.aggregationMode || 'MINUTE_AVERAGE';
+      });
+      setParameterModes(modes);
       setIsDirty(false);
     }
   }, [config]);
@@ -104,6 +108,11 @@ function MetricsConfigPage() {
     setIsDirty(true);
   }, []);
 
+  const handleModeChange = useCallback((key, mode) => {
+    setParameterModes((prev) => ({ ...prev, [key]: mode }));
+    setIsDirty(true);
+  }, []);
+
   // Build parameters array for API request
   const buildParametersPayload = useCallback(() => {
     return selectedParameters.map((key) => {
@@ -114,9 +123,10 @@ function MetricsConfigPage() {
         fieldName,
         enabled: true,
         customMetricName: null,
+        aggregationMode: parameterModes[key] || 'MINUTE_AVERAGE',
       };
     });
-  }, [selectedParameters]);
+  }, [selectedParameters, parameterModes]);
 
   // Save handler
   const handleSave = useCallback(async () => {
@@ -299,6 +309,9 @@ function MetricsConfigPage() {
               onSelectionChange={handleParameterSelectionChange}
               disabled={false}
               discoveryBased={isDiscoveryBased}
+              showModeSelector={storeToDatabase && enabled}
+              parameterModes={parameterModes}
+              onModeChange={handleModeChange}
             />
           )}
         </CardContent>
