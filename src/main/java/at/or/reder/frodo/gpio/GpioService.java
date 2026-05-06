@@ -280,7 +280,7 @@ public class GpioService {
       if (state == null) {
         pairStatusList.add(new GpioPairStatus(
           name, false, cfg.outputPin(), null, false,
-          cfg.inputPin(), null, false, null,
+          cfg.inputPin(), cfg.inputBias(), null, false, null,
           "Pair initialisation failed"
         ));
         continue;
@@ -311,7 +311,7 @@ public class GpioService {
         name, true,
         state.outputPin(), outState,
         manualOverrides.containsKey(name),
-        state.inputPin(), inState, extActive,
+        state.inputPin(), cfg.inputBias(), inState, extActive,
         assignedDevice, null
       ));
     }

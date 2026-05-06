@@ -10,6 +10,7 @@ public record GpioPairStatusDto(
   Boolean outputPinState,
   boolean outputManualOverride,
   int inputPin,
+  String inputBias,
   Boolean inputPinState,
   boolean externalModeActive,
   Long assignedDeviceId,

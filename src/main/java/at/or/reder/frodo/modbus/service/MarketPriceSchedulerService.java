@@ -53,6 +53,9 @@ public class MarketPriceSchedulerService {
   @Inject
   MarketPriceRepository marketPriceRepository;
 
+  @ConfigProperty(name = "quarkus.datasource.active", defaultValue = "true")
+  boolean datasourceActive;
+
   @ConfigProperty(name = "frodo.awattar.enabled", defaultValue = "false")
   boolean awattarEnabled;
 
@@ -69,6 +72,10 @@ public class MarketPriceSchedulerService {
   void onStart(@Observes StartupEvent event) {
     if (!awattarEnabled) {
       LOG.debug("Skipping startup market price fetch: aWATTar disabled");
+      return;
+    }
+    if (!datasourceActive) {
+      LOG.debug("Skipping startup market price fetch: datasource inactive");
       return;
     }
     try {

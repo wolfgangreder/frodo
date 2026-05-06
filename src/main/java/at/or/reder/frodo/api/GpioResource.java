@@ -211,7 +211,7 @@ public class GpioResource {
     List<GpioPairStatusDto> pairs = status.pairs().stream()
       .map(p -> new GpioPairStatusDto(
         p.name(), p.available(), p.outputPin(), p.outputPinState(),
-        p.outputManualOverride(), p.inputPin(), p.inputPinState(),
+        p.outputManualOverride(), p.inputPin(), p.inputBias(), p.inputPinState(),
         p.externalModeActive(), p.assignedDeviceId(), p.errorMessage()))
       .toList();
     return new GpioStatusDto(

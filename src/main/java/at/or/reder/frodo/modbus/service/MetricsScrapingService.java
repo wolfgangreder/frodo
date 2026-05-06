@@ -23,6 +23,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
@@ -75,6 +76,9 @@ public class MetricsScrapingService {
   @Inject
   MetricMetadataRegistry metadataRegistry;
 
+  @ConfigProperty(name = "quarkus.datasource.active", defaultValue = "true")
+  boolean datasourceActive;
+
   /**
    * Thread pool for scheduled scraping tasks.
    */
@@ -122,6 +126,10 @@ public class MetricsScrapingService {
    * On application startup, initialize scraping for all enabled configs.
    */
   void onStart(@Observes StartupEvent event) {
+    if (!datasourceActive) {
+      LOG.debug("Skipping metrics scraping initialization: datasource inactive");
+      return;
+    }
     LOG.info("Initializing metrics scraping service");
     try {
       List<MetricsConfigEntity> enabledConfigs = configRepository.findAllEnabled();

@@ -148,6 +148,14 @@ function GpioPairCard({ pair, devices, onAssign, onUnassign }) {
                   variant="outlined"
                 />
               )}
+              {pair.inputBias && (
+                <Chip
+                  label={pair.inputBias.replace('_', ' ')}
+                  size="small"
+                  variant="outlined"
+                  color="default"
+                />
+              )}
             </Stack>
           </Box>
           <Box>

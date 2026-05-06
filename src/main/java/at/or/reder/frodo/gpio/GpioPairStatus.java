@@ -12,6 +12,7 @@ package at.or.reder.frodo.gpio;
  * @param outputPinState      current output pin level ({@code null} if unavailable)
  * @param outputManualOverride {@code true} when a manual test override is active
  * @param inputPin            BCM pin number of the input line
+ * @param inputBias           configured input bias ("PULL_UP", "PULL_DOWN", or "DISABLE")
  * @param inputPinState       current input pin level ({@code null} if unavailable)
  * @param externalModeActive  derived: input pin is at its active level
  * @param assignedDeviceId    device this pair is currently assigned to ({@code null} = unassigned)
@@ -24,6 +25,7 @@ public record GpioPairStatus(
   Boolean outputPinState,
   boolean outputManualOverride,
   int inputPin,
+  String inputBias,
   Boolean inputPinState,
   boolean externalModeActive,
   Long assignedDeviceId,

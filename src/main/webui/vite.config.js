@@ -1,17 +1,17 @@
-import { defineConfig, transformWithEsbuild } from 'vite';
+import { defineConfig, transformWithOxc } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [
     // CRA used .js for JSX; Vite/Rollup only parse JSX in .jsx by default.
-    // This pre-plugin runs esbuild with the jsx loader on every .js file under
+    // This pre-plugin runs oxc with the jsx loader on every .js file under
     // src/ so Rollup sees valid JS before any other transform runs.
     {
       name: 'treat-js-files-as-jsx',
       enforce: 'pre',
       async transform(code, id) {
         if (!id.match(/src\/.*\.js$/)) return null;
-        return transformWithEsbuild(code, id, { loader: 'jsx' });
+        return transformWithOxc(code, id, { lang: 'jsx' });
       },
     },
     react(),

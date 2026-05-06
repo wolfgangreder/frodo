@@ -34,7 +34,7 @@
       </column>
     </createTable>
 
-    <createSequence sequenceName="FroGpioAssignment_SEQ" startValue="1" incrementBy="50"/>
+    <createSequence sequenceName="FroGpioAssignment_SEQ"/>
 
     <addUniqueConstraint
       tableName="FroGpioAssignment"
