@@ -1,7 +1,7 @@
 package at.or.reder.frodo.api;
 
+import at.or.reder.frodo.modbus.entity.AggregationMode;
 import at.or.reder.frodo.modbus.metrics.MetricMetadata;
-import at.or.reder.frodo.modbus.metrics.MetricMetadata.FieldMapping;
 import at.or.reder.frodo.modbus.metrics.MetricMetadataRegistry;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -47,6 +48,26 @@ public class MetricsDocsResource {
     return new MetricsDocsResponse(docs, metadataRegistry.isLoaded());
   }
 
+  /**
+   * Returns all supported aggregation modes with descriptions and disk-usage estimates.
+   */
+  @GET
+  @Path("/aggregation-modes")
+  @Operation(
+    summary = "Get supported aggregation modes",
+    description = "Returns all aggregation modes with description, window size, and estimated rows/year per parameter"
+  )
+  public List<AggregationModeInfo> getAggregationModes() {
+    return Arrays.stream(AggregationMode.values())
+      .map(mode -> new AggregationModeInfo(
+        mode.name(),
+        mode.description(),
+        mode.windowSeconds(),
+        mode.estimatedRowsPerYear()
+      ))
+      .toList();
+  }
+
   // ========== Response Records ==========
 
   public record MetricsDocsResponse(
@@ -69,6 +90,21 @@ public class MetricsDocsResource {
     List<Integer> modelIds,
     String field,
     Map<String, String> tags
+  ) {}
+
+  /**
+   * Information record for a single aggregation mode.
+   *
+   * @param name                 enum constant name (e.g. {@code HOUR_AVERAGE})
+   * @param description          human-readable description
+   * @param windowSeconds        window duration in seconds (60, 3600, or 86400)
+   * @param estimatedRowsPerYear estimated DB rows per year per parameter at 30 s scrape interval
+   */
+  public record AggregationModeInfo(
+    String name,
+    String description,
+    long windowSeconds,
+    long estimatedRowsPerYear
   ) {}
 
   // ========== Mapping ==========

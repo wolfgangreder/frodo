@@ -102,3 +102,9 @@ tasks.register('scanSecrets', Exec) {
 tasks.named('build') {
     dependsOn scanSecrets
 }
+
+// GpioService uses java.lang.foreign.Linker (FFM API) from an unnamed module.
+// Pass --enable-native-access=ALL-UNNAMED so the JVM suppresses the restricted-method warning.
+quarkusDev {
+    jvmArgs = ['--enable-native-access=ALL-UNNAMED']
+}

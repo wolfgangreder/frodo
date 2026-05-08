@@ -10,6 +10,7 @@ import at.or.reder.frodo.api.dto.MetricsStatusResponse;
 import at.or.reder.frodo.api.dto.ParameterConfigRequest;
 import at.or.reder.frodo.api.exception.DeviceNotFoundException;
 import at.or.reder.frodo.modbus.connection.DeviceAddress;
+import at.or.reder.frodo.modbus.entity.AggregationMode;
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
 import at.or.reder.frodo.modbus.entity.ModbusDeviceEntity;
@@ -26,6 +27,8 @@ import at.or.reder.frodo.modbus.sunspec.SunSpecModelBlock;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelDefinition;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelRegistry;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
+import at.or.reder.frodo.solarapi.SolarApiFields;
+import at.or.reder.frodo.solarapi.SolarApiMetricsService;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -39,6 +42,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
@@ -85,6 +89,12 @@ public class MetricsConfigResource {
 
   @Inject
   MetricMetadataRegistry metadataRegistry;
+
+  @Inject
+  SolarApiMetricsService solarApiMetricsService;
+
+  @ConfigProperty(name = "frodo.solar-api.enabled", defaultValue = "false")
+  boolean solarApiEnabled;
 
   /**
    * Gets the metrics configuration for a device.
@@ -214,6 +224,9 @@ public class MetricsConfigResource {
         }
       }
 
+      if (solarApiEnabled) {
+        params.addAll(buildSolarApiParameters());
+      }
       return new AvailableParametersResponse(deviceId, params, true);
     } catch (Exception error) {
       LOG.warnf("SunSpec discovery failed for device %d, falling back to static registry: %s",
@@ -346,7 +359,32 @@ public class MetricsConfigResource {
       }
     }
 
-    return new AvailableParametersResponse(deviceId, params, false);  }
+    if (solarApiEnabled) {
+      params.addAll(buildSolarApiParameters());
+    }
+
+    return new AvailableParametersResponse(deviceId, params, false);
+  }
+
+  /**
+   * Builds the Solar API site-level parameter entries for the available-parameters response.
+   *
+   * <p>These appear alongside SunSpec parameters in the metrics configuration UI.
+   * They are always included when {@code frodo.solar-api.enabled=true}, regardless of
+   * whether SunSpec discovery succeeded.</p>
+   */
+  private List<AvailableParameter> buildSolarApiParameters() {
+    return SolarApiFields.SITE_FIELDS.stream()
+      .map(f -> new AvailableParameter(
+        SunSpecConstants.MODEL_ID_SOLAR_API,
+        SunSpecConstants.modelName(SunSpecConstants.MODEL_ID_SOLAR_API),
+        f.fieldName(),
+        f.units(),
+        f.description(),
+        f.metricName()
+      ))
+      .toList();
+  }
 
   /**
    * Resolves the Prometheus metric name for a SunSpec field.
@@ -409,6 +447,9 @@ public class MetricsConfigResource {
         // Update in-place — preserves the database ID
         existing.enabled = paramReq.enabled();
         existing.customMetricName = paramReq.customMetricName();
+        existing.aggregationMode = paramReq.aggregationMode() != null
+          ? paramReq.aggregationMode()
+          : AggregationMode.MINUTE_AVERAGE;
       } else {
         // New parameter — add it
         MetricsParameterEntity param = new MetricsParameterEntity();
@@ -417,6 +458,9 @@ public class MetricsConfigResource {
         param.fieldName = paramReq.fieldName();
         param.enabled = paramReq.enabled();
         param.customMetricName = paramReq.customMetricName();
+        param.aggregationMode = paramReq.aggregationMode() != null
+          ? paramReq.aggregationMode()
+          : AggregationMode.MINUTE_AVERAGE;
         config.parameters.add(param);
       }
     }

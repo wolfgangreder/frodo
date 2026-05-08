@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    v1.8.0: Per-parameter aggregation modes
+    Adds an aggregation_mode column to FroMetricsParameter so each scraped
+    parameter can independently control how values are reduced before DB writes
+    (minute/hour/day × average/current/diff). Existing rows are backfilled with
+    the default MINUTE_AVERAGE to preserve previous behaviour.
+  -->
+
+  <changeSet id="9" author="frodo">
+    <comment>Add aggregation_mode column to FroMetricsParameter (nullable initially for backfill)</comment>
+
+    <addColumn tableName="FroMetricsParameter">
+      <column name="aggregation_mode" type="VARCHAR(20)"/>
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="10" author="frodo">
+    <comment>Backfill existing parameters with default MINUTE_AVERAGE mode</comment>
+
+    <update tableName="FroMetricsParameter">
+      <column name="aggregation_mode" value="MINUTE_AVERAGE"/>
+      <where>aggregation_mode IS NULL</where>
+    </update>
+  </changeSet>
+
+  <changeSet id="11" author="frodo">
+    <comment>Make aggregation_mode NOT NULL and add check constraint for valid enum values</comment>
+
+    <addNotNullConstraint
+        tableName="FroMetricsParameter"
+        columnName="aggregation_mode"
+        defaultNullValue="MINUTE_AVERAGE"
+        columnDataType="VARCHAR(20)"/>
+
+    <sql>
+      ALTER TABLE FroMetricsParameter
+      ADD CONSTRAINT ck_FroMetricsParam_agg_mode
+      CHECK (aggregation_mode IN (
+        'MINUTE_AVERAGE', 'MINUTE_CURRENT', 'MINUTE_DIFF',
+        'HOUR_AVERAGE',   'HOUR_CURRENT',   'HOUR_DIFF',
+        'DAY_AVERAGE',    'DAY_CURRENT',    'DAY_DIFF'
+      ))
+    </sql>
+  </changeSet>
+
+</databaseChangeLog>

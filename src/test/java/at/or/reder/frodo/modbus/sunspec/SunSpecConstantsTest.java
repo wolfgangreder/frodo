@@ -141,4 +141,33 @@ class SunSpecConstantsTest {
     assertTrue(name.startsWith("Unknown"));
     assertTrue(name.contains("999"));
   }
+
+  // ========== Solar API sentinel ==========
+
+  @Test
+  void solarApiModelId_isNegativeOne() {
+    assertEquals(-1, MODEL_ID_SOLAR_API);
+  }
+
+  @Test
+  void isSolarApiModel_solarApiId_returnsTrue() {
+    assertTrue(isSolarApiModel(MODEL_ID_SOLAR_API));
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {-2, -100, Integer.MIN_VALUE})
+  void isSolarApiModel_anyNegativeId_returnsTrue(int modelId) {
+    assertTrue(isSolarApiModel(modelId));
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1, 101, 111, 201, 0xFFFF})
+  void isSolarApiModel_nonNegativeId_returnsFalse(int modelId) {
+    assertFalse(isSolarApiModel(modelId));
+  }
+
+  @Test
+  void modelName_solarApiId_returnsSolarApiSite() {
+    assertEquals("Solar API Site", modelName(MODEL_ID_SOLAR_API));
+  }
 }

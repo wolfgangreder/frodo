@@ -1,0 +1,77 @@
+package at.or.reder.frodo.solarapi;
+
+import java.util.List;
+
+/**
+ * Definitions for the Solar API site-level parameters that can be scraped
+ * and stored via the metrics pipeline.
+ *
+ * <p>These parameters correspond to the site-level data from
+ * {@code GetPowerFlowRealtimeData} and are exposed alongside SunSpec
+ * parameters in the metrics configuration API.</p>
+ *
+ * <p>Field names match the keys returned by
+ * {@link SolarApiMetricsService#getLastSiteValues()}.</p>
+ */
+public final class SolarApiFields {
+
+  private SolarApiFields() {
+    // Utility class
+  }
+
+  /**
+   * Descriptor for a single Solar API site-level metric parameter.
+   *
+   * @param fieldName   key used in the values map (matches the Prometheus metric suffix)
+   * @param units       measurement unit (e.g. "W"), or empty string if dimensionless
+   * @param description human-readable description shown in the metrics config UI
+   * @param metricName  Prometheus metric name published by {@link SolarApiMetricsService}
+   */
+  public record FieldDescriptor(
+    String fieldName,
+    String units,
+    String description,
+    String metricName
+  ) {
+  }
+
+  /** Ordered list of all scrapeable Solar API site-level fields. */
+  public static final List<FieldDescriptor> SITE_FIELDS = List.of(
+    new FieldDescriptor(
+      "grid_power_watts",
+      "W",
+      "Grid power (positive = import from grid, negative = export to grid)",
+      "frodo_solar_site_grid_power_watts"
+    ),
+    new FieldDescriptor(
+      "load_power_watts",
+      "W",
+      "Site load / consumption power",
+      "frodo_solar_site_load_power_watts"
+    ),
+    new FieldDescriptor(
+      "pv_power_watts",
+      "W",
+      "PV production power",
+      "frodo_solar_site_pv_power_watts"
+    ),
+    new FieldDescriptor(
+      "battery_power_watts",
+      "W",
+      "Battery power (positive = charging, negative = discharging)",
+      "frodo_solar_site_battery_power_watts"
+    ),
+    new FieldDescriptor(
+      "autonomy_ratio",
+      "",
+      "Relative autonomy ratio (0 = fully grid-dependent, 1 = fully self-sufficient)",
+      "frodo_solar_site_autonomy_ratio"
+    ),
+    new FieldDescriptor(
+      "self_consumption_ratio",
+      "",
+      "Relative self-consumption ratio (0 = all PV exported, 1 = all PV consumed locally)",
+      "frodo_solar_site_self_consumption_ratio"
+    )
+  );
+}

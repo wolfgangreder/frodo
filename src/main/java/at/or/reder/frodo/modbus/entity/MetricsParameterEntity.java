@@ -3,6 +3,8 @@ package at.or.reder.frodo.modbus.entity;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -46,6 +48,16 @@ public class MetricsParameterEntity extends PanacheEntity {
    */
   @Column(nullable = false)
   public boolean enabled = true;
+
+  /**
+   * Aggregation mode controlling how scraped values are reduced before DB writes.
+   *
+   * <p>Defaults to {@link AggregationMode#MINUTE_AVERAGE} to preserve the
+   * original 1-minute averaging behaviour.</p>
+   */
+  @Column(name = "aggregation_mode", nullable = false, length = 20)
+  @Enumerated(EnumType.STRING)
+  public AggregationMode aggregationMode = AggregationMode.MINUTE_AVERAGE;
 
   /**
    * Optional custom Prometheus metric name. If null, a default name
