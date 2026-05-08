@@ -15,6 +15,7 @@ import at.or.reder.frodo.modbus.sunspec.SunSpecDiscoveryResult;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelData;
 import at.or.reder.frodo.modbus.sunspec.SunSpecModelRegistry;
 import at.or.reder.frodo.modbus.sunspec.SunSpecService;
+import at.or.reder.frodo.solarapi.SolarApiMetricsService;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -29,6 +30,7 @@ import org.jboss.logging.Logger;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -80,6 +82,9 @@ public class MetricsScrapingService {
 
   @Inject
   MetricMetadataRegistry metadataRegistry;
+
+  @Inject
+  SolarApiMetricsService solarApiMetricsService;
 
   @ConfigProperty(name = "quarkus.datasource.active", defaultValue = "true")
   boolean datasourceActive;
@@ -233,7 +238,9 @@ public class MetricsScrapingService {
     scheduledTimers.put(deviceId, future);
     long actualParams = availableModelIds != null
       ? config.parameters.stream()
-          .filter(p -> p.enabled && availableModelIds.contains(p.sunspecModelId))
+          .filter(p -> p.enabled
+            && (SunSpecConstants.isSolarApiModel(p.sunspecModelId)
+                || availableModelIds.contains(p.sunspecModelId)))
           .count()
       : enabledParams;
     LOG.infof("Scheduled metrics scraping for device %d (%s) every %d seconds (%d parameters, %d available after filtering)",
@@ -334,18 +341,28 @@ public class MetricsScrapingService {
         continue;
       }
 
-      // Skip parameters for models not present on the device
-      if (availableModelIds != null && !availableModelIds.contains(param.sunspecModelId)) {
+      // Skip parameters for models not present on the device.
+      // Solar API params (modelId < 0) are never filtered by SunSpec discovery.
+      if (availableModelIds != null
+          && !SunSpecConstants.isSolarApiModel(param.sunspecModelId)
+          && !availableModelIds.contains(param.sunspecModelId)) {
         LOG.debugf("Skipping gauge registration for model %d (%s) on device %d: not present on device",
           param.sunspecModelId, SunSpecConstants.modelName(param.sunspecModelId), deviceId);
+        continue;
+      }
+
+      // Solar API params: SolarApiMetricsService already owns the frodo_solar_site_* gauges
+      // (registered without device tags). Registering them here with device tags would produce
+      // a Prometheus tag-set conflict ("same metric name, different tag keys"). Skip gauge
+      // registration — DB persistence still runs via processModelReadSuccess.
+      if (SunSpecConstants.isSolarApiModel(param.sunspecModelId)) {
         continue;
       }
 
       String fieldKey = param.sunspecModelId + "_" + param.fieldName;
 
       // Resolve semantic metric name and tags from the mapping
-      Optional<ResolvedMetric> resolved =
-        metadataRegistry.resolve(param.sunspecModelId, param.fieldName);
+      Optional<ResolvedMetric> resolved = metadataRegistry.resolve(param.sunspecModelId, param.fieldName);
 
       String metricName = buildMetricName(param, resolved.orElse(null));
       String description = resolved
@@ -362,13 +379,15 @@ public class MetricsScrapingService {
       Map<String, Meter.Id> deviceMeterIds =
         registeredGauges.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
       if (!deviceMeterIds.containsKey(gaugeKey)) {
+        String modelName = SunSpecModelRegistry.get(param.sunspecModelId)
+          .map(def -> def.name())
+          .orElse("unknown");
+
         Gauge.Builder<?> builder = Gauge.builder(metricName, gaugeValue, AtomicReference::get)
           .tag("device_id", String.valueOf(deviceId))
           .tag("device_name", deviceName)
           .tag("model_id", String.valueOf(param.sunspecModelId))
-          .tag("model_name", SunSpecModelRegistry.get(param.sunspecModelId)
-            .map(def -> def.name())
-            .orElse("unknown"))
+          .tag("model_name", modelName)
           .description(description);
 
         // Add semantic tags (phase, channel, line, quadrant, location)
@@ -388,7 +407,7 @@ public class MetricsScrapingService {
   }
 
   /**
-   * Builds the Prometheus metric name for a parameter.
+   * Builds the Prometheus metric name for a SunSpec parameter.
    *
    * <p>Priority order:</p>
    * <ol>
@@ -396,6 +415,10 @@ public class MetricsScrapingService {
    *   <li>Semantic name from {@link MetricMetadataRegistry} (e.g. {@code frodo_sunspec_ac_power_watts})</li>
    *   <li>Legacy fallback: {@code frodo_sunspec_{modelId}_{fieldName}}</li>
    * </ol>
+   *
+   * <p>Solar API params are never passed here — gauge registration for Solar API
+   * is skipped in {@link #registerGauges} since {@code SolarApiMetricsService}
+   * already owns those gauges.</p>
    */
   private String buildMetricName(MetricsParameterEntity param, ResolvedMetric resolved) {
     if (param.customMetricName != null && !param.customMetricName.isBlank()) {
@@ -446,7 +469,7 @@ public class MetricsScrapingService {
       DeviceAddress address = DeviceAddress.fromEntity(config.device);
       Instant scrapeTime = Instant.now();
 
-      // Group enabled parameters by model ID
+      // Group enabled parameters by model ID, then split Solar API from SunSpec
       Map<Integer, List<MetricsParameterEntity>> paramsByModel = config.parameters.stream()
         .filter(p -> p.enabled)
         .collect(Collectors.groupingBy(p -> p.sunspecModelId));
@@ -455,45 +478,49 @@ public class MetricsScrapingService {
         return;
       }
 
+      // Separate Solar API params (model ID < 0) from SunSpec params so that
+      // SunSpec discovery filtering does not exclude Solar API entries.
+      Map<Integer, List<MetricsParameterEntity>> solarApiParamsByModel = new LinkedHashMap<>();
+      Map<Integer, List<MetricsParameterEntity>> sunspecParamsByModel = new LinkedHashMap<>();
+      for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : paramsByModel.entrySet()) {
+        if (SunSpecConstants.isSolarApiModel(entry.getKey())) {
+          solarApiParamsByModel.put(entry.getKey(), entry.getValue());
+        } else {
+          sunspecParamsByModel.put(entry.getKey(), entry.getValue());
+        }
+      }
+
       // Run SunSpec discovery to determine which models are actually present
       // on the device, then filter out configured models that don't exist.
       // This prevents noisy warnings and false partial-failure status when
       // users have selected models from the static registry fallback that
       // don't match the device (e.g. Float models on an Int+SF device,
       // or three-phase meter models on a single-phase meter).
-      Set<Integer> availableModelIds = discoverAvailableModels(address, deviceId);
-      if (availableModelIds != null) {
-        Map<Integer, List<MetricsParameterEntity>> filteredParams = new java.util.LinkedHashMap<>();
-        for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : paramsByModel.entrySet()) {
-          int modelId = entry.getKey();
-          if (availableModelIds.contains(modelId)) {
-            filteredParams.put(modelId, entry.getValue());
-          } else {
-            LOG.debugf("Skipping model %d (%s) for device %d: not present on device",
-              modelId, SunSpecConstants.modelName(modelId), deviceId);
+      if (!sunspecParamsByModel.isEmpty()) {
+        Set<Integer> availableModelIds = discoverAvailableModels(address, deviceId);
+        if (availableModelIds != null) {
+          Map<Integer, List<MetricsParameterEntity>> filteredParams = new LinkedHashMap<>();
+          for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : sunspecParamsByModel.entrySet()) {
+            int modelId = entry.getKey();
+            if (availableModelIds.contains(modelId)) {
+              filteredParams.put(modelId, entry.getValue());
+            } else {
+              LOG.debugf("Skipping model %d (%s) for device %d: not present on device",
+                modelId, SunSpecConstants.modelName(modelId), deviceId);
+            }
           }
+          sunspecParamsByModel = filteredParams;
         }
-        paramsByModel = filteredParams;
-
-        if (paramsByModel.isEmpty()) {
-          LOG.warnf("No configured models are available on device %d after discovery filtering", deviceId);
-          try {
-            updateScrapeStatus(config.id, ScrapeStatus.FAILED,
-              "None of the configured models are available on this device");
-          } catch (Exception e) {
-            LOG.warnf(e, "Failed to update scrape status for device %d", deviceId);
-          }
-          return;
-        }
+        // If discovery failed (availableModelIds == null), proceed with all
+        // configured SunSpec models and let individual readModel calls fail gracefully.
       }
-      // If discovery failed (availableModelIds == null), proceed with all
-      // configured models and let individual readModel calls fail gracefully.
 
       boolean anySuccess = false;
       boolean anyFailed = false;
       String firstError = null;
 
-      for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : paramsByModel.entrySet()) {
+      // --- SunSpec models ---
+      for (Map.Entry<Integer, List<MetricsParameterEntity>> entry : sunspecParamsByModel.entrySet()) {
         int modelId = entry.getKey();
         List<MetricsParameterEntity> params = entry.getValue();
 
@@ -511,7 +538,34 @@ public class MetricsScrapingService {
         }
       }
 
-      // Update scrape status once after all models are done
+      // --- Solar API params ---
+      if (!solarApiParamsByModel.isEmpty()) {
+        try {
+          scrapeSolarApiParams(config, deviceId, solarApiParamsByModel, scrapeTime);
+          anySuccess = true;
+        } catch (Exception error) {
+          LOG.warnf("Failed to scrape Solar API params for device %d: %s",
+            deviceId, error.getMessage());
+          anyFailed = true;
+          if (firstError == null) {
+            firstError = error.getMessage();
+          }
+        }
+      }
+
+      if (sunspecParamsByModel.isEmpty() && solarApiParamsByModel.isEmpty()) {
+        // All SunSpec models were filtered out and no Solar API params
+        LOG.warnf("No configured models are available on device %d after discovery filtering", deviceId);
+        try {
+          updateScrapeStatus(config.id, ScrapeStatus.FAILED,
+            "None of the configured models are available on this device");
+        } catch (Exception e) {
+          LOG.warnf(e, "Failed to update scrape status for device %d", deviceId);
+        }
+        return;
+      }
+
+      // Update scrape status once after all models are done.
       // Mark SUCCESS if at least one model was read successfully.
       // Only mark FAILED if ALL models failed.
       try {
@@ -647,6 +701,52 @@ public class MetricsScrapingService {
       LOG.debugf("SunSpec discovery failed for device %d during scrape, " +
         "will attempt all configured models: %s", deviceId, e.getMessage());
       return null;
+    }
+  }
+
+  /**
+   * Scrapes Solar API site-level parameters for a device.
+   *
+   * <p>Reads the latest site values from the cached {@link SolarApiMetricsService}
+   * snapshot and wraps them in a synthetic {@link SunSpecModelData} so that the
+   * existing {@link #processModelReadSuccess} pipeline (accumulation, gauge update,
+   * DB persistence) works unchanged.</p>
+   *
+   * <p>If the Solar API has not yet delivered data (all values null), this method
+   * returns without processing so that no partial records are written to the DB.</p>
+   *
+   * @param config             device metrics config
+   * @param deviceId           device ID (for logging / gauge keys)
+   * @param solarApiParamsByModel  Solar API parameter groups (model ID always {@code -1})
+   * @param scrapeTime         current scrape timestamp
+   */
+  private void scrapeSolarApiParams(MetricsConfigEntity config, Long deviceId,
+                                    Map<Integer, List<MetricsParameterEntity>> solarApiParamsByModel,
+                                    Instant scrapeTime) {
+    Map<String, Object> siteValues = solarApiMetricsService.getLastSiteValues();
+
+    // Check if any value is actually available yet
+    boolean hasData = siteValues.values().stream().anyMatch(v -> v != null);
+    if (!hasData) {
+      LOG.debugf("Solar API has no data yet for device %d, skipping Solar API param scrape", deviceId);
+      return;
+    }
+
+    // Build a synthetic SunSpecModelData so processModelReadSuccess works unchanged
+    Instant dataTime = solarApiMetricsService.getLastScrapeTime();
+    SunSpecModelData fakeModelData = new SunSpecModelData(
+      SunSpecConstants.MODEL_ID_SOLAR_API,
+      "Solar API Site",
+      0,
+      siteValues,
+      dataTime != null ? dataTime : scrapeTime
+    );
+
+    List<MetricsParameterEntity> params =
+      solarApiParamsByModel.getOrDefault(SunSpecConstants.MODEL_ID_SOLAR_API, List.of());
+    if (!params.isEmpty()) {
+      processModelReadSuccess(config, deviceId, SunSpecConstants.MODEL_ID_SOLAR_API,
+        params, fakeModelData, scrapeTime);
     }
   }
 

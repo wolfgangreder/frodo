@@ -43,6 +43,16 @@ public final class SunSpecConstants {
   public static final int[] ALTERNATE_BASE_ADDRESSES = {0, 50000};
 
   /**
+   * Sentinel model ID for Solar API site-level parameters.
+   *
+   * <p>Solar API parameters are not part of the SunSpec protocol; they are read
+   * from the Fronius Solar API (cached by {@code SolarApiMetricsService}).
+   * Using a negative value keeps the {@code sunspecModelId} column type unchanged
+   * while cleanly separating Solar API parameters from real SunSpec models.</p>
+   */
+  public static final int MODEL_ID_SOLAR_API = -1;
+
+  /**
    * Model ID indicating the end of the SunSpec model chain.
    */
   public static final int END_MODEL_ID = 0xFFFF;
@@ -125,6 +135,19 @@ public final class SunSpecConstants {
   public static final int MODEL_METER_THREE_PHASE_DELTA_FLOAT = 214;
 
   /**
+   * Returns {@code true} when the model ID refers to a Solar API parameter
+   * rather than a real SunSpec model.
+   *
+   * <p>All negative model IDs are reserved for non-SunSpec data sources.</p>
+   *
+   * @param modelId the model ID to check
+   * @return true for Solar API parameters (modelId &lt; 0)
+   */
+  public static boolean isSolarApiModel(int modelId) {
+    return modelId < 0;
+  }
+
+  /**
    * Checks whether the given model ID represents a Float-format inverter model.
    *
    * @param modelId the model ID to check
@@ -196,6 +219,7 @@ public final class SunSpecConstants {
    */
   public static String modelName(int modelId) {
     return switch (modelId) {
+      case MODEL_ID_SOLAR_API -> "Solar API Site";
       case MODEL_COMMON -> "Common";
       case MODEL_INVERTER_SINGLE_PHASE -> "Inverter (Single Phase, Int+SF)";
       case MODEL_INVERTER_SPLIT_PHASE -> "Inverter (Split Phase, Int+SF)";

@@ -17,6 +17,8 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -110,7 +112,7 @@ public class SolarApiMetricsService {
 
   // --- Last raw data snapshot for API consumers ---
   private final AtomicReference<PowerFlowRealtimeData> lastData = new AtomicReference<>();
-  private final AtomicReference<java.time.Instant> lastScrapeTime = new AtomicReference<>();
+  private final AtomicReference<Instant> lastScrapeTime = new AtomicReference<>();
   private volatile int scrapeCount;
   private volatile int errorCount;
 
@@ -167,7 +169,7 @@ public class SolarApiMetricsService {
    *
    * @return last scrape instant
    */
-  public java.time.Instant getLastScrapeTime() {
+  public Instant getLastScrapeTime() {
     return lastScrapeTime.get();
   }
 
@@ -196,6 +198,30 @@ public class SolarApiMetricsService {
    */
   public int getErrorCount() {
     return errorCount;
+  }
+
+  /**
+   * Returns the latest site-level values as a plain map suitable for the
+   * metrics scraping pipeline.
+   *
+   * <p>Keys match the field names defined in {@link SolarApiFields#SITE_FIELDS}.
+   * Values are {@code Double}, or {@code null} when the Solar API has not
+   * delivered a reading for that field yet (NaN sentinel converted to null).</p>
+   *
+   * <p>This method is always safe to call; it never blocks or throws.
+   * When Solar API scraping is disabled, all values are null.</p>
+   *
+   * @return map of field name to current double value (values may be null)
+   */
+  public Map<String, Object> getLastSiteValues() {
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("grid_power_watts", nanToNull(siteGridPower.get()));
+    result.put("load_power_watts", nanToNull(siteLoadPower.get()));
+    result.put("pv_power_watts", nanToNull(sitePvPower.get()));
+    result.put("battery_power_watts", nanToNull(siteBatteryPower.get()));
+    result.put("autonomy_ratio", nanToNull(siteAutonomy.get()));
+    result.put("self_consumption_ratio", nanToNull(siteSelfConsumption.get()));
+    return result;
   }
 
   // ========== Internal ==========
@@ -256,7 +282,7 @@ public class SolarApiMetricsService {
 
       PowerFlowRealtimeData data = response.getData();
       lastData.set(data);
-      lastScrapeTime.set(java.time.Instant.now());
+      lastScrapeTime.set(Instant.now());
       scrapeCount++;
       updateSiteMetrics(data.getSite());
       updateInverterMetrics(data.getInverters());
@@ -376,6 +402,11 @@ public class SolarApiMetricsService {
     if (value != null) {
       ref.set(value);
     }
+  }
+
+  /** Converts NaN (the "no data" sentinel used by Micrometer gauges) to null. */
+  static Double nanToNull(Double value) {
+    return (value != null && !Double.isNaN(value)) ? value : null;
   }
 
   /**

@@ -166,7 +166,7 @@ function ParameterSelector({
       {/* Model selection guide */}
       <Alert severity="info" icon={<InfoOutlinedIcon />} sx={{ mb: 2 }}>
         <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
-          SunSpec model selection guide
+          Parameter selection guide
         </Typography>
         <Typography variant="caption" component="div" color="text.secondary">
           Each device supports only <strong>one data format</strong> (Int+SF or Float) and
@@ -175,7 +175,9 @@ function ParameterSelector({
           (Three Phase, Float), but never both. Similarly, a meter provides only one of
           models 201-204 or 211-214 depending on its wiring and format.
           Parameters selected for models not present on the device are automatically filtered
-          out at scrape time.
+          out at scrape time.{' '}
+          <strong>Solar API Site</strong> parameters are sourced from the Fronius Solar API
+          and are always available when Solar API is enabled, regardless of device discovery.
         </Typography>
       </Alert>
 
@@ -248,7 +250,7 @@ function ParameterSelector({
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%', mr: 1 }}>
                   <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
-                    {group.modelName} (Model {group.modelId})
+                    {group.modelName}{group.modelId >= 0 ? ` (Model ${group.modelId})` : ''}
                   </Typography>
                   <Chip
                     label={`${selectedInModel}/${group.fields.length}`}

@@ -5,6 +5,7 @@ import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.entity.MetricsDataEntity;
 import at.or.reder.frodo.modbus.entity.MetricsParameterEntity;
 import at.or.reder.frodo.modbus.service.MetricsScrapingService.AggregatingAccumulator;
+import at.or.reder.frodo.modbus.sunspec.SunSpecConstants;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -409,5 +410,42 @@ class MetricsScrapingServiceTest {
     MetricsDataEntity dp = acc.buildDataEntity(makeConfig(), makeParam("W", AggregationMode.HOUR_AVERAGE), 203, null);
     assertNotNull(dp);
     assertEquals(203, dp.sunspecModelId);
+  }
+
+  // ========== Solar API model ID sentinel ==========
+
+  @Test
+  void buildDataEntity_solarApiModelId_persistedAsNegativeOne() {
+    // Solar API params use MODEL_ID_SOLAR_API (-1) as the modelId sentinel.
+    // AggregatingAccumulator just stores whatever modelId is passed — verify
+    // that negative values pass through correctly.
+    AggregatingAccumulator acc = new AggregatingAccumulator(AggregationMode.MINUTE_AVERAGE, BUCKET_MIN);
+    acc.add(1234.5); // grid_power_watts
+    MetricsDataEntity dp = acc.buildDataEntity(
+      makeConfig(),
+      makeParam("grid_power_watts", AggregationMode.MINUTE_AVERAGE),
+      SunSpecConstants.MODEL_ID_SOLAR_API,
+      null
+    );
+    assertNotNull(dp);
+    assertEquals(SunSpecConstants.MODEL_ID_SOLAR_API, dp.sunspecModelId);
+    assertEquals("grid_power_watts", dp.fieldName);
+    assertEquals(1234.5, dp.valueNumeric, 0.001);
+  }
+
+  @Test
+  void buildDataEntity_solarApiRatioField_storesRatioValue() {
+    // Autonomy ratio stored as 0-1 (SolarApiMetricsService already divides by 100)
+    AggregatingAccumulator acc = new AggregatingAccumulator(AggregationMode.HOUR_CURRENT, BUCKET_HOUR);
+    acc.add(0.75);
+    MetricsDataEntity dp = acc.buildDataEntity(
+      makeConfig(),
+      makeParam("autonomy_ratio", AggregationMode.HOUR_CURRENT),
+      SunSpecConstants.MODEL_ID_SOLAR_API,
+      null
+    );
+    assertNotNull(dp);
+    assertEquals(SunSpecConstants.MODEL_ID_SOLAR_API, dp.sunspecModelId);
+    assertEquals(0.75, dp.valueNumeric, 0.0001);
   }
 }
