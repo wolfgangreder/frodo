@@ -1,6 +1,7 @@
 package at.or.reder.frodo.modbus.service;
 
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
+import at.or.reder.frodo.modbus.repository.MarketPriceRepository;
 import at.or.reder.frodo.modbus.repository.MetricsConfigRepository;
 import at.or.reder.frodo.modbus.repository.MetricsDataRepository;
 import io.quarkus.scheduler.Scheduled;
@@ -10,6 +11,7 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -20,11 +22,15 @@ import java.util.List;
  * <p>Runs daily at 02:00 and iterates over all metrics configs that have
  * database storage enabled. For each config, data older than the configured
  * {@code retentionDays} is deleted.</p>
+ *
+ * <p>Also cleans up market price data older than 365 days.</p>
  */
 @ApplicationScoped
 public class MetricsRetentionService {
 
   private static final Logger LOG = Logger.getLogger(MetricsRetentionService.class);
+
+  private static final int MARKET_PRICE_RETENTION_DAYS = 365;
 
   @Inject
   MetricsConfigRepository configRepository;
@@ -32,11 +38,16 @@ public class MetricsRetentionService {
   @Inject
   MetricsDataRepository dataRepository;
 
+  @Inject
+  MarketPriceRepository marketPriceRepository;
+
   /**
    * Daily retention cleanup job. Runs at 02:00 every day.
    *
    * <p>For each device with database storage enabled, deletes metrics data
    * that is older than the configured retention period.</p>
+   *
+   * <p>Also cleans up market price data older than 365 days.</p>
    */
   @Scheduled(cron = "0 0 2 * * ?", identity = "metrics-retention-cleanup")
   @Transactional
@@ -68,5 +79,25 @@ public class MetricsRetentionService {
     }
 
     LOG.infof("Metrics retention cleanup complete: %d records deleted", totalDeleted);
+
+    // Clean up market prices
+    cleanupMarketPrices();
+  }
+
+  /**
+   * Cleans up market price data older than the retention period.
+   */
+  @Transactional
+  void cleanupMarketPrices() {
+    try {
+      LocalDateTime cutoff = LocalDateTime.now().minusDays(MARKET_PRICE_RETENTION_DAYS);
+      int deleted = marketPriceRepository.deleteExpired(cutoff);
+      if (deleted > 0) {
+        LOG.infof("Deleted %d expired market price entries (retention: %d days)",
+          deleted, MARKET_PRICE_RETENTION_DAYS);
+      }
+    } catch (Exception e) {
+      LOG.errorf(e, "Failed to clean up market price data");
+    }
   }
 }

@@ -112,7 +112,8 @@ at.or.reder.frodo/
 │   ├── GpioMetrics              # Micrometer gauges per GPIO pair
 │   ├── ModbusHealthCheck        # Modbus connection pool health
 │   ├── SunSpecHealthCheck       # SunSpec discovery cache health
-│   └── ModbusMetrics            # Micrometer gauges, counters, timers
+│   ├── ModbusMetrics            # Micrometer gauges, counters, timers
+│   └── MarketPriceMetrics       # Market price Prometheus metrics
 ├── modbus/                     # Modbus TCP protocol core
 │   ├── ModbusTcpService         # Core service (FC 0x03/0x06/0x10/0x2B); static helpers for testing
 │   ├── ModbusResource           # Raw register access endpoint
@@ -229,17 +230,19 @@ Use `@Table(name = "Fro...")` on entities. Liquibase changesets in `src/main/res
 - Upstream model JSON/XML: https://github.com/sunspec/models
 
 ### aWATTar API Integration
-- Fetches Austrian hourly electricity market prices; stored in `FroMarketPrice`, retained 48h
-- Config: `frodo.awattar.enabled=true`, `frodo.awattar.retention-hours=48`
+- Fetches Austrian hourly electricity market prices; stored in `FroMarketPrice`, retained 365 days (same as metrics)
+- Config: `frodo.awattar.enabled=true`
 - REST client: `AwattarClient` (inject this) → `AwattarRestClient` (MicroProfile, URL: `https://api.awattar.at`)
 - Price-controlled export: `PriceControlResource` / `PriceControlEntity` — when enabled, `ExportSchedulerService` blocks export on negative prices
+- Prometheus metrics: `MarketPriceMetrics` exposes current price gauge
+- Retention cleanup: `MetricsRetentionService` prunes old prices daily at 02:00
 
 ### Metrics Scraping System
 - Configurable per-device SunSpec parameter polling, stored as time-series in Firebird
 - `MetricMetadataRegistry` — registry of all scrapeable fields with display name and unit
 - Config API: `GET /api/devices/{id}/metrics/config`, `PUT /api/devices/{id}/metrics/config`
 - Data API: `GET /api/devices/{id}/metrics/data?parameter=...&from=...&to=...`
-- `MetricsRetentionService` prunes old data based on configured retention period
+- `MetricsRetentionService` prunes old metrics data + market prices based on retention period (daily at 02:00)
 
 ### Configuration Profiles
 - `%dev.` — development overrides; Firebird/Solar API enabled

@@ -36,8 +36,10 @@ import java.util.List;
  * <p><b>Configuration:</b></p>
  * <ul>
  *   <li>{@code frodo.awattar.enabled} — enable/disable price fetching</li>
- *   <li>{@code frodo.awattar.retention-hours} — hours to keep prices (default: 48)</li>
  * </ul>
+ *
+ * <p>Market price retention is handled by {@link MetricsRetentionService} using
+ * the default 365-day retention period.</p>
  */
 @ApplicationScoped
 public class MarketPriceSchedulerService {
@@ -58,9 +60,6 @@ public class MarketPriceSchedulerService {
 
   @ConfigProperty(name = "frodo.awattar.enabled", defaultValue = "false")
   boolean awattarEnabled;
-
-  @ConfigProperty(name = "frodo.awattar.retention-hours", defaultValue = "48")
-  int retentionHours;
 
   /**
    * Fetches prices at startup if the current hour has no price in the database.
@@ -147,8 +146,10 @@ public class MarketPriceSchedulerService {
   }
 
   /**
-   * Persists the given price list to the database and purges expired entries.
+   * Persists the given price list to the database.
    * Runs in its own short transaction; called only after the HTTP fetch succeeds.
+   *
+   * <p>Cleanup of expired entries is handled by {@link MetricsRetentionService}.</p>
    *
    * @param prices raw price entries from aWATTar (EUR/MWh, converted to ct/kWh on store)
    * @return number of rows saved
@@ -166,13 +167,6 @@ public class MarketPriceSchedulerService {
 
       marketPriceRepository.upsert(startTime, endTime, eurMwhToCtKwh(price.getMarketPrice()));
       saved++;
-    }
-
-    // Clean up old entries
-    LocalDateTime cutoff = LocalDateTime.now().minusHours(retentionHours);
-    int deleted = marketPriceRepository.deleteExpired(cutoff);
-    if (deleted > 0) {
-      LOG.debugf("Deleted %d expired market price entries", deleted);
     }
     return saved;
   }
