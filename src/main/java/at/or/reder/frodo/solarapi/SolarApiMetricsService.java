@@ -1,5 +1,6 @@
 package at.or.reder.frodo.solarapi;
 
+import at.or.reder.frodo.cost.service.EnergyIntegrationService;
 import at.or.reder.frodo.modbus.service.ExportSchedulerService;
 import at.or.reder.frodo.solarapi.model.OhmpilotData;
 import at.or.reder.frodo.solarapi.model.PowerFlowRealtimeData;
@@ -79,6 +80,9 @@ public class SolarApiMetricsService {
 
   @Inject
   ExportSchedulerService exportSchedulerService;
+
+  @Inject
+  EnergyIntegrationService energyIntegrationService;
 
   @ConfigProperty(name = "frodo.solar-api.enabled", defaultValue = "false")
   boolean solarApiEnabled;
@@ -287,6 +291,15 @@ public class SolarApiMetricsService {
       updateSiteMetrics(data.getSite());
       updateInverterMetrics(data.getInverters());
       updateOhmpilotMetrics(data);
+
+      // Energy integration (trapezoidal P_Grid → kWh)
+      try {
+        Double gridPower = data.getSite() != null ? data.getSite().powerGrid() : null;
+        energyIntegrationService.onSolarScrape(gridPower);
+      } catch (Exception e) {
+        LOG.debugf("Energy integration failed: %s", e.getMessage());
+      }
+
       try {
         exportSchedulerService.onSolarDataUpdated();
       } catch (Exception e) {

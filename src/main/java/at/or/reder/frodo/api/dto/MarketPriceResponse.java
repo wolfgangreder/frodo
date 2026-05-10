@@ -1,5 +1,7 @@
 package at.or.reder.frodo.api.dto;
 
+import java.math.BigDecimal;
+
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 /**
@@ -15,7 +17,7 @@ public record MarketPriceResponse(
   String endTime,
 
   @Schema(description = "Market price in ct/kWh (euro-cents per kilowatt-hour)", example = "4.25")
-  double priceCt,
+  BigDecimal priceCt,
 
   @Schema(description = "When this price was fetched", example = "2024-01-14T14:00:00Z")
   String fetchedAt

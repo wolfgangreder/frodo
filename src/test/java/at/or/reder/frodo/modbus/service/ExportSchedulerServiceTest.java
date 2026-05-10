@@ -2,6 +2,7 @@ package at.or.reder.frodo.modbus.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -119,32 +120,32 @@ class ExportSchedulerServiceTest {
 
   @Test
   void price_positive_notBlocked() {
-    assertFalse(ExportSchedulerService.shouldBlockForPrice(100.0));
+    assertFalse(ExportSchedulerService.shouldBlockForPrice(BigDecimal.valueOf(100.0)));
   }
 
   @Test
   void price_zero_notBlocked() {
-    assertFalse(ExportSchedulerService.shouldBlockForPrice(0.0));
+    assertFalse(ExportSchedulerService.shouldBlockForPrice(BigDecimal.valueOf(0.0)));
   }
 
   @Test
   void price_slightlyNegative_blocked() {
-    assertTrue(ExportSchedulerService.shouldBlockForPrice(-0.01));
+    assertTrue(ExportSchedulerService.shouldBlockForPrice(BigDecimal.valueOf(-0.01)));
   }
 
   @Test
   void price_moderatelyNegative_blocked() {
-    assertTrue(ExportSchedulerService.shouldBlockForPrice(-50.0));
+    assertTrue(ExportSchedulerService.shouldBlockForPrice(BigDecimal.valueOf(-50.0)));
   }
 
   @Test
   void price_veryNegative_blocked() {
-    assertTrue(ExportSchedulerService.shouldBlockForPrice(-200.0));
+    assertTrue(ExportSchedulerService.shouldBlockForPrice(BigDecimal.valueOf(-200.0)));
   }
 
   @Test
   void price_smallPositive_notBlocked() {
-    assertFalse(ExportSchedulerService.shouldBlockForPrice(0.01));
+    assertFalse(ExportSchedulerService.shouldBlockForPrice(BigDecimal.valueOf(0.01)));
   }
 
   // ========== computeEffectiveGridW — dead-band suppression ==========

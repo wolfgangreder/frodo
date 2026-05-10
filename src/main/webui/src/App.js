@@ -9,6 +9,7 @@ import {
   MetricsDocsPage,
   GrafanaPage,
   SolarApiPage,
+  CostControlPage,
   SettingsPage,
   AboutPage,
   NotFoundPage,
@@ -43,6 +44,9 @@ function App() {
 
         {/* Solar API */}
         <Route path="solar-api" element={<SolarApiPage />} />
+
+        {/* Cost Control */}
+        <Route path="cost-control" element={<CostControlPage />} />
 
         {/* Settings */}
         <Route path="settings" element={<SettingsPage />} />

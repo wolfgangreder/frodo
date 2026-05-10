@@ -2,6 +2,7 @@ package at.or.reder.frodo.modbus.entity;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 
@@ -17,8 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
  */
 class MarketPriceEntityTest {
 
-  private static final double DELTA = 0.0001;
-
   @Test
   void fieldAssignment_roundTrip() {
     LocalDateTime start = LocalDateTime.of(2025, 6, 1, 14, 0);
@@ -27,11 +26,11 @@ class MarketPriceEntityTest {
     MarketPriceEntity e = new MarketPriceEntity();
     e.startTime = start;
     e.endTime   = end;
-    e.priceCt   = 12.5;
+    e.priceCt   = new BigDecimal("12.5");
 
     assertEquals(start, e.startTime);
     assertEquals(end,   e.endTime);
-    assertEquals(12.5,  e.priceCt, DELTA);
+    assertEquals(0, new BigDecimal("12.5").compareTo(e.priceCt));
   }
 
   @Test
@@ -62,8 +61,8 @@ class MarketPriceEntityTest {
   @Test
   void negativePriceCt_storedCorrectly() {
     MarketPriceEntity e = new MarketPriceEntity();
-    e.priceCt = -3.7;
+    e.priceCt = new BigDecimal("-3.7");
 
-    assertEquals(-3.7, e.priceCt, DELTA, "Negative prices must be preserved exactly");
+    assertEquals(0, new BigDecimal("-3.7").compareTo(e.priceCt), "Negative prices must be preserved exactly");
   }
 }

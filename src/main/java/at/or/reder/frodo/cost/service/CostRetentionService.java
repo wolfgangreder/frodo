@@ -1,0 +1,87 @@
+package at.or.reder.frodo.cost.service;
+
+import at.or.reder.frodo.cost.entity.CostControlConfigEntity;
+import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
+import at.or.reder.frodo.cost.repository.HourlyCostRepository;
+import at.or.reder.frodo.cost.repository.HourlyEnergyRepository;
+import at.or.reder.frodo.cost.repository.MonthlyCostRepository;
+import io.quarkus.scheduler.Scheduled;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+/**
+ * Daily cleanup service for cost control time-series tables.
+ *
+ * <p>Runs at 03:00 every day (one hour after {@code MetricsRetentionService} at 02:00).
+ * Retention periods are read from the DB-backed config on each run.</p>
+ *
+ * <p>Tables pruned:</p>
+ * <ul>
+ *   <li>{@code FroHourlyEnergy} — older than {@code retentionHourlyDays}</li>
+ *   <li>{@code FroHourlyCost} — older than {@code retentionHourlyDays}</li>
+ *   <li>{@code FroEnergyPrice} — older than {@code retentionHourlyDays}</li>
+ *   <li>{@code FroMonthlyCost} — older than {@code retentionMonthlyYears}</li>
+ * </ul>
+ *
+ * <p>Reference tables ({@code FroFixedCost}, {@code FroGridFee}, {@code FroTariffWindow})
+ * are never auto-pruned — they contain infrequent manual configuration data.</p>
+ */
+@ApplicationScoped
+public class CostRetentionService {
+
+  private static final Logger LOG = Logger.getLogger(CostRetentionService.class);
+  private static final DateTimeFormatter YEAR_MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+
+  @Inject
+  CostControlConfigService configService;
+
+  @Inject
+  HourlyEnergyRepository hourlyEnergyRepository;
+
+  @Inject
+  HourlyCostRepository hourlyCostRepository;
+
+  @Inject
+  EnergyPriceRepository energyPriceRepository;
+
+  @Inject
+  MonthlyCostRepository monthlyCostRepository;
+
+  /**
+   * Runs daily at 03:00 and prunes expired records.
+   */
+  @Scheduled(cron = "0 0 3 * * ?", identity = "cost-retention")
+  @Transactional
+  void prune() {
+    CostControlConfigEntity cfg;
+    try {
+      cfg = configService.load();
+    } catch (Exception ex) {
+      LOG.warnf("Cost retention skipped: cannot load config (%s)", ex.getMessage());
+      return;
+    }
+
+    LocalDateTime hourlyCutoff = LocalDateTime.now()
+      .minusDays(cfg.retentionHourlyDays);
+
+    int deletedEnergy = hourlyEnergyRepository.deleteOlderThan(hourlyCutoff);
+    int deletedCost = hourlyCostRepository.deleteOlderThan(hourlyCutoff);
+    int deletedPrices = energyPriceRepository.deleteExpired(hourlyCutoff);
+
+    // Monthly: delete if yearMonth < cutoff month
+    String monthlyCutoff = LocalDate.now()
+      .minusYears(cfg.retentionMonthlyYears)
+      .format(YEAR_MONTH_FMT);
+    int deletedMonthly = monthlyCostRepository.deleteOlderThan(monthlyCutoff);
+
+    LOG.infof(
+      "Cost retention: deleted %d energy rows, %d cost rows, %d price rows, %d monthly rows",
+      deletedEnergy, deletedCost, deletedPrices, deletedMonthly);
+  }
+}

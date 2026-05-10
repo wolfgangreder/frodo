@@ -165,9 +165,60 @@ at.or.reder.frodo/
 │       ├── SunSpecDataType           # Data type enum
 │       ├── SunSpecModelFormat        # INT_SF vs FLOAT variant selector
 │       └── model/                   # SunSpecDiscoveryResult, ModelBlock, ModelData, ModelDefinition, FieldDefinition
+├── cost/                       # Cost control & energy tracking
+│   ├── entity/                  # JPA entities
+│   │   ├── CostControlConfigEntity   # Runtime config (single row, id=1)
+│   │   ├── HourlyEnergyEntity        # Hourly grid import/export kWh
+│   │   ├── HourlyCostEntity          # Hourly cost breakdown
+│   │   ├── MonthlyCostEntity         # Monthly cost summary
+│   │   ├── EnergyPriceEntity         # Hourly import/export prices (ct/kWh)
+│   │   ├── TariffWindowEntity        # Fixed-price time slots (peak/off-peak)
+│   │   ├── GridFeeEntity             # Grid surcharge rules
+│   │   └── FixedCostEntity           # Recurring monthly costs
+│   ├── repository/              # Panache repositories
+│   ├── service/
+│   │   ├── CostControlConfigService  # Config CRUD
+│   │   ├── EnergyIntegrationService  # Trapezoidal P_Grid → kWh (called by SolarApiMetricsService)
+│   │   ├── CostCalculationService    # Hourly/monthly cost calc
+│   │   ├── EnergyPriceSchedulerService # Fetches provider prices (aWATTar, manual)
+│   │   └── MetricsRetentionService   # Prunes old hourly/monthly data
+│   └── spi/                     # Provider SPI
+│       ├── EnergyPriceProviderSpi    # Vendor-neutral price provider interface
+│       ├── AwattarPriceProvider      # aWATTar AT implementation (EXPORT only)
+│       ├── ManualPriceProvider       # Manual fixed prices (IMPORT + EXPORT)
+│       ├── PriceDirection            # IMPORT / EXPORT enum
+│       ├── FeeType                   # PERCENT / ABSOLUTE_ENERGY / ABSOLUTE_TIME
+│       └── FeeAppliesTo              # IMPORT / EXPORT / BOTH
 └── mqtt/
     └── MqttService              # Publish/subscribe (disabled by default in all profiles)
 ```
+
+## Cost Control System
+
+**Energy integration:** `EnergyIntegrationService` called by `SolarApiMetricsService` at each scrape (default 15s). Trapezoidal integration of P_Grid (positive = import, negative = export). Exposes Prometheus gauges:
+- `frodo_solar_site_grid_energy_import_kwh` — current hour accumulated import
+- `frodo_solar_site_grid_energy_export_kwh` — current hour accumulated export
+
+Flushes to `FroHourlyEnergy` on hour boundary, triggers `CostCalculationService.calculateHourlyCost()`.
+
+**Monetary values:** `BigDecimal` everywhere. Scales: EUR `NUMERIC(15,4)`, ct/kWh `NUMERIC(15,5)`, kWh `NUMERIC(15,6)`. Physical sensor values stay `double`.
+
+**Price resolution order (per direction):**
+1. Tariff window (fixed price for time slot)
+2. Provider price (aWATTar spot / manual)
+3. Warn + use `BigDecimal.ZERO` if missing → source = "UNKNOWN"
+
+**Grid fees:** multiple simultaneous fees supported. `ABSOLUTE_ENERGY` (ct/kWh) and `PERCENT` (% of base cost) applied to hourly energy. `ABSOLUTE_TIME` (EUR/month) amortized per hour (÷ 730) for monthly totals only.
+
+**Fixed costs:** recurring monthly charges. No unique constraint; all where `validFrom <= monthStart` summed. Direction (IMPORT/EXPORT/BOTH) informational only — all summed into `fixedCostEur`.
+
+**Liquibase:** changesets 26–38 in `v1.9.0-cost-control.xml`. Next changeset ID: **39**. Never modify applied changesets; add new. Use raw `<sql splitStatements="false">` for Firebird DDL. Type migration pattern: ADD col_new TYPE / UPDATE SET col_new=CAST(col) / DROP col / ALTER col_new TO col / [SET NOT NULL].
+
+**Quarkus REST + Panache:** write methods (`@POST`, `@PUT`, `@DELETE`) require `@Transactional` on resource method. Repository's Panache `delete(entity)` does not start own transaction.
+
+**Frontend:** `CostControlPage.jsx` (7 tabs). Shared `DirectionChip` component for IMPORT/EXPORT/BOTH labels (orange/green/grey). Field order: direction first, then dates, then values.
+
+**Reference:** `docs/COST_CONTROL_PLAN.md`
 
 ## Code Style
 
@@ -315,6 +366,25 @@ Commit format: `type(scope): description` with a body explaining the why.
 | `GET /api/price-control` | Price-controlled export settings |
 | `PUT /api/price-control` | Update price control |
 | `GET /api/solar-api/status` | Solar API live data |
+| `GET /api/cost-control/config` | Cost control config |
+| `PUT /api/cost-control/config` | Update cost control config |
+| `GET /api/cost-control/providers` | Available price providers |
+| `GET /api/cost-control/prices` | Energy prices (hourly) |
+| `POST /api/cost-control/prices/refresh` | Force price refresh (IMPORT/EXPORT) |
+| `GET /api/cost-control/monthly-costs` | Monthly cost summary |
+| `GET /api/cost-control/hourly-costs` | Hourly cost breakdown |
+| `GET /api/cost-control/tariff-windows` | Tariff windows (peak/off-peak) |
+| `POST /api/cost-control/tariff-windows` | Create tariff window |
+| `PUT /api/cost-control/tariff-windows/{id}` | Update tariff window |
+| `DELETE /api/cost-control/tariff-windows/{id}` | Delete tariff window |
+| `GET /api/cost-control/grid-fees` | Grid fees |
+| `POST /api/cost-control/grid-fees` | Create grid fee |
+| `PUT /api/cost-control/grid-fees/{id}` | Update grid fee |
+| `DELETE /api/cost-control/grid-fees/{id}` | Delete grid fee |
+| `GET /api/cost-control/fixed-costs` | Fixed costs |
+| `POST /api/cost-control/fixed-costs` | Create fixed cost |
+| `PUT /api/cost-control/fixed-costs/{id}` | Update fixed cost |
+| `DELETE /api/cost-control/fixed-costs/{id}` | Delete fixed cost |
 | `GET /api/modbus/{unitId}/holding-registers` | Raw FC 0x03 access |
 | `GET /q/health` | Health check |
 | `GET /q/metrics` | Prometheus metrics |

@@ -83,7 +83,7 @@ public class MarketPriceRepository implements PanacheRepository<MarketPriceEntit
      * @return the persisted entity
      */
     @Transactional
-    public MarketPriceEntity upsert(LocalDateTime startTime, LocalDateTime endTime, double priceCt) {
+    public MarketPriceEntity upsert(LocalDateTime startTime, LocalDateTime endTime, java.math.BigDecimal priceCt) {
         MarketPriceEntity entity = findByStartTime(startTime)
             .orElseGet(MarketPriceEntity::new);
 

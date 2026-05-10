@@ -1,0 +1,722 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <!--
+    v1.9.0: Cost Control feature
+
+    Eight new tables covering:
+      - FroEnergyPrice      : hourly raw provider prices per direction (nullable per direction)
+      - FroFixedCost        : monthly fixed network/standing charges
+      - FroGridFee          : grid surcharge rules (percent / absolute-energy / absolute-time)
+      - FroTariffWindow     : fixed-price time slots overriding provider spot prices
+      - FroHourlyEnergy     : hourly grid import/export kWh (trapezoidal P_Grid integration)
+      - FroHourlyCost       : hourly cost/income with effective price and fee audit trail
+      - FroMonthlyCost      : pre-calculated monthly summaries (updated on every hourly insert)
+      - FroCostControlConfig: single-row runtime config (provider selection, cron, retention)
+
+    Changeset IDs start at 26 (highest existing is 25).
+  -->
+
+  <!-- ======================================================
+       Changeset 26: FroEnergyPrice
+       ====================================================== -->
+  <changeSet id="26" author="frodo">
+    <comment>Create FroEnergyPrice table for hourly raw provider prices (nullable per direction)</comment>
+
+    <createTable tableName="FroEnergyPrice">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroEnergyPrice"/>
+      </column>
+
+      <!-- Hour start / end (UTC) -->
+      <column name="start_time" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="end_time" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Import price in ct/kWh; null if no import provider active -->
+      <column name="price_import_ct" type="DOUBLE PRECISION"/>
+
+      <!-- Export price in ct/kWh; null if no export provider active -->
+      <column name="price_export_ct" type="DOUBLE PRECISION"/>
+
+      <!-- Provider IDs that delivered the prices (e.g. 'AWATTAR', 'MANUAL') -->
+      <column name="import_source" type="VARCHAR(50)"/>
+      <column name="export_source" type="VARCHAR(50)"/>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP"/>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroEnergyPrice_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <addUniqueConstraint
+        tableName="FroEnergyPrice"
+        columnNames="start_time"
+        constraintName="uk_FroEnergyPrice_time"/>
+
+    <createIndex tableName="FroEnergyPrice" indexName="idx_FroEnergyPrice_time">
+      <column name="start_time"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 27: FroFixedCost
+       ====================================================== -->
+  <changeSet id="27" author="frodo">
+    <comment>Create FroFixedCost table for monthly standing charges</comment>
+
+    <createTable tableName="FroFixedCost">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroFixedCost"/>
+      </column>
+
+      <!-- First day of the calendar month this cost applies to -->
+      <column name="valid_from" type="DATE">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Total monthly fixed cost in EUR -->
+      <column name="monthly_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="description" type="VARCHAR(255)"/>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroFixedCost_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <addUniqueConstraint
+        tableName="FroFixedCost"
+        columnNames="valid_from"
+        constraintName="uk_FroFixedCost_month"/>
+
+    <createIndex tableName="FroFixedCost" indexName="idx_FroFixedCost_month">
+      <column name="valid_from"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 28: FroGridFee
+       ====================================================== -->
+  <changeSet id="28" author="frodo">
+    <comment>Create FroGridFee table for grid surcharge rules</comment>
+
+    <createTable tableName="FroGridFee">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroGridFee"/>
+      </column>
+
+      <!-- When this fee became / becomes active -->
+      <column name="valid_from" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- PERCENT | ABSOLUTE_ENERGY | ABSOLUTE_TIME -->
+      <column name="fee_type" type="VARCHAR(20)">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- % value, ct/kWh, or EUR/month depending on fee_type -->
+      <column name="fee_value" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- EXPORT | IMPORT | BOTH -->
+      <column name="applies_to" type="VARCHAR(20)">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="description" type="VARCHAR(255)"/>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroGridFee_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <createIndex tableName="FroGridFee" indexName="idx_FroGridFee_valid">
+      <column name="valid_from"/>
+    </createIndex>
+
+    <sql>
+      ALTER TABLE FroGridFee
+      ADD CONSTRAINT ck_FroGridFee_type CHECK (fee_type IN ('PERCENT','ABSOLUTE_ENERGY','ABSOLUTE_TIME'))
+    </sql>
+
+    <sql>
+      ALTER TABLE FroGridFee
+      ADD CONSTRAINT ck_FroGridFee_applies CHECK (applies_to IN ('EXPORT','IMPORT','BOTH'))
+    </sql>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 29: FroTariffWindow
+       ====================================================== -->
+  <changeSet id="29" author="frodo">
+    <comment>Create FroTariffWindow table for fixed-price time slots overriding provider spot prices</comment>
+
+    <createTable tableName="FroTariffWindow">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroTariffWindow"/>
+      </column>
+
+      <!-- IMPORT | EXPORT -->
+      <column name="direction" type="VARCHAR(10)">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Tariff effective from date (inclusive) -->
+      <column name="valid_from" type="DATE">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Tariff end date (exclusive); null = still active -->
+      <column name="valid_to" type="DATE"/>
+
+      <!-- Comma-separated day names: MON,TUE,WED,THU,FRI,SAT,SUN; null = all days -->
+      <column name="days_of_week" type="VARCHAR(35)"/>
+
+      <!-- Window start within day (e.g. 07:00:00) -->
+      <column name="time_from" type="TIME">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Window end within day (00:00:00 = end of day / 24:00) -->
+      <column name="time_to" type="TIME">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Fixed price in ct/kWh -->
+      <column name="price_ct" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Higher priority wins when multiple windows match the same hour -->
+      <column name="priority" type="INTEGER" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="description" type="VARCHAR(255)"/>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroTariffWindow_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <createIndex tableName="FroTariffWindow" indexName="idx_FroTariffWindow_dir_from">
+      <column name="direction"/>
+      <column name="valid_from"/>
+    </createIndex>
+
+    <sql>
+      ALTER TABLE FroTariffWindow
+      ADD CONSTRAINT ck_FroTariffWindow_dir CHECK (direction IN ('IMPORT','EXPORT'))
+    </sql>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 30: FroHourlyEnergy
+       ====================================================== -->
+  <changeSet id="30" author="frodo">
+    <comment>Create FroHourlyEnergy table for hourly grid import/export kWh (trapezoidal P_Grid integration)</comment>
+
+    <createTable tableName="FroHourlyEnergy">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroHourlyEnergy"/>
+      </column>
+
+      <column name="hour_start" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="hour_end" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- kWh imported from grid this hour (≥ 0) -->
+      <column name="import_kwh" type="DOUBLE PRECISION" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- kWh exported to grid this hour (≥ 0) -->
+      <column name="export_kwh" type="DOUBLE PRECISION" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Number of P_Grid samples used in integration -->
+      <column name="sample_count" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroHourlyEnergy_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <addUniqueConstraint
+        tableName="FroHourlyEnergy"
+        columnNames="hour_start"
+        constraintName="uk_FroHourlyEnergy_hour"/>
+
+    <createIndex tableName="FroHourlyEnergy" indexName="idx_FroHourlyEnergy_hour">
+      <column name="hour_start"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 31: FroHourlyCost
+       ====================================================== -->
+  <changeSet id="31" author="frodo">
+    <comment>Create FroHourlyCost table for hourly cost/income with effective price and fee audit trail</comment>
+
+    <createTable tableName="FroHourlyCost">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroHourlyCost"/>
+      </column>
+
+      <column name="hour_start" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="hour_end" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Energy consumed / produced this hour -->
+      <column name="import_kwh" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="export_kwh" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Effective prices applied (from tariff window or provider) -->
+      <column name="price_import_ct" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="price_export_ct" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Source that determined effective price: 'TARIFF_WINDOW' or provider id -->
+      <column name="import_price_source" type="VARCHAR(20)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="export_price_source" type="VARCHAR(20)">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Cost/income in EUR -->
+      <column name="import_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="export_income_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Sum of all active grid fee amounts for this hour -->
+      <column name="fee_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- import_cost_eur - export_income_eur + fee_eur -->
+      <column name="net_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroHourlyCost_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <addUniqueConstraint
+        tableName="FroHourlyCost"
+        columnNames="hour_start"
+        constraintName="uk_FroHourlyCost_hour"/>
+
+    <createIndex tableName="FroHourlyCost" indexName="idx_FroHourlyCost_hour">
+      <column name="hour_start"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 32: FroMonthlyCost
+       ====================================================== -->
+  <changeSet id="32" author="frodo">
+    <comment>Create FroMonthlyCost table for pre-calculated monthly summaries</comment>
+
+    <createTable tableName="FroMonthlyCost">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroMonthlyCost"/>
+      </column>
+
+      <!-- Year-month key: '2026-05' -->
+      <column name="year_month" type="VARCHAR(7)">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="total_import_kwh" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_export_kwh" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_import_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_export_income_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_fee_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="fixed_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- import_cost - export_income + fee + fixed -->
+      <column name="net_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Count of FroHourlyCost rows summed into this month -->
+      <column name="hours_calculated" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroMonthlyCost_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <addUniqueConstraint
+        tableName="FroMonthlyCost"
+        columnNames="year_month"
+        constraintName="uk_FroMonthlyCost_month"/>
+
+    <createIndex tableName="FroMonthlyCost" indexName="idx_FroMonthlyCost_month">
+      <column name="year_month"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 33: FroCostControlConfig
+       ====================================================== -->
+  <changeSet id="33" author="frodo">
+    <comment>Create FroCostControlConfig table for DB-backed runtime configuration (single row, id=1)</comment>
+
+    <createTable tableName="FroCostControlConfig">
+      <!-- Single-row config table: always id=1 -->
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroCostCtrlCfg"/>
+      </column>
+
+      <!-- SPI provider IDs for import and export directions -->
+      <column name="import_provider_id" type="VARCHAR(50)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="export_provider_id" type="VARCHAR(50)">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Cron expressions for scheduled price fetches -->
+      <column name="import_fetch_cron" type="VARCHAR(100)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="export_fetch_cron" type="VARCHAR(100)">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- P_Grid sample interval in seconds (default 15) -->
+      <column name="sample_interval_seconds" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Dead-band in watts: P_Grid values within ±dead_band_watts treated as zero -->
+      <column name="dead_band_watts" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Retention periods -->
+      <column name="retention_hourly_days" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+      <column name="retention_monthly_years" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="updated_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 34: FroCostControlConfig default row
+       ====================================================== -->
+  <changeSet id="34" author="frodo">
+    <comment>Insert default FroCostControlConfig row (id=1) with conservative defaults</comment>
+
+    <insert tableName="FroCostControlConfig">
+      <column name="id" valueNumeric="1"/>
+      <column name="import_provider_id" value="MANUAL"/>
+      <column name="export_provider_id" value="AWATTAR"/>
+      <column name="import_fetch_cron" value="0 55 * * * ?"/>
+      <column name="export_fetch_cron" value="0 55 * * * ?"/>
+      <column name="sample_interval_seconds" valueNumeric="15"/>
+      <column name="dead_band_watts" valueNumeric="10.0"/>
+      <column name="retention_hourly_days" valueNumeric="365"/>
+      <column name="retention_monthly_years" valueNumeric="10"/>
+      <column name="updated_at" valueComputed="CURRENT_TIMESTAMP"/>
+    </insert>
+
+  </changeSet>
+
+  <changeSet id="35" author="frodo">
+    <comment>Make FroFixedCost recurring: drop unique constraint on valid_from so multiple
+    entries with the same or overlapping dates can coexist (all active entries are summed,
+    same pattern as FroGridFee).</comment>
+    <dropUniqueConstraint tableName="FroFixedCost" constraintName="uk_FroFixedCost_month"/>
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 36: Migrate monetary/energy columns from DOUBLE PRECISION to NUMERIC
+       Firebird cannot convert DOUBLE PRECISION to NUMERIC via ALTER COLUMN TYPE, so each
+       column is migrated using: ADD new_col / UPDATE (cast) / DROP old_col / RENAME new_col.
+       Scales: EUR NUMERIC(15,4), ct/kWh NUMERIC(15,5), kWh NUMERIC(15,6), feeValue NUMERIC(15,5)
+       ====================================================== -->
+  <changeSet id="36" author="frodo">
+    <comment>Migrate monetary/energy columns DOUBLE PRECISION -> NUMERIC via add/copy/drop/rename.
+    Firebird rejects direct ALTER COLUMN TYPE from DOUBLE PRECISION to NUMERIC.</comment>
+
+    <!-- ── FroEnergyPrice ───────────────────────────────────────────────────────── -->
+    <!-- price_import_ct nullable NUMERIC(15,5) -->
+    <sql splitStatements="false">ALTER TABLE FroEnergyPrice ADD price_import_ct_new NUMERIC(15,5)</sql>
+    <sql splitStatements="false">UPDATE FroEnergyPrice SET price_import_ct_new = CAST(price_import_ct AS NUMERIC(15,5))</sql>
+    <sql splitStatements="false">ALTER TABLE FroEnergyPrice DROP price_import_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroEnergyPrice ALTER price_import_ct_new TO price_import_ct</sql>
+
+    <!-- price_export_ct nullable NUMERIC(15,5) -->
+    <sql splitStatements="false">ALTER TABLE FroEnergyPrice ADD price_export_ct_new NUMERIC(15,5)</sql>
+    <sql splitStatements="false">UPDATE FroEnergyPrice SET price_export_ct_new = CAST(price_export_ct AS NUMERIC(15,5))</sql>
+    <sql splitStatements="false">ALTER TABLE FroEnergyPrice DROP price_export_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroEnergyPrice ALTER price_export_ct_new TO price_export_ct</sql>
+
+    <!-- ── FroFixedCost ──────────────────────────────────────────────────────────── -->
+    <!-- monthly_cost_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroFixedCost ADD monthly_cost_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroFixedCost SET monthly_cost_eur_new = CAST(monthly_cost_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroFixedCost DROP monthly_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroFixedCost ALTER monthly_cost_eur_new TO monthly_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroFixedCost ALTER COLUMN monthly_cost_eur SET NOT NULL</sql>
+
+    <!-- ── FroGridFee ────────────────────────────────────────────────────────────── -->
+    <!-- fee_value NOT NULL NUMERIC(15,5) -->
+    <sql splitStatements="false">ALTER TABLE FroGridFee ADD fee_value_new NUMERIC(15,5)</sql>
+    <sql splitStatements="false">UPDATE FroGridFee SET fee_value_new = CAST(fee_value AS NUMERIC(15,5))</sql>
+    <sql splitStatements="false">ALTER TABLE FroGridFee DROP fee_value</sql>
+    <sql splitStatements="false">ALTER TABLE FroGridFee ALTER fee_value_new TO fee_value</sql>
+    <sql splitStatements="false">ALTER TABLE FroGridFee ALTER COLUMN fee_value SET NOT NULL</sql>
+
+    <!-- ── FroTariffWindow ───────────────────────────────────────────────────────── -->
+    <!-- price_ct NOT NULL NUMERIC(15,5) -->
+    <sql splitStatements="false">ALTER TABLE FroTariffWindow ADD price_ct_new NUMERIC(15,5)</sql>
+    <sql splitStatements="false">UPDATE FroTariffWindow SET price_ct_new = CAST(price_ct AS NUMERIC(15,5))</sql>
+    <sql splitStatements="false">ALTER TABLE FroTariffWindow DROP price_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroTariffWindow ALTER price_ct_new TO price_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroTariffWindow ALTER COLUMN price_ct SET NOT NULL</sql>
+
+    <!-- ── FroHourlyEnergy ───────────────────────────────────────────────────────── -->
+    <!-- import_kwh NOT NULL DEFAULT 0 NUMERIC(15,6) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ADD import_kwh_new NUMERIC(15,6)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyEnergy SET import_kwh_new = CAST(import_kwh AS NUMERIC(15,6))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy DROP import_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ALTER import_kwh_new TO import_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ALTER COLUMN import_kwh SET DEFAULT 0</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ALTER COLUMN import_kwh SET NOT NULL</sql>
+
+    <!-- export_kwh NOT NULL DEFAULT 0 NUMERIC(15,6) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ADD export_kwh_new NUMERIC(15,6)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyEnergy SET export_kwh_new = CAST(export_kwh AS NUMERIC(15,6))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy DROP export_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ALTER export_kwh_new TO export_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ALTER COLUMN export_kwh SET DEFAULT 0</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyEnergy ALTER COLUMN export_kwh SET NOT NULL</sql>
+
+    <!-- ── FroHourlyCost ─────────────────────────────────────────────────────────── -->
+    <!-- import_kwh NOT NULL NUMERIC(15,6) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD import_kwh_new NUMERIC(15,6)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET import_kwh_new = CAST(import_kwh AS NUMERIC(15,6))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP import_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER import_kwh_new TO import_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN import_kwh SET NOT NULL</sql>
+
+    <!-- export_kwh NOT NULL NUMERIC(15,6) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD export_kwh_new NUMERIC(15,6)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET export_kwh_new = CAST(export_kwh AS NUMERIC(15,6))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP export_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER export_kwh_new TO export_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN export_kwh SET NOT NULL</sql>
+
+    <!-- price_import_ct NOT NULL NUMERIC(15,5) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD price_import_ct_new NUMERIC(15,5)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET price_import_ct_new = CAST(price_import_ct AS NUMERIC(15,5))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP price_import_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER price_import_ct_new TO price_import_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN price_import_ct SET NOT NULL</sql>
+
+    <!-- price_export_ct NOT NULL NUMERIC(15,5) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD price_export_ct_new NUMERIC(15,5)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET price_export_ct_new = CAST(price_export_ct AS NUMERIC(15,5))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP price_export_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER price_export_ct_new TO price_export_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN price_export_ct SET NOT NULL</sql>
+
+    <!-- import_cost_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD import_cost_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET import_cost_eur_new = CAST(import_cost_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP import_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER import_cost_eur_new TO import_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN import_cost_eur SET NOT NULL</sql>
+
+    <!-- export_income_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD export_income_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET export_income_eur_new = CAST(export_income_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP export_income_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER export_income_eur_new TO export_income_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN export_income_eur SET NOT NULL</sql>
+
+    <!-- fee_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD fee_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET fee_eur_new = CAST(fee_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP fee_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER fee_eur_new TO fee_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN fee_eur SET NOT NULL</sql>
+
+    <!-- net_cost_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ADD net_cost_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroHourlyCost SET net_cost_eur_new = CAST(net_cost_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost DROP net_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER net_cost_eur_new TO net_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroHourlyCost ALTER COLUMN net_cost_eur SET NOT NULL</sql>
+
+    <!-- ── FroMonthlyCost ────────────────────────────────────────────────────────── -->
+    <!-- total_import_kwh NOT NULL NUMERIC(15,6) -->
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ADD total_import_kwh_new NUMERIC(15,6)</sql>
+    <sql splitStatements="false">UPDATE FroMonthlyCost SET total_import_kwh_new = CAST(total_import_kwh AS NUMERIC(15,6))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost DROP total_import_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER total_import_kwh_new TO total_import_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER COLUMN total_import_kwh SET NOT NULL</sql>
+
+    <!-- total_export_kwh NOT NULL NUMERIC(15,6) -->
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ADD total_export_kwh_new NUMERIC(15,6)</sql>
+    <sql splitStatements="false">UPDATE FroMonthlyCost SET total_export_kwh_new = CAST(total_export_kwh AS NUMERIC(15,6))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost DROP total_export_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER total_export_kwh_new TO total_export_kwh</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER COLUMN total_export_kwh SET NOT NULL</sql>
+
+    <!-- total_import_cost_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ADD total_import_cost_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroMonthlyCost SET total_import_cost_eur_new = CAST(total_import_cost_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost DROP total_import_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER total_import_cost_eur_new TO total_import_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER COLUMN total_import_cost_eur SET NOT NULL</sql>
+
+    <!-- total_export_income_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ADD total_export_income_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroMonthlyCost SET total_export_income_eur_new = CAST(total_export_income_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost DROP total_export_income_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER total_export_income_eur_new TO total_export_income_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER COLUMN total_export_income_eur SET NOT NULL</sql>
+
+    <!-- total_fee_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ADD total_fee_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroMonthlyCost SET total_fee_eur_new = CAST(total_fee_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost DROP total_fee_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER total_fee_eur_new TO total_fee_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER COLUMN total_fee_eur SET NOT NULL</sql>
+
+    <!-- fixed_cost_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ADD fixed_cost_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroMonthlyCost SET fixed_cost_eur_new = CAST(fixed_cost_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost DROP fixed_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER fixed_cost_eur_new TO fixed_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER COLUMN fixed_cost_eur SET NOT NULL</sql>
+
+    <!-- net_cost_eur NOT NULL NUMERIC(15,4) -->
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ADD net_cost_eur_new NUMERIC(15,4)</sql>
+    <sql splitStatements="false">UPDATE FroMonthlyCost SET net_cost_eur_new = CAST(net_cost_eur AS NUMERIC(15,4))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost DROP net_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER net_cost_eur_new TO net_cost_eur</sql>
+    <sql splitStatements="false">ALTER TABLE FroMonthlyCost ALTER COLUMN net_cost_eur SET NOT NULL</sql>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 37: Add direction column to FroFixedCost
+       ====================================================== -->
+  <changeSet id="37" author="frodo">
+    <comment>Add direction column to FroFixedCost (IMPORT/EXPORT/BOTH) to indicate
+    which energy flow direction the standing charge applies to. Default BOTH.</comment>
+
+    <addColumn tableName="FroFixedCost">
+      <column name="direction" type="VARCHAR(10)" defaultValue="BOTH">
+        <constraints nullable="false"/>
+      </column>
+    </addColumn>
+
+    <sql splitStatements="false">
+      ALTER TABLE FroFixedCost
+      ADD CONSTRAINT ck_FroFixedCost_dir CHECK (direction IN ('IMPORT','EXPORT','BOTH'))
+    </sql>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 38: Migrate FroMarketPrice.price_ct DOUBLE → NUMERIC(15,5)
+       ====================================================== -->
+  <changeSet id="38" author="frodo">
+    <comment>Migrate FroMarketPrice.price_ct from DOUBLE PRECISION to NUMERIC(15,5)
+    to match BigDecimal mapping and consistent monetary precision across the schema.
+    Uses add/copy/drop/rename pattern required for Firebird DDL type changes.</comment>
+
+    <sql splitStatements="false">ALTER TABLE FroMarketPrice ADD price_ct_new NUMERIC(15,5)</sql>
+    <sql splitStatements="false">UPDATE FroMarketPrice SET price_ct_new = CAST(price_ct AS NUMERIC(15,5))</sql>
+    <sql splitStatements="false">ALTER TABLE FroMarketPrice DROP price_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroMarketPrice ALTER price_ct_new TO price_ct</sql>
+    <sql splitStatements="false">ALTER TABLE FroMarketPrice ALTER COLUMN price_ct SET NOT NULL</sql>
+
+  </changeSet>
+
+</databaseChangeLog>

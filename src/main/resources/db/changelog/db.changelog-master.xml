@@ -16,5 +16,6 @@
   <include file="db/changelog/v1.7.0-gpio-assignment.xml"/>
   <include file="db/changelog/v1.7.1-fix-gpio-seq-increment.xml"/>
   <include file="db/changelog/v1.8.0-aggregation-modes.xml"/>
+  <include file="db/changelog/v1.9.0-cost-control.xml"/>
 
 </databaseChangeLog>

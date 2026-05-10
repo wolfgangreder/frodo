@@ -217,7 +217,8 @@ public class MarketPriceSchedulerService {
    * @param eurMwh market price in EUR/MWh
    * @return equivalent price in ct/kWh
    */
-  static double eurMwhToCtKwh(double eurMwh) {
-    return eurMwh / 10.0;
+  static java.math.BigDecimal eurMwhToCtKwh(double eurMwh) {
+    return java.math.BigDecimal.valueOf(eurMwh)
+      .divide(java.math.BigDecimal.TEN, 5, java.math.RoundingMode.HALF_UP);
   }
 }

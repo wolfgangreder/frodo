@@ -1,5 +1,7 @@
 package at.or.reder.frodo.api.dto;
 
+import java.math.BigDecimal;
+
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 /**
@@ -18,7 +20,7 @@ public record PriceControlResponse(
 
   @Schema(description = "Current aWATTar AT market price in ct/kWh, or null if not yet available",
           example = "-1.25")
-  Double currentPriceCt,
+  BigDecimal currentPriceCt,
 
   @Schema(description = "True when price control is enabled AND the current price is negative "
           + "(i.e. the scheduler is actively limiting export right now)",

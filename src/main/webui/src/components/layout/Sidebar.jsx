@@ -16,6 +16,7 @@ import {
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DevicesIcon from '@mui/icons-material/Devices';
 import DescriptionIcon from '@mui/icons-material/Description';
+import EuroIcon from '@mui/icons-material/Euro';
 import InsightsIcon from '@mui/icons-material/Insights';
 import MemoryIcon from '@mui/icons-material/Memory';
 import SolarPowerIcon from '@mui/icons-material/SolarPower';
@@ -56,6 +57,11 @@ const navItems = [
     title: 'Solar API',
     path: '/solar-api',
     icon: <SolarPowerIcon />,
+  },
+  {
+    title: 'Cost Control',
+    path: '/cost-control',
+    icon: <EuroIcon />,
   },
   {
     title: 'Settings',

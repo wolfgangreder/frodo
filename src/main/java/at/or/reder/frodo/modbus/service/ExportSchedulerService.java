@@ -27,6 +27,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
@@ -275,7 +276,7 @@ public class ExportSchedulerService {
       return;
     }
 
-    double priceCt     = priceOpt.get().priceCt;
+    BigDecimal priceCt = priceOpt.get().priceCt;
     int toleranceWatts = globalConfig.exportToleranceWatts;
     List<ModbusDeviceEntity> inverters = loadEnabledInverters();
 
@@ -290,7 +291,7 @@ public class ExportSchedulerService {
 
       String strategyLabel = String.format(
         "GLOBAL_PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W",
-        priceCt, Integer.valueOf(toleranceWatts));
+        priceCt.doubleValue(), Integer.valueOf(toleranceWatts));
       applyDynamicLimitWithTolerance(deviceId, device, toleranceWatts, strategyLabel);
     }
   }
@@ -409,8 +410,8 @@ public class ExportSchedulerService {
    * @param priceCt current market price in ct/kWh (may be negative)
    * @return {@code true} if export should be capped (price is negative)
    */
-  public static boolean shouldBlockForPrice(double priceCt) {
-    return priceCt < 0;
+  public static boolean shouldBlockForPrice(BigDecimal priceCt) {
+    return priceCt.compareTo(BigDecimal.ZERO) < 0;
   }
 
   /**
@@ -765,7 +766,7 @@ public class ExportSchedulerService {
       return;
     }
 
-    double priceCt = priceOpt.get().priceCt;
+    BigDecimal priceCt = priceOpt.get().priceCt;
 
     if (!shouldBlockForPrice(priceCt)) {
       // Price is zero or positive — clear manual override and re-enable on transition only
@@ -779,7 +780,7 @@ public class ExportSchedulerService {
     // Price is negative — use dynamic load+battery demand plus a small export buffer
     int toleranceWatts = schedule.exportToleranceWatts != null ? schedule.exportToleranceWatts : 50;
     String strategyLabel = String.format(
-      "PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W", priceCt, Integer.valueOf(toleranceWatts));
+      "PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W", priceCt.doubleValue(), Integer.valueOf(toleranceWatts));
     applyDynamicLimitWithTolerance(schedule.deviceId, device, toleranceWatts, strategyLabel);
   }
 
@@ -847,7 +848,7 @@ public class ExportSchedulerService {
       return;
     }
 
-    double priceCt = priceOpt.get().priceCt;
+    BigDecimal priceCt = priceOpt.get().priceCt;
     boolean shouldBlock = shouldBlockForPrice(priceCt);
 
     try {
@@ -856,7 +857,7 @@ public class ExportSchedulerService {
       LOG.infof(
         "GPIO applied: pair='%s' device=%d (%s) export=%s price=%.4f ct/kWh",
         pairName, schedule.deviceId, device.name,
-        shouldBlock ? "BLOCKED" : "ENABLED", priceCt);
+        shouldBlock ? "BLOCKED" : "ENABLED", priceCt.doubleValue());
     } catch (IOException e) {
       LOG.errorf(e,
         "GPIO setBlockState failed for pair '%s' device %d (%s): %s — falling back to Modbus",
@@ -901,7 +902,7 @@ public class ExportSchedulerService {
       return;
     }
 
-    double priceCt      = priceOpt.get().priceCt;
+    BigDecimal priceCt  = priceOpt.get().priceCt;
     boolean shouldBlock = shouldBlockForPrice(priceCt);
     int toleranceWatts  = config.exportToleranceWatts;
 
@@ -912,7 +913,7 @@ public class ExportSchedulerService {
 
     LOG.debugf(
       "Global price control: price=%.4f ct/kWh, block=%b, tolerance=%d W, inverters=%d",
-      priceCt, Boolean.valueOf(shouldBlock), Integer.valueOf(toleranceWatts),
+      priceCt.doubleValue(), Boolean.valueOf(shouldBlock), Integer.valueOf(toleranceWatts),
       Integer.valueOf(inverters.size()));
 
     for (ModbusDeviceEntity device : inverters) {
@@ -941,7 +942,7 @@ public class ExportSchedulerService {
         // Price is negative — apply dynamic load+battery demand limit
         String strategyLabel = String.format(
           "GLOBAL_PRICE_CONTROLLED, price=%.4f ct/kWh, tol=%d W",
-          priceCt, Integer.valueOf(toleranceWatts));
+          priceCt.doubleValue(), Integer.valueOf(toleranceWatts));
         applyDynamicLimitWithTolerance(deviceId, device, toleranceWatts, strategyLabel);
       }
     }

@@ -13,6 +13,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import java.math.BigDecimal;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
@@ -91,7 +92,7 @@ public class PriceControlResource {
   // ── helpers ──────────────────────────────────────────────────────────────
 
   private PriceControlResponse toResponse(boolean enabled, int toleranceWatts) {
-    Double currentPriceCt = marketPriceRepository.findCurrent()
+    BigDecimal currentPriceCt = marketPriceRepository.findCurrent()
       .map(p -> p.priceCt)
       .orElse(null);
     boolean currentlyBlocking = enabled

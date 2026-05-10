@@ -7,6 +7,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 
@@ -46,8 +47,8 @@ public class MarketPriceEntity extends PanacheEntity {
      * <p>Conversion from aWATTar API (EUR/MWh): {@code priceCt = priceEurMwh / 10}.
      * Negative values indicate hours where grid operators pay producers to consume.</p>
      */
-    @Column(name = "price_ct", nullable = false)
-    public double priceCt;
+    @Column(name = "price_ct", nullable = false, precision = 15, scale = 5)
+    public BigDecimal priceCt;
 
     /**
      * Timestamp when this record was fetched from aWATTar.
