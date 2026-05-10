@@ -222,6 +222,30 @@ Flushes to `FroHourlyEnergy` on hour boundary, triggers `CostCalculationService.
 
 ## Code Style
 
+### License Header
+
+**Every** `.java`, `.js`, and `.jsx` source file **must** begin with the Apache 2.0 header below.
+When creating a new file, prepend this header before the `package` statement (Java) or first import (JS/JSX).
+When editing an existing file that is missing the header, add it as part of the same change.
+
+```
+/*
+ * Copyright 2026 Wolfgang Reder
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+```
+
 ### Import Order
 1. `io.vertx.*`, `io.smallrye.*`, `io.quarkus.*`
 2. `jakarta.*`
