@@ -17,20 +17,20 @@
 package at.or.reder.frodo.cost.service;
 
 import at.or.reder.frodo.cost.entity.DailyCostEntity;
+import at.or.reder.frodo.cost.entity.EnergyPriceEntity;
 import at.or.reder.frodo.cost.entity.GridFeeEntity;
-import at.or.reder.frodo.cost.entity.HourlyEnergyEntity;
 import at.or.reder.frodo.cost.entity.HourlyCostEntity;
+import at.or.reder.frodo.cost.entity.HourlyEnergyEntity;
 import at.or.reder.frodo.cost.entity.MonthlyCostEntity;
 import at.or.reder.frodo.cost.entity.TariffWindowEntity;
+import at.or.reder.frodo.cost.repository.DailyCostRepository;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.repository.FixedCostRepository;
 import at.or.reder.frodo.cost.repository.GridFeeRepository;
-import at.or.reder.frodo.cost.repository.HourlyEnergyRepository;
 import at.or.reder.frodo.cost.repository.HourlyCostRepository;
-import at.or.reder.frodo.cost.repository.DailyCostRepository;
+import at.or.reder.frodo.cost.repository.HourlyEnergyRepository;
 import at.or.reder.frodo.cost.repository.MonthlyCostRepository;
 import at.or.reder.frodo.cost.repository.TariffWindowRepository;
-import at.or.reder.frodo.cost.entity.EnergyPriceEntity;
 import at.or.reder.frodo.cost.spi.FeeAppliesTo;
 import at.or.reder.frodo.cost.spi.FeeType;
 import at.or.reder.frodo.cost.spi.PriceDirection;
@@ -41,8 +41,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -50,6 +48,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import org.jboss.logging.Logger;
 
 /**
  * Calculates hourly and monthly energy costs from grid energy data, provider prices,
@@ -298,7 +297,7 @@ public class CostCalculationService {
         }
         case ABSOLUTE_TIME ->
           // EUR/month amortized per hour; separate standing charge
-          timeFeeEur = timeFeeEur.add(fee.feeValue.divide(HOURS_PER_MONTH, 4, RoundingMode.HALF_UP));
+          timeFeeEur = timeFeeEur.subtract(fee.feeValue.divide(HOURS_PER_MONTH, 4, RoundingMode.HALF_UP));
       }
     }
     return new EffectivePrices(importCt, exportCt, timeFeeEur);
@@ -333,7 +332,7 @@ public class CostCalculationService {
     daily.totalExportIncomeEur = totalExportIncome;
     daily.totalFeeEur = totalFee;
     // netCostEur = import cost + time-based fees; fixed costs are monthly only
-    daily.netCostEur = totalImportCost.add(totalFee);
+    daily.netCostEur = totalImportCost.subtract(totalFee);
     daily.hoursCalculated = hours.size();
 
     dailyCostRepository.upsert(daily);

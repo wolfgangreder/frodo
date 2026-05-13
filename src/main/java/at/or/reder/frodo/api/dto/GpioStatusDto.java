@@ -23,7 +23,7 @@ import java.util.List;
  */
 public record GpioStatusDto(
   boolean available,
-  boolean isRaspberryPi5,
+  boolean isRaspberryPi,
   String platform,
   String errorMessage,
   List<GpioPairStatusDto> pairs

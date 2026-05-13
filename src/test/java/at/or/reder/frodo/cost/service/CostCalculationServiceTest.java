@@ -171,11 +171,11 @@ class CostCalculationServiceTest {
     var ep = CostCalculationService.applyFees(bd("20.0"), bd("8.0"),
       List.of(fee(FeeType.ABSOLUTE_TIME, FeeAppliesTo.BOTH, "730.0")));
 
-    // 730 EUR/month ÷ 730 = 1.0000 EUR/hour
+    // 730 EUR/month ÷ 730 = 1.0000 EUR/hour deducted
     assertEquals(0, bd("20.0").compareTo(ep.importPriceCt()), "import price unchanged");
     assertEquals(0, bd("8.0").compareTo(ep.exportPriceCt()), "export price unchanged");
-    assertEquals(0, BigDecimal.ONE.compareTo(ep.timeFeeEur().stripTrailingZeros()),
-      "1 EUR/hour time fee");
+    assertEquals(0, BigDecimal.ONE.negate().compareTo(ep.timeFeeEur().stripTrailingZeros()),
+      "-1 EUR/hour time fee (deducted)");
   }
 
   @Test
@@ -185,8 +185,8 @@ class CostCalculationServiceTest {
       fee(FeeType.ABSOLUTE_TIME, FeeAppliesTo.IMPORT, "365.0"),
       fee(FeeType.ABSOLUTE_TIME, FeeAppliesTo.EXPORT, "365.0")));
 
-    // (365 + 365) / 730 = 730/730 = 1 EUR/hour
-    assertEquals(0, BigDecimal.ONE.compareTo(ep.timeFeeEur().stripTrailingZeros()));
+    // (365 + 365) / 730 = 730/730 = 1 EUR/hour deducted
+    assertEquals(0, BigDecimal.ONE.negate().compareTo(ep.timeFeeEur().stripTrailingZeros()));
     assertEquals(0, bd("20.0").compareTo(ep.importPriceCt()), "price unchanged");
   }
 
@@ -208,7 +208,7 @@ class CostCalculationServiceTest {
 
     assertEquals(0, bd("18.0").compareTo(ep.importPriceCt()), "effective import price");
     assertEquals(0, bd("9.0").compareTo(ep.exportPriceCt()), "effective export price");
-    assertEquals(0, BigDecimal.ONE.compareTo(ep.timeFeeEur().stripTrailingZeros()), "time fee");
+    assertEquals(0, BigDecimal.ONE.negate().compareTo(ep.timeFeeEur().stripTrailingZeros()), "time fee");
   }
 
   // ---- net cost formula --------------------------------------------------

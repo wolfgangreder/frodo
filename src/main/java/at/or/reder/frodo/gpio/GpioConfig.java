@@ -22,7 +22,7 @@ import io.smallrye.config.WithDefault;
 import java.util.Map;
 
 /**
- * Configuration for GPIO-based export control on Raspberry Pi 5.
+ * Configuration for GPIO-based export control on Raspberry Pi.
  *
  * <p>GPIO pairs are named by arbitrary keys in {@code application.properties}:
  * <pre>

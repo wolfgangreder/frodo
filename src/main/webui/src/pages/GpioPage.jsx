@@ -73,7 +73,7 @@ function GpioSystemStatus({ status }) {
             Platform: {status.platform || 'Unknown'}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Raspberry Pi 5: {status.isRaspberryPi5 ? 'Yes' : 'No'}
+            Raspberry Pi: {status.isRaspberryPi ? 'Yes' : 'No'}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Pairs: {status.pairs?.length ?? 0}
@@ -342,7 +342,7 @@ function GpioPage() {
     <Box>
       <PageHeader
         title="GPIO Export Control"
-        subtitle="Manage GPIO-based export control relay pairs (Raspberry Pi 5 only)"
+        subtitle="Manage GPIO-based export control relay pairs (Raspberry Pi)"
       />
 
       {isLoading && (

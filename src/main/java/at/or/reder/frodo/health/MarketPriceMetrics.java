@@ -27,11 +27,10 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.jboss.logging.Logger;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import org.jboss.logging.Logger;
 
 /**
  * Registers and manages Micrometer/Prometheus metrics for market price operations.
@@ -139,11 +138,11 @@ public class MarketPriceMetrics {
         continue;
       }
       if (fee.feeType == FeeType.ABSOLUTE_ENERGY) {
-        gross = gross.add(fee.feeValue);
+        gross = gross.subtract(fee.feeValue);
       } else if (fee.feeType == FeeType.PERCENT) {
         BigDecimal surcharge = net.multiply(fee.feeValue)
           .divide(BigDecimal.valueOf(100), 5, RoundingMode.HALF_UP);
-        gross = gross.add(surcharge);
+        gross = gross.subtract(surcharge);
       }
       // ABSOLUTE_TIME: skip — EUR/month standing charge, not per-kWh
     }
