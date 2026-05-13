@@ -16,9 +16,10 @@
 
 package at.or.reder.frodo.health;
 
+import at.or.reder.frodo.TimeUtil;
+import at.or.reder.frodo.cost.entity.HourlyCostEntity;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.repository.HourlyCostRepository;
-import at.or.reder.frodo.cost.entity.HourlyCostEntity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -85,7 +86,7 @@ public class CostControlHealthCheck implements HealthCheck {
 
     builder.withData("cost_control.enabled", true);
 
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = TimeUtil.nowUtc();
     boolean stale = false;
 
     // Check latest hourly cost age
@@ -107,12 +108,9 @@ public class CostControlHealthCheck implements HealthCheck {
 
     // Check current energy prices
     try {
-      boolean hasImport = energyPriceRepository.findForTime(now)
-        .map(e -> e.priceImportCt != null)
-        .orElse(false);
-      boolean hasExport = energyPriceRepository.findForTime(now)
-        .map(e -> e.priceExportCt != null)
-        .orElse(false);
+      var currentPrice = energyPriceRepository.findForTime(now);
+      boolean hasImport = currentPrice.map(e -> e.priceImportCt != null).orElse(false);
+      boolean hasExport = currentPrice.map(e -> e.priceExportCt != null).orElse(false);
       builder.withData("prices.import_available", hasImport)
         .withData("prices.export_available", hasExport);
     } catch (Exception ex) {

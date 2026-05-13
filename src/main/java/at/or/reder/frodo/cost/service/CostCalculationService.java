@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.cost.service;
 
+import at.or.reder.frodo.cost.entity.DailyCostEntity;
 import at.or.reder.frodo.cost.entity.GridFeeEntity;
 import at.or.reder.frodo.cost.entity.HourlyEnergyEntity;
 import at.or.reder.frodo.cost.entity.HourlyCostEntity;
@@ -26,6 +27,7 @@ import at.or.reder.frodo.cost.repository.FixedCostRepository;
 import at.or.reder.frodo.cost.repository.GridFeeRepository;
 import at.or.reder.frodo.cost.repository.HourlyEnergyRepository;
 import at.or.reder.frodo.cost.repository.HourlyCostRepository;
+import at.or.reder.frodo.cost.repository.DailyCostRepository;
 import at.or.reder.frodo.cost.repository.MonthlyCostRepository;
 import at.or.reder.frodo.cost.repository.TariffWindowRepository;
 import at.or.reder.frodo.cost.entity.EnergyPriceEntity;
@@ -53,6 +55,17 @@ import java.util.Optional;
  * Calculates hourly and monthly energy costs from grid energy data, provider prices,
  * tariff windows, and grid fees.
  *
+ * <h3>Hourly formula</h3>
+ * <pre>
+ *   effectiveImportPrice = marketImportPrice − ABSOLUTE_ENERGY_fees − PERCENT_fees (ct/kWh)
+ *   effectiveExportPrice = marketExportPrice − ABSOLUTE_ENERGY_fees − PERCENT_fees (ct/kWh)
+ *   importCostEur   = max(0, effectiveImportPrice) × importKwh  / 100
+ *   exportIncomeEur = max(0, effectiveExportPrice) × exportKwh / 100
+ *   feeEur          = sum(ABSOLUTE_TIME fees) / 730  [EUR/month amortized per hour]
+ *   netCostEur      = importCostEur + feeEur          [import cost only, no saldo]
+ * </pre>
+ * Import and export are calculated independently — no saldo is built at the hourly level.
+ *
  * <h3>Price resolution order (per direction)</h3>
  * <ol>
  *   <li>Matching {@link TariffWindowEntity} (highest priority wins) → source = "TARIFF_WINDOW"</li>
@@ -60,9 +73,13 @@ import java.util.Optional;
  *   <li>No price found → warn, use 0.0, source = "UNKNOWN"</li>
  * </ol>
  *
+ * <h3>Daily update</h3>
+ * <p>After every hourly upsert, all {@code FroHourlyCost} rows for the calendar day are
+ * re-aggregated. Fixed costs are not included at the daily level (monthly concept only).</p>
+ *
  * <h3>Monthly update</h3>
- * <p>After every hourly upsert, all {@code FroHourlyCost} rows for the calendar month
- * are re-aggregated and the {@code FroMonthlyCost} row is updated in the same transaction.</p>
+ * <p>After every hourly upsert, all {@code FroHourlyCost} rows for the calendar month are
+ * re-aggregated. Fixed costs are added on top of the summed import costs + time fees.</p>
  */
 @ApplicationScoped
 public class CostCalculationService {
@@ -71,6 +88,7 @@ public class CostCalculationService {
   private static final String SOURCE_TARIFF_WINDOW = "TARIFF_WINDOW";
   private static final String SOURCE_UNKNOWN = "UNKNOWN";
   private static final DateTimeFormatter YEAR_MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+  private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
   private static final BigDecimal HOURS_PER_MONTH = new BigDecimal("730");
   private static final BigDecimal HUNDRED = new BigDecimal("100");
 
@@ -79,6 +97,9 @@ public class CostCalculationService {
 
   @Inject
   HourlyCostRepository hourlyCostRepository;
+
+  @Inject
+  DailyCostRepository dailyCostRepository;
 
   @Inject
   MonthlyCostRepository monthlyCostRepository;
@@ -157,34 +178,38 @@ public class CostCalculationService {
     }
     HourlyEnergyEntity energy = energyOpt.get();
 
-    // Resolve effective prices per direction
+    // Resolve raw market prices per direction
     PriceResolution importResolution = resolvePrice(PriceDirection.IMPORT, hourStart);
     PriceResolution exportResolution = resolvePrice(PriceDirection.EXPORT, hourStart);
 
-    // Base costs: kWh * ct/kWh / 100 → EUR (scale 4)
-    BigDecimal importCostEur = energy.importKwh
-      .multiply(importResolution.priceCt())
-      .divide(HUNDRED, 4, RoundingMode.HALF_UP);
-    BigDecimal exportIncomeEur = energy.exportKwh
-      .multiply(exportResolution.priceCt())
-      .divide(HUNDRED, 4, RoundingMode.HALF_UP);
-
-    // Grid fees
+    // Apply grid fees: ABSOLUTE_ENERGY/PERCENT reduce the effective price per direction;
+    // ABSOLUTE_TIME is amortized as a separate hourly EUR charge.
     List<GridFeeEntity> fees = gridFeeRepository.findActiveFeesForTime(hourStart);
-    BigDecimal feeEur = fees.stream()
-      .map(fee -> calcFee(fee, energy, importResolution.priceCt(), exportResolution.priceCt()))
-      .reduce(BigDecimal.ZERO, BigDecimal::add);
+    EffectivePrices effective = applyFees(importResolution.priceCt(), exportResolution.priceCt(), fees);
 
-    BigDecimal netCostEur = importCostEur.subtract(exportIncomeEur).add(feeEur);
+    // cost = max(0, effective_price_ct) * kWh / 100  (ct/kWh → EUR)
+    // Import and export are independent — no saldo.
+    BigDecimal importCostEur = effective.importPriceCt().max(BigDecimal.ZERO)
+      .multiply(energy.importKwh)
+      .divide(HUNDRED, 4, RoundingMode.HALF_UP);
+    BigDecimal exportIncomeEur = effective.exportPriceCt().max(BigDecimal.ZERO)
+      .multiply(energy.exportKwh)
+      .divide(HUNDRED, 4, RoundingMode.HALF_UP);
 
-    // Upsert FroHourlyCost
+    // feeEur = ABSOLUTE_TIME per-hour standing charge only (energy fees are in the price)
+    BigDecimal feeEur = effective.timeFeeEur();
+
+    // netCostEur = import cost + standing fees; export income is separate
+    BigDecimal netCostEur = importCostEur.add(feeEur);
+
+    // Upsert FroHourlyCost — store effective (after-fee) prices for display consistency
     HourlyCostEntity cost = new HourlyCostEntity();
     cost.hourStart = hourStart;
     cost.hourEnd = energy.hourEnd;
     cost.importKwh = energy.importKwh;
     cost.exportKwh = energy.exportKwh;
-    cost.priceImportCt = importResolution.priceCt();
-    cost.priceExportCt = exportResolution.priceCt();
+    cost.priceImportCt = effective.importPriceCt();
+    cost.priceExportCt = effective.exportPriceCt();
     cost.importPriceSource = importResolution.source();
     cost.exportPriceSource = exportResolution.source();
     cost.importCostEur = importCostEur;
@@ -194,7 +219,8 @@ public class CostCalculationService {
 
     hourlyCostRepository.upsert(cost);
 
-    // Real-time monthly update
+    // Real-time daily and monthly updates
+    updateDailyCost(hourStart);
     updateMonthlyCost(hourStart);
   }
 
@@ -224,33 +250,93 @@ public class CostCalculationService {
     return new PriceResolution(BigDecimal.ZERO, SOURCE_UNKNOWN);
   }
 
-  private static BigDecimal calcFee(
-      GridFeeEntity fee, HourlyEnergyEntity energy,
-      BigDecimal importPriceCt, BigDecimal exportPriceCt) {
-    return switch (fee.feeType) {
-      case PERCENT -> {
-        BigDecimal base = switch (fee.appliesTo) {
-          case EXPORT -> energy.exportKwh.multiply(exportPriceCt)
-            .divide(HUNDRED, 6, RoundingMode.HALF_UP);
-          case IMPORT -> energy.importKwh.multiply(importPriceCt)
-            .divide(HUNDRED, 6, RoundingMode.HALF_UP);
-          case BOTH -> energy.exportKwh.multiply(exportPriceCt)
-            .add(energy.importKwh.multiply(importPriceCt))
-            .divide(HUNDRED, 6, RoundingMode.HALF_UP);
-        };
-        yield base.multiply(fee.feeValue).divide(HUNDRED, 4, RoundingMode.HALF_UP);
+  /**
+   * Applies all active grid fees to the raw market prices, returning effective prices.
+   *
+   * <ul>
+   *   <li>{@link FeeType#ABSOLUTE_ENERGY} (ct/kWh): subtracted directly from the market price
+   *       per applicable direction.</li>
+   *   <li>{@link FeeType#PERCENT} (%): {@code rawPrice × percent / 100} subtracted from the
+   *       effective price per applicable direction.</li>
+   *   <li>{@link FeeType#ABSOLUTE_TIME} (EUR/month): amortized per hour (÷ 730) and returned
+   *       as a separate standing charge; does not affect per-kWh prices.</li>
+   * </ul>
+   *
+   * <p>Package-private and static for unit testability.</p>
+   *
+   * @param rawImportCt  raw market import price in ct/kWh
+   * @param rawExportCt  raw market export price in ct/kWh
+   * @param fees         active grid fees for the hour
+   * @return effective prices and per-hour time fee
+   */
+  static EffectivePrices applyFees(BigDecimal rawImportCt, BigDecimal rawExportCt, List<GridFeeEntity> fees) {
+    BigDecimal importCt = rawImportCt;
+    BigDecimal exportCt = rawExportCt;
+    BigDecimal timeFeeEur = BigDecimal.ZERO;
+
+    for (GridFeeEntity fee : fees) {
+      switch (fee.feeType) {
+        case ABSOLUTE_ENERGY -> {
+          // ct/kWh subtracted from market price per direction
+          if (fee.appliesTo == FeeAppliesTo.IMPORT || fee.appliesTo == FeeAppliesTo.BOTH) {
+            importCt = importCt.subtract(fee.feeValue);
+          }
+          if (fee.appliesTo == FeeAppliesTo.EXPORT || fee.appliesTo == FeeAppliesTo.BOTH) {
+            exportCt = exportCt.subtract(fee.feeValue);
+          }
+        }
+        case PERCENT -> {
+          // Percentage of the raw market price subtracted per direction
+          if (fee.appliesTo == FeeAppliesTo.IMPORT || fee.appliesTo == FeeAppliesTo.BOTH) {
+            importCt = importCt.subtract(
+              rawImportCt.multiply(fee.feeValue).divide(HUNDRED, 6, RoundingMode.HALF_UP));
+          }
+          if (fee.appliesTo == FeeAppliesTo.EXPORT || fee.appliesTo == FeeAppliesTo.BOTH) {
+            exportCt = exportCt.subtract(
+              rawExportCt.multiply(fee.feeValue).divide(HUNDRED, 6, RoundingMode.HALF_UP));
+          }
+        }
+        case ABSOLUTE_TIME ->
+          // EUR/month amortized per hour; separate standing charge
+          timeFeeEur = timeFeeEur.add(fee.feeValue.divide(HOURS_PER_MONTH, 4, RoundingMode.HALF_UP));
       }
-      case ABSOLUTE_ENERGY -> {
-        BigDecimal kwh = switch (fee.appliesTo) {
-          case EXPORT -> energy.exportKwh;
-          case IMPORT -> energy.importKwh;
-          case BOTH -> energy.exportKwh.add(energy.importKwh);
-        };
-        yield kwh.multiply(fee.feeValue).divide(HUNDRED, 4, RoundingMode.HALF_UP); // ct/kWh → EUR
-      }
-      case ABSOLUTE_TIME ->
-        fee.feeValue.divide(HOURS_PER_MONTH, 4, RoundingMode.HALF_UP); // EUR/month → EUR/hour
-    };
+    }
+    return new EffectivePrices(importCt, exportCt, timeFeeEur);
+  }
+
+  private void updateDailyCost(LocalDateTime anyHourInDay) {
+    String day = anyHourInDay.format(DAY_FMT);
+    LocalDateTime from = anyHourInDay.toLocalDate().atStartOfDay();
+    LocalDateTime to = from.plusDays(1);
+
+    List<HourlyCostEntity> hours = hourlyCostRepository.findByDateRange(from, to);
+
+    BigDecimal totalImportKwh = BigDecimal.ZERO;
+    BigDecimal totalExportKwh = BigDecimal.ZERO;
+    BigDecimal totalImportCost = BigDecimal.ZERO;
+    BigDecimal totalExportIncome = BigDecimal.ZERO;
+    BigDecimal totalFee = BigDecimal.ZERO;
+
+    for (HourlyCostEntity h : hours) {
+      totalImportKwh = totalImportKwh.add(h.importKwh);
+      totalExportKwh = totalExportKwh.add(h.exportKwh);
+      totalImportCost = totalImportCost.add(h.importCostEur);
+      totalExportIncome = totalExportIncome.add(h.exportIncomeEur);
+      totalFee = totalFee.add(h.feeEur);
+    }
+
+    DailyCostEntity daily = new DailyCostEntity();
+    daily.costDay = day;
+    daily.totalImportKwh = totalImportKwh;
+    daily.totalExportKwh = totalExportKwh;
+    daily.totalImportCostEur = totalImportCost;
+    daily.totalExportIncomeEur = totalExportIncome;
+    daily.totalFeeEur = totalFee;
+    // netCostEur = import cost + time-based fees; fixed costs are monthly only
+    daily.netCostEur = totalImportCost.add(totalFee);
+    daily.hoursCalculated = hours.size();
+
+    dailyCostRepository.upsert(daily);
   }
 
   private void updateMonthlyCost(LocalDateTime anyHourInMonth) {
@@ -267,7 +353,6 @@ public class CostCalculationService {
     BigDecimal totalImportCost = BigDecimal.ZERO;
     BigDecimal totalExportIncome = BigDecimal.ZERO;
     BigDecimal totalFee = BigDecimal.ZERO;
-    BigDecimal totalNet = BigDecimal.ZERO;
 
     for (HourlyCostEntity h : hours) {
       totalImportKwh = totalImportKwh.add(h.importKwh);
@@ -275,7 +360,6 @@ public class CostCalculationService {
       totalImportCost = totalImportCost.add(h.importCostEur);
       totalExportIncome = totalExportIncome.add(h.exportIncomeEur);
       totalFee = totalFee.add(h.feeEur);
-      totalNet = totalNet.add(h.netCostEur);
     }
 
     BigDecimal fixedCost = fixedCostRepository
@@ -292,12 +376,23 @@ public class CostCalculationService {
     monthly.totalExportIncomeEur = totalExportIncome;
     monthly.totalFeeEur = totalFee;
     monthly.fixedCostEur = fixedCost;
-    monthly.netCostEur = totalNet.add(fixedCost);
+    // netCostEur = total import cost + time-based standing fees + fixed costs;
+    // export income is tracked separately and NOT subtracted (no saldo).
+    monthly.netCostEur = totalImportCost.add(totalFee).add(fixedCost);
     monthly.hoursCalculated = hours.size();
 
     monthlyCostRepository.upsert(monthly);
   }
 
-  /** Price resolution result: effective price in ct/kWh + source label. */
+  /** Price resolution result: raw market price in ct/kWh + source label. */
   record PriceResolution(BigDecimal priceCt, String source) {}
+
+  /**
+   * Effective prices after grid fees have been applied.
+   *
+   * @param importPriceCt effective import price in ct/kWh (market − fees); may be negative
+   * @param exportPriceCt effective export price in ct/kWh (market − fees); may be negative
+   * @param timeFeeEur    per-hour standing charge from ABSOLUTE_TIME fees in EUR
+   */
+  record EffectivePrices(BigDecimal importPriceCt, BigDecimal exportPriceCt, BigDecimal timeFeeEur) {}
 }

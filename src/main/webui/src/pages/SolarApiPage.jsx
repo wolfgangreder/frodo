@@ -34,6 +34,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import WaterIcon from '@mui/icons-material/Water';
 import { PageHeader, LoadingSpinner, ErrorDisplay } from '../components/common';
 import { useSolarApiStatus } from '../hooks';
+import { formatTimeOnly } from '../utils/timeZone';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -321,7 +322,7 @@ function ScrapingStatusBar({ data }) {
             )}
             {data.lastScrapeTime && (
               <Typography variant="body2" color="text.secondary">
-                Last: {new Date(data.lastScrapeTime).toLocaleTimeString()}
+                Last: {formatTimeOnly(data.lastScrapeTime)}
               </Typography>
             )}
           </Stack>

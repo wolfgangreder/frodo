@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.cost.service;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.entity.CostControlConfigEntity;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.spi.EnergyPriceProviderSpi;
@@ -77,6 +78,13 @@ public class EnergyPriceSchedulerService {
   private Counter exportFetchSuccess;
   private Counter exportFetchFailure;
 
+  /**
+   * Initialises Micrometer counters and triggers a startup price fetch if the
+   * current hour has no price for either direction in the database.
+   *
+   * <p>Counter initialisation must happen before any fetch attempt because
+   * {@link #fetchForDirection} increments them on success/failure.</p>
+   */
   void onStart(@Observes StartupEvent event) {
     importFetchSuccess = meterRegistry.counter(
       "frodo.cost.price_fetch_total", "direction", "IMPORT", "provider", "any", "status", "success");
@@ -92,7 +100,7 @@ public class EnergyPriceSchedulerService {
       return;
     }
 
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = TimeUtil.nowUtc();
     try {
       if (energyPriceRepository.findForTime(now).map(e -> e.priceImportCt).isEmpty()) {
         fetchForDirection(PriceDirection.IMPORT, now);
@@ -105,6 +113,9 @@ public class EnergyPriceSchedulerService {
     }
   }
 
+  /**
+   * Sets the shutdown flag so the next scheduled fetch is skipped gracefully.
+   */
   void onStop(@Observes ShutdownEvent event) {
     shuttingDown = true;
   }
@@ -115,7 +126,7 @@ public class EnergyPriceSchedulerService {
     if (shuttingDown || !costControlEnabled) {
       return;
     }
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = TimeUtil.nowUtc();
     fetchForDirection(PriceDirection.IMPORT, now);
     fetchForDirection(PriceDirection.EXPORT, now);
   }
@@ -127,7 +138,7 @@ public class EnergyPriceSchedulerService {
    * @param direction IMPORT or EXPORT
    */
   public void refreshNow(PriceDirection direction) {
-    fetchForDirection(direction, LocalDateTime.now());
+    fetchForDirection(direction, TimeUtil.nowUtc());
   }
 
   // ---- internals ---------------------------------------------------------

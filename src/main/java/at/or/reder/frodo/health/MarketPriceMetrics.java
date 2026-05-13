@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.health;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.entity.GridFeeEntity;
 import at.or.reder.frodo.cost.repository.GridFeeRepository;
 import at.or.reder.frodo.cost.spi.FeeAppliesTo;
@@ -30,7 +31,6 @@ import org.jboss.logging.Logger;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -70,7 +70,7 @@ public class MarketPriceMetrics {
     this.marketPriceRepository = marketPriceRepository;
     this.gridFeeRepository = gridFeeRepository;
 
-    Gauge.builder("frodo.market_price.current", this, m -> m.currentNetPrice())
+    Gauge.builder("frodo.market_price.current", this, MarketPriceMetrics::currentNetPrice)
       .description("Current market price in ct/kWh (raw spot, no grid fees)")
       .tag("type", "net")
       .tag("direction", "import")
@@ -82,7 +82,7 @@ public class MarketPriceMetrics {
       .tag("direction", "import")
       .register(registry);
 
-    Gauge.builder("frodo.market_price.current", this, m -> m.currentNetPrice())
+    Gauge.builder("frodo.market_price.current", this, MarketPriceMetrics::currentNetPrice)
       .description("Current market price in ct/kWh (raw spot, no grid fees)")
       .tag("type", "net")
       .tag("direction", "export")
@@ -132,7 +132,7 @@ public class MarketPriceMetrics {
    * @return gross price in ct/kWh
    */
   private BigDecimal applyGridFees(BigDecimal net, FeeAppliesTo direction) {
-    List<GridFeeEntity> fees = gridFeeRepository.findActiveFeesForTime(LocalDateTime.now());
+    List<GridFeeEntity> fees = gridFeeRepository.findActiveFeesForTime(TimeUtil.nowUtc());
     BigDecimal gross = net;
     for (GridFeeEntity fee : fees) {
       if (fee.appliesTo != FeeAppliesTo.BOTH && fee.appliesTo != direction) {

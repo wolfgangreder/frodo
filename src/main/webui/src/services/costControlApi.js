@@ -101,6 +101,30 @@ const costControlApi = {
     return response.data;
   },
 
+  // ---- Daily cost --------------------------------------------------------
+
+  /**
+   * Get daily cost records in date range.
+   * @param {string} [from] ISO date (e.g. 2026-05-01)
+   * @param {string} [to]   ISO date (exclusive)
+   */
+  getDailyCosts: async (from, to) => {
+    const params = {};
+    if (from) params.from = from;
+    if (to) params.to = to;
+    const response = await apiClient.get('/cost-control/daily', { params });
+    return response.data;
+  },
+
+  /**
+   * Get daily cost summary for a specific day.
+   * @param {string} day format yyyy-MM-dd
+   */
+  getDailyCost: async (day) => {
+    const response = await apiClient.get(`/cost-control/daily/${day}`);
+    return response.data;
+  },
+
   // ---- Monthly cost ------------------------------------------------------
 
   /** Get all monthly cost summaries (newest first). */

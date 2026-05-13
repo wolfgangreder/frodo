@@ -16,7 +16,9 @@
 
 package at.or.reder.frodo.cost.service;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.entity.CostControlConfigEntity;
+import at.or.reder.frodo.cost.repository.DailyCostRepository;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.repository.HourlyCostRepository;
 import at.or.reder.frodo.cost.repository.HourlyEnergyRepository;
@@ -27,7 +29,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -42,6 +43,7 @@ import java.time.format.DateTimeFormatter;
  *   <li>{@code FroHourlyEnergy} — older than {@code retentionHourlyDays}</li>
  *   <li>{@code FroHourlyCost} — older than {@code retentionHourlyDays}</li>
  *   <li>{@code FroEnergyPrice} — older than {@code retentionHourlyDays}</li>
+ *   <li>{@code FroDailyCost} — older than {@code retentionMonthlyYears}</li>
  *   <li>{@code FroMonthlyCost} — older than {@code retentionMonthlyYears}</li>
  * </ul>
  *
@@ -53,6 +55,7 @@ public class CostRetentionService {
 
   private static final Logger LOG = Logger.getLogger(CostRetentionService.class);
   private static final DateTimeFormatter YEAR_MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+  private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
   @Inject
   CostControlConfigService configService;
@@ -65,6 +68,9 @@ public class CostRetentionService {
 
   @Inject
   EnergyPriceRepository energyPriceRepository;
+
+  @Inject
+  DailyCostRepository dailyCostRepository;
 
   @Inject
   MonthlyCostRepository monthlyCostRepository;
@@ -83,21 +89,25 @@ public class CostRetentionService {
       return;
     }
 
-    LocalDateTime hourlyCutoff = LocalDateTime.now()
+    LocalDateTime hourlyCutoff = TimeUtil.nowUtc()
       .minusDays(cfg.retentionHourlyDays);
 
     int deletedEnergy = hourlyEnergyRepository.deleteOlderThan(hourlyCutoff);
     int deletedCost = hourlyCostRepository.deleteOlderThan(hourlyCutoff);
     int deletedPrices = energyPriceRepository.deleteExpired(hourlyCutoff);
 
-    // Monthly: delete if yearMonth < cutoff month
-    String monthlyCutoff = LocalDate.now()
+    // Monthly and daily: delete if key < cutoff
+    String monthlyCutoff = TimeUtil.todayUtc()
       .minusYears(cfg.retentionMonthlyYears)
       .format(YEAR_MONTH_FMT);
+    String dailyCutoff = TimeUtil.todayUtc()
+      .minusYears(cfg.retentionMonthlyYears)
+      .format(DAY_FMT);
+    int deletedDaily = dailyCostRepository.deleteOlderThan(dailyCutoff);
     int deletedMonthly = monthlyCostRepository.deleteOlderThan(monthlyCutoff);
 
     LOG.infof(
-      "Cost retention: deleted %d energy rows, %d cost rows, %d price rows, %d monthly rows",
-      deletedEnergy, deletedCost, deletedPrices, deletedMonthly);
+      "Cost retention: deleted %d energy rows, %d cost rows, %d price rows, %d daily rows, %d monthly rows",
+      deletedEnergy, deletedCost, deletedPrices, deletedDaily, deletedMonthly);
   }
 }

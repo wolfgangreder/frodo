@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { formatForDisplay } from '../../utils/timeZone';
 import {
   Card,
   CardContent,
@@ -314,7 +315,7 @@ function SitePowerFlowCard({ deviceId, statusData, hasControls }) {
                             not available
                           </Typography>
                         ) : (
-                          <Tooltip title={`Valid ${currentPrice.startTime} – ${currentPrice.endTime}`}>
+                          <Tooltip title={`Valid ${formatForDisplay(currentPrice.startTime)} – ${formatForDisplay(currentPrice.endTime)}`}>
                             <Typography
                               variant="body2"
                               sx={{

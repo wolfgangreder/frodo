@@ -28,6 +28,7 @@ export const costControlKeys = {
   prices: () => [...costControlKeys.all, 'prices'],
   hourly: () => [...costControlKeys.all, 'hourly'],
   hourlyLatest: () => [...costControlKeys.hourly(), 'latest'],
+  daily: () => [...costControlKeys.all, 'daily'],
   monthly: () => [...costControlKeys.all, 'monthly'],
   monthlyDetail: (ym) => [...costControlKeys.monthly(), ym],
   tariffWindows: () => [...costControlKeys.all, 'tariff-windows'],
@@ -154,6 +155,17 @@ export function useLatestHourlyCost(options = {}) {
     queryFn: () => costControlApi.getLatestHourlyCost(),
     refetchInterval: 5 * 60 * 1000,
     staleTime: 2 * 60 * 1000,
+    ...options,
+  });
+}
+
+// ---- Daily cost ------------------------------------------------------------
+
+export function useDailyCosts(from, to, options = {}) {
+  return useQuery({
+    queryKey: [...costControlKeys.daily(), from, to],
+    queryFn: () => costControlApi.getDailyCosts(from, to),
+    staleTime: 5 * 60 * 1000,
     ...options,
   });
 }

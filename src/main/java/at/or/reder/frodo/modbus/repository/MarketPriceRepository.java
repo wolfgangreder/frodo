@@ -16,11 +16,13 @@
 
 package at.or.reder.frodo.modbus.repository;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.modbus.entity.MarketPriceEntity;
 import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -34,17 +36,17 @@ import java.util.Optional;
 @ApplicationScoped
 public class MarketPriceRepository implements PanacheRepository<MarketPriceEntity> {
 
-    /**
-     * Finds the market price for a specific hour.
-     *
-     * @param startTime the hour start time
-     * @return Optional containing the price, or empty if not found
-     */
-    public Optional<MarketPriceEntity> findByStartTime(LocalDateTime startTime) {
-        return find("startTime", startTime).firstResultOptional();
-    }
+  /**
+   * Finds the market price for a specific hour.
+   *
+   * @param startTime the hour start time
+   * @return Optional containing the price, or empty if not found
+   */
+  public Optional<MarketPriceEntity> findByStartTime(LocalDateTime startTime) {
+    return find("startTime", startTime).firstResultOptional();
+  }
 
-/**
+  /**
    * Finds the market price that applies to the given time.
    *
    * @param time the time to look up
@@ -61,21 +63,21 @@ public class MarketPriceRepository implements PanacheRepository<MarketPriceEntit
    * @return the current price entry, or empty if not available
    */
   public Optional<MarketPriceEntity> findCurrent() {
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = TimeUtil.nowUtc();
     return find("startTime <= ?1 and endTime > ?1", now)
       .firstResultOptional();
   }
 
-    /**
-     * Lists all stored market prices.
-     *
-     * @return list of all price entities
-     */
-    public List<MarketPriceEntity> listAll() {
-        return list("startTime desc");
-    }
+  /**
+   * Lists all stored market prices.
+   *
+   * @return list of all price entities
+   */
+  public List<MarketPriceEntity> listAll() {
+    return list("startTime desc");
+  }
 
-/**
+  /**
    * Lists the most recent prices (for display).
    *
    * @param limit max number of entries to return
@@ -87,30 +89,30 @@ public class MarketPriceRepository implements PanacheRepository<MarketPriceEntit
       .list();
   }
 
-    /**
-     * Saves or updates a market price.
-     *
-     * <p>If a price already exists for the hour, it is updated.
-     * Otherwise a new entity is created.</p>
-     *
-     * @param startTime hour start time
-     * @param endTime   hour end time
-     * @param priceCt   price in ct/kWh
-     * @return the persisted entity
-     */
-    @Transactional
-    public MarketPriceEntity upsert(LocalDateTime startTime, LocalDateTime endTime, java.math.BigDecimal priceCt) {
-        MarketPriceEntity entity = findByStartTime(startTime)
-            .orElseGet(MarketPriceEntity::new);
+  /**
+   * Saves or updates a market price.
+   *
+   * <p>If a price already exists for the hour, it is updated.
+   * Otherwise a new entity is created.</p>
+   *
+   * @param startTime hour start time
+   * @param endTime   hour end time
+   * @param priceCt   price in ct/kWh
+   * @return the persisted entity
+   */
+  @Transactional
+  public MarketPriceEntity upsert(LocalDateTime startTime, LocalDateTime endTime, BigDecimal priceCt) {
+    MarketPriceEntity entity = findByStartTime(startTime)
+      .orElseGet(MarketPriceEntity::new);
 
-        entity.startTime = startTime;
-        entity.endTime = endTime;
-        entity.priceCt = priceCt;
-        persist(entity);
-        return entity;
-    }
+    entity.startTime = startTime;
+    entity.endTime = endTime;
+    entity.priceCt = priceCt;
+    persist(entity);
+    return entity;
+  }
 
-/**
+  /**
    * Deletes expired price entries older than the specified time.
    *
    * @param before the cutoff time
