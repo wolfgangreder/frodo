@@ -86,6 +86,7 @@ export {
   useSetManualExportPrice,
   useHourlyCosts,
   useLatestHourlyCost,
+  useDailyCosts,
   useMonthlyCosts,
   useMonthlyCost,
   useTariffWindows,

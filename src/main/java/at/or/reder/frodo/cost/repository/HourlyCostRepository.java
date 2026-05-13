@@ -42,14 +42,14 @@ public class HourlyCostRepository implements PanacheRepository<HourlyCostEntity>
   }
 
   /**
-   * Returns cost records in a date range, ordered by hour ascending.
+   * Returns cost records in a date range, ordered by hour descending.
    *
    * @param from range start (inclusive)
    * @param to   range end (exclusive)
    * @return list of hourly cost entities
    */
   public List<HourlyCostEntity> findByDateRange(LocalDateTime from, LocalDateTime to) {
-    return list("hourStart >= ?1 and hourStart < ?2 order by hourStart asc", from, to);
+    return list("hourStart >= ?1 and hourStart < ?2 order by hourStart desc", from, to);
   }
 
   /**

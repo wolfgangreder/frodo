@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.health;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.entity.GridFeeEntity;
 import at.or.reder.frodo.cost.repository.GridFeeRepository;
 import at.or.reder.frodo.cost.spi.FeeAppliesTo;
@@ -26,12 +27,10 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.jboss.logging.Logger;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.List;
+import org.jboss.logging.Logger;
 
 /**
  * Registers and manages Micrometer/Prometheus metrics for market price operations.
@@ -70,7 +69,7 @@ public class MarketPriceMetrics {
     this.marketPriceRepository = marketPriceRepository;
     this.gridFeeRepository = gridFeeRepository;
 
-    Gauge.builder("frodo.market_price.current", this, m -> m.currentNetPrice())
+    Gauge.builder("frodo.market_price.current", this, MarketPriceMetrics::currentNetPrice)
       .description("Current market price in ct/kWh (raw spot, no grid fees)")
       .tag("type", "net")
       .tag("direction", "import")
@@ -82,7 +81,7 @@ public class MarketPriceMetrics {
       .tag("direction", "import")
       .register(registry);
 
-    Gauge.builder("frodo.market_price.current", this, m -> m.currentNetPrice())
+    Gauge.builder("frodo.market_price.current", this, MarketPriceMetrics::currentNetPrice)
       .description("Current market price in ct/kWh (raw spot, no grid fees)")
       .tag("type", "net")
       .tag("direction", "export")
@@ -132,18 +131,18 @@ public class MarketPriceMetrics {
    * @return gross price in ct/kWh
    */
   private BigDecimal applyGridFees(BigDecimal net, FeeAppliesTo direction) {
-    List<GridFeeEntity> fees = gridFeeRepository.findActiveFeesForTime(LocalDateTime.now());
+    List<GridFeeEntity> fees = gridFeeRepository.findActiveFeesForTime(TimeUtil.nowUtc());
     BigDecimal gross = net;
     for (GridFeeEntity fee : fees) {
       if (fee.appliesTo != FeeAppliesTo.BOTH && fee.appliesTo != direction) {
         continue;
       }
       if (fee.feeType == FeeType.ABSOLUTE_ENERGY) {
-        gross = gross.add(fee.feeValue);
+        gross = gross.subtract(fee.feeValue);
       } else if (fee.feeType == FeeType.PERCENT) {
         BigDecimal surcharge = net.multiply(fee.feeValue)
           .divide(BigDecimal.valueOf(100), 5, RoundingMode.HALF_UP);
-        gross = gross.add(surcharge);
+        gross = gross.subtract(surcharge);
       }
       // ABSOLUTE_TIME: skip — EUR/month standing charge, not per-kWh
     }

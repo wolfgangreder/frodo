@@ -29,6 +29,7 @@ import {
 } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { formatForDisplay } from '../../utils/timeZone';
 
 /**
  * Device info dialog showing device identification details
@@ -127,7 +128,7 @@ function DeviceInfoDialog({
                 
                 {deviceInfo.lastUpdated && (
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                    Last updated: {new Date(deviceInfo.lastUpdated).toLocaleString()}
+                    Last updated: {formatForDisplay(deviceInfo.lastUpdated)}
                   </Typography>
                 )}
               </>

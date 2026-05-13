@@ -28,27 +28,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import PauseCircleIcon from '@mui/icons-material/PauseCircle';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
-
-/**
- * Format a timestamp for display
- */
-function formatTime(isoString) {
-  if (!isoString) return 'Never';
-  const date = new Date(isoString);
-  return date.toLocaleString();
-}
-
-/**
- * Format time ago
- */
-function formatTimeAgo(isoString) {
-  if (!isoString) return '';
-  const seconds = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
-}
+import { formatForDisplay, formatTimeAgo } from '../../utils/timeZone';
 
 /**
  * MetricsStatusCard - displays current scraping status
@@ -120,7 +100,7 @@ function MetricsStatusCard({ status, isLoading = false }) {
               </Stack>
               {status.lastScrapeTime && (
                 <Typography variant="caption" color="text.secondary">
-                  Last scrape: {formatTime(status.lastScrapeTime)} ({formatTimeAgo(status.lastScrapeTime)})
+                  Last scrape: {formatForDisplay(status.lastScrapeTime)} ({formatTimeAgo(status.lastScrapeTime)})
                 </Typography>
               )}
             </Box>

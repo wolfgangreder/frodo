@@ -16,8 +16,10 @@
 
 package at.or.reder.frodo.api;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.api.dto.CostControlConfigRequest;
 import at.or.reder.frodo.api.dto.CostControlConfigResponse;
+import at.or.reder.frodo.api.dto.DailyCostResponse;
 import at.or.reder.frodo.api.dto.EnergyPriceResponse;
 import at.or.reder.frodo.api.dto.FixedCostRequest;
 import at.or.reder.frodo.api.dto.FixedCostResponse;
@@ -30,6 +32,7 @@ import at.or.reder.frodo.api.dto.ProviderInfoResponse;
 import at.or.reder.frodo.api.dto.TariffWindowRequest;
 import at.or.reder.frodo.api.dto.TariffWindowResponse;
 import at.or.reder.frodo.cost.entity.CostControlConfigEntity;
+import at.or.reder.frodo.cost.entity.DailyCostEntity;
 import at.or.reder.frodo.cost.entity.EnergyPriceEntity;
 import at.or.reder.frodo.cost.entity.FixedCostEntity;
 import at.or.reder.frodo.cost.entity.GridFeeEntity;
@@ -39,6 +42,7 @@ import at.or.reder.frodo.cost.entity.TariffWindowEntity;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.repository.FixedCostRepository;
 import at.or.reder.frodo.cost.repository.GridFeeRepository;
+import at.or.reder.frodo.cost.repository.DailyCostRepository;
 import at.or.reder.frodo.cost.repository.HourlyCostRepository;
 import at.or.reder.frodo.cost.repository.MonthlyCostRepository;
 import at.or.reder.frodo.cost.repository.TariffWindowRepository;
@@ -95,6 +99,9 @@ public class CostControlResource {
 
   @Inject
   HourlyCostRepository hourlyCostRepository;
+
+  @Inject
+  DailyCostRepository dailyCostRepository;
 
   @Inject
   MonthlyCostRepository monthlyCostRepository;
@@ -259,8 +266,8 @@ public class CostControlResource {
   public List<HourlyCostResponse> getHourlyCosts(
       @QueryParam("from") String from,
       @QueryParam("to") String to) {
-    LocalDateTime dtFrom = (from == null) ? LocalDateTime.now().minusDays(7) : parseDateTime(from);
-    LocalDateTime dtTo = (to == null) ? LocalDateTime.now() : parseDateTime(to);
+    LocalDateTime dtFrom = (from == null) ? TimeUtil.nowUtc().minusDays(7) : parseDateTime(from);
+    LocalDateTime dtTo = (to == null) ? TimeUtil.nowUtc() : parseDateTime(to);
     return hourlyCostRepository.findByDateRange(dtFrom, dtTo).stream()
       .map(this::toHourlyCostResponse)
       .toList();
@@ -314,6 +321,48 @@ public class CostControlResource {
       .orElseThrow(NotFoundException::new);
   }
 
+  // ---- Daily cost --------------------------------------------------------
+
+  /**
+   * Returns daily cost records within a day range.
+   *
+   * <p>Both {@code from} and {@code to} are ISO 8601 date strings
+   * (e.g. {@code 2026-05-01}). Defaults to last 30 days. Newest first.</p>
+   *
+   * @param from range start (inclusive, yyyy-MM-dd)
+   * @param to   range end (exclusive, yyyy-MM-dd)
+   * @return list of daily cost records
+   */
+  @GET
+  @Path("/daily")
+  @Produces(MediaType.APPLICATION_JSON)
+  @Operation(summary = "Get daily cost records in date range")
+  public List<DailyCostResponse> getDailyCosts(
+      @QueryParam("from") String from,
+      @QueryParam("to") String to) {
+    String dtFrom = (from == null) ? TimeUtil.todayUtc().minusDays(30).toString() : parseDate(from).toString();
+    String dtTo = (to == null) ? TimeUtil.todayUtc().plusDays(1).toString() : parseDate(to).toString();
+    return dailyCostRepository.findByDateRange(dtFrom, dtTo).stream()
+      .map(this::toDailyCostResponse)
+      .toList();
+  }
+
+  /**
+   * Returns the daily cost summary for a specific day.
+   *
+   * @param day day in format {@code yyyy-MM-dd}
+   * @return daily summary, or 404 if not found
+   */
+  @GET
+  @Path("/daily/{day}")
+  @Produces(MediaType.APPLICATION_JSON)
+  @Operation(summary = "Get daily cost summary for a specific day")
+  public DailyCostResponse getDailyCost(@PathParam("day") String day) {
+    return dailyCostRepository.findByDay(day)
+      .map(this::toDailyCostResponse)
+      .orElseThrow(NotFoundException::new);
+  }
+
   // ---- Tariff windows ----------------------------------------------------
 
   /**
@@ -334,7 +383,7 @@ public class CostControlResource {
         .map(this::toTariffWindowResponse)
         .toList();
     }
-    return tariffWindowRepository.listAll().stream()
+    return tariffWindowRepository.listAll(Sort.descending("validFrom")).stream()
       .map(this::toTariffWindowResponse)
       .toList();
   }
@@ -399,7 +448,7 @@ public class CostControlResource {
   // ---- Grid fees ---------------------------------------------------------
 
   /**
-   * Lists all grid fees ordered by validFrom ascending.
+   * Lists all grid fees ordered by validFrom descending.
    *
    * @return grid fee list
    */
@@ -408,7 +457,7 @@ public class CostControlResource {
   @Produces(MediaType.APPLICATION_JSON)
   @Operation(summary = "List all grid fees")
   public List<GridFeeResponse> listGridFees() {
-    return gridFeeRepository.listAll().stream()
+    return gridFeeRepository.listAll(Sort.descending("validFrom")).stream()
       .map(this::toGridFeeResponse)
       .toList();
   }
@@ -473,7 +522,7 @@ public class CostControlResource {
   // ---- Fixed costs -------------------------------------------------------
 
   /**
-   * Lists all fixed cost entries ordered by {@code validFrom} ascending.
+   * Lists all fixed cost entries ordered by {@code validFrom} descending.
    *
    * @return fixed cost list
    */
@@ -482,7 +531,7 @@ public class CostControlResource {
   @Produces(MediaType.APPLICATION_JSON)
   @Operation(summary = "List all fixed costs")
   public List<FixedCostResponse> listFixedCosts() {
-    return fixedCostRepository.listAll(Sort.ascending("validFrom")).stream()
+    return fixedCostRepository.listAll(Sort.descending("validFrom")).stream()
       .map(this::toFixedCostResponse)
       .toList();
   }
@@ -606,6 +655,20 @@ public class CostControlResource {
       e.totalExportIncomeEur,
       e.totalFeeEur,
       e.fixedCostEur,
+      e.netCostEur,
+      e.hoursCalculated,
+      e.updatedAt != null ? e.updatedAt.toString() : null
+    );
+  }
+
+  private DailyCostResponse toDailyCostResponse(DailyCostEntity e) {
+    return new DailyCostResponse(
+      e.costDay,
+      e.totalImportKwh,
+      e.totalExportKwh,
+      e.totalImportCostEur,
+      e.totalExportIncomeEur,
+      e.totalFeeEur,
       e.netCostEur,
       e.hoursCalculated,
       e.updatedAt != null ? e.updatedAt.toString() : null

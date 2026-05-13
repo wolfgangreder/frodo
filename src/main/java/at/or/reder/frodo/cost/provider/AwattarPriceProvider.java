@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.cost.provider;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.spi.EnergyPriceProviderSpi;
 import at.or.reder.frodo.cost.spi.PriceDirection;
 import at.or.reder.frodo.modbus.service.AwattarRestClient;
@@ -27,10 +28,7 @@ import org.jboss.logging.Logger;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -50,13 +48,6 @@ public class AwattarPriceProvider implements EnergyPriceProviderSpi {
   private static final Logger LOG = Logger.getLogger(AwattarPriceProvider.class);
   private static final String PROVIDER_ID = "AWATTAR";
   private static final Set<PriceDirection> SUPPORTED = Set.of(PriceDirection.EXPORT);
-
-  /**
-   * aWATTar AT interprets and reports all epoch-ms values in Europe/Vienna local time
-   * (CET/CEST), not UTC. Both request parameters and response timestamps must be
-   * converted accordingly.
-   */
-  private static final ZoneId VIENNA = ZoneId.of("Europe/Vienna");
 
   @Inject
   @RestClient
@@ -103,9 +94,9 @@ public class AwattarPriceProvider implements EnergyPriceProviderSpi {
         PROVIDER_ID + " only supports EXPORT; requested: " + direction);
     }
 
-    // from/to are UTC; encode as Vienna-local-epoch ms for the aWATTar request.
-    long startMs = toViennaEpochMs(from);
-    long endMs = toViennaEpochMs(to);
+    // from/to are UTC; convert to epoch ms for the aWATTar request.
+    long startMs = TimeUtil.toEpochMs(from);
+    long endMs = TimeUtil.toEpochMs(to);
 
     LOG.debugf("Fetching aWATTar export prices from %s to %s (UTC)", from, to);
     try {
@@ -117,9 +108,9 @@ public class AwattarPriceProvider implements EnergyPriceProviderSpi {
 
       List<HourlyPrice> prices = response.data().stream()
         .map(mp -> {
-          // aWATTar epochs are Vienna-local-epoch ms → convert to UTC LocalDateTime
-          LocalDateTime start = fromViennaEpochMs(mp.startTimestamp());
-          LocalDateTime end = fromViennaEpochMs(mp.endTimestamp());
+          // aWATTar returns standard UTC epoch ms
+          LocalDateTime start = TimeUtil.fromEpochMs(mp.startTimestamp());
+          LocalDateTime end = TimeUtil.fromEpochMs(mp.endTimestamp());
           // EUR/MWh → ct/kWh: divide by 10
           BigDecimal priceCt = BigDecimal.valueOf(mp.marketPrice())
             .divide(BigDecimal.TEN, 5, RoundingMode.HALF_UP);
@@ -133,39 +124,5 @@ public class AwattarPriceProvider implements EnergyPriceProviderSpi {
       LOG.errorf(ex, "Failed to fetch aWATTar prices for range %s – %s", from, to);
       throw ex;
     }
-  }
-
-  /**
-   * Converts a UTC {@link LocalDateTime} to a Vienna-local-epoch millisecond value
-   * as expected by the aWATTar API.
-   *
-   * <p>aWATTar treats epoch ms as if the epoch origin is
-   * {@code 1970-01-01T00:00:00} in Europe/Vienna local time. To produce such a value
-   * from a real UTC instant: convert to Vienna local time, then encode that
-   * local time as if it were UTC.</p>
-   */
-  private static long toViennaEpochMs(LocalDateTime utcLdt) {
-    return utcLdt.atZone(ZoneOffset.UTC)
-      .withZoneSameInstant(VIENNA)
-      .toLocalDateTime()
-      .toInstant(ZoneOffset.UTC)
-      .toEpochMilli();
-  }
-
-  /**
-   * Converts a Vienna-local-epoch millisecond value (as returned by the aWATTar API)
-   * to a UTC {@link LocalDateTime}.
-   *
-   * <p>Decodes the value naively as UTC to recover the Vienna local time, then
-   * reinterprets it in Europe/Vienna to obtain the real UTC instant.</p>
-   */
-  private static LocalDateTime fromViennaEpochMs(long viennaEpochMs) {
-    LocalDateTime viennaLocal = Instant.ofEpochMilli(viennaEpochMs)
-      .atZone(ZoneOffset.UTC)
-      .toLocalDateTime();
-    return viennaLocal.atZone(VIENNA)
-      .toInstant()
-      .atZone(ZoneOffset.UTC)
-      .toLocalDateTime();
   }
 }

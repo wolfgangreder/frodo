@@ -719,4 +719,96 @@
 
   </changeSet>
 
+  <!-- ======================================================
+       Changeset 39: FroDailyCost
+       ====================================================== -->
+  <changeSet id="39" author="frodo">
+    <comment>Create FroDailyCost table for pre-calculated daily cost summaries</comment>
+
+    <createTable tableName="FroDailyCost">
+      <column name="id" type="BIGINT" autoIncrement="false">
+        <constraints primaryKey="true" nullable="false" primaryKeyName="pk_FroDailyCost"/>
+      </column>
+
+      <!-- Day key: 'yyyy-MM-dd' — 'day' is reserved in Firebird, use cost_day -->
+      <column name="cost_day" type="VARCHAR(10)">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="total_import_kwh" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_export_kwh" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_import_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_export_income_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+      <column name="total_fee_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- net = total_import_cost_eur + total_fee_eur (no fixed costs at daily level) -->
+      <column name="net_cost_eur" type="DOUBLE PRECISION">
+        <constraints nullable="false"/>
+      </column>
+
+      <!-- Count of FroHourlyCost rows summed into this day -->
+      <column name="hours_calculated" type="INTEGER">
+        <constraints nullable="false"/>
+      </column>
+
+      <column name="created_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+      <column name="updated_at" type="TIMESTAMP">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+    <sql>CREATE SEQUENCE FroDailyCost_SEQ START WITH 1 INCREMENT BY 50</sql>
+
+    <addUniqueConstraint
+        tableName="FroDailyCost"
+        columnNames="cost_day"
+        constraintName="uk_FroDailyCost_day"/>
+
+    <createIndex tableName="FroDailyCost" indexName="idx_FroDailyCost_day">
+      <column name="cost_day"/>
+    </createIndex>
+
+  </changeSet>
+
+  <!-- ======================================================
+       Changeset 40: Fix FroDailyCost column types
+       DOUBLE PRECISION → NUMERIC to match BigDecimal entity mappings.
+       Table is new and empty; drop+recreate is safe.
+       DROP TABLE also drops all associated indexes and constraints.
+       ====================================================== -->
+  <changeSet id="40" author="frodo">
+    <comment>Recreate FroDailyCost with NUMERIC column types (Firebird cannot ALTER DOUBLE PRECISION to NUMERIC directly)</comment>
+    <sql splitStatements="false">DROP TABLE FroDailyCost</sql>
+    <sql splitStatements="false">DROP SEQUENCE FroDailyCost_SEQ</sql>
+    <sql splitStatements="false">CREATE TABLE FroDailyCost (
+      id              BIGINT          NOT NULL,
+      cost_day        VARCHAR(10)     NOT NULL,
+      total_import_kwh       NUMERIC(15,6)   NOT NULL,
+      total_export_kwh       NUMERIC(15,6)   NOT NULL,
+      total_import_cost_eur  NUMERIC(15,4)   NOT NULL,
+      total_export_income_eur NUMERIC(15,4)  NOT NULL,
+      total_fee_eur          NUMERIC(15,4)   NOT NULL,
+      net_cost_eur           NUMERIC(15,4)   NOT NULL,
+      hours_calculated       INTEGER         NOT NULL,
+      created_at      TIMESTAMP       NOT NULL,
+      updated_at      TIMESTAMP       NOT NULL,
+      CONSTRAINT pk_FroDailyCost PRIMARY KEY (id)
+    )</sql>
+    <sql splitStatements="false">CREATE SEQUENCE FroDailyCost_SEQ START WITH 1 INCREMENT BY 50</sql>
+    <sql splitStatements="false">ALTER TABLE FroDailyCost ADD CONSTRAINT uk_FroDailyCost_day UNIQUE (cost_day)</sql>
+    <sql splitStatements="false">CREATE INDEX idx_FroDailyCost_day ON FroDailyCost (cost_day)</sql>
+  </changeSet>
+
 </databaseChangeLog>

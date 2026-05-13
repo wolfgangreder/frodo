@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.modbus.service;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.modbus.entity.MetricsConfigEntity;
 import at.or.reder.frodo.modbus.repository.MarketPriceRepository;
 import at.or.reder.frodo.modbus.repository.MetricsConfigRepository;
@@ -106,7 +107,7 @@ public class MetricsRetentionService {
   @Transactional
   void cleanupMarketPrices() {
     try {
-      LocalDateTime cutoff = LocalDateTime.now().minusDays(MARKET_PRICE_RETENTION_DAYS);
+      LocalDateTime cutoff = TimeUtil.nowUtc().minusDays(MARKET_PRICE_RETENTION_DAYS);
       int deleted = marketPriceRepository.deleteExpired(cutoff);
       if (deleted > 0) {
         LOG.infof("Deleted %d expired market price entries (retention: %d days)",

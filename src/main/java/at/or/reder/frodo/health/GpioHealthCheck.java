@@ -57,7 +57,7 @@ public class GpioHealthCheck implements HealthCheck {
     GpioStatus status = gpioService.getStatus();
     builder.withData("enabled", true)
       .withData("platform", status.platform())
-      .withData("isRaspberryPi5", status.isRaspberryPi5())
+      .withData("isRaspberryPi", status.isRaspberryPi())
       .withData("pairs", status.pairs().size());
 
     long unavailable = status.pairs().stream().filter(p -> !p.available()).count();

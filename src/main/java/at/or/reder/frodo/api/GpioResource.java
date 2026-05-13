@@ -59,7 +59,7 @@ import java.util.Set;
  */
 @Path("/gpio")
 @Produces(MediaType.APPLICATION_JSON)
-@Tag(name = "GPIO", description = "GPIO-based export control (RPi5 only)")
+@Tag(name = "GPIO", description = "GPIO-based export control (Raspberry Pi)")
 public class GpioResource {
 
   private static final Logger LOG = Logger.getLogger(GpioResource.class);
@@ -231,7 +231,7 @@ public class GpioResource {
         p.externalModeActive(), p.assignedDeviceId(), p.errorMessage()))
       .toList();
     return new GpioStatusDto(
-      status.available(), status.isRaspberryPi5(), status.platform(),
+      status.available(), status.isRaspberryPi(), status.platform(),
       status.errorMessage(), pairs);
   }
 

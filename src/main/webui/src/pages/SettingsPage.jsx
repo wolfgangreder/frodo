@@ -39,6 +39,7 @@ import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '../components/common';
 import { deviceApi, metricsApi, systemApi, grafanaService } from '../services';
+import { formatForDisplay } from '../utils/timeZone';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -325,8 +326,8 @@ function ConnectionPoolSection() {
             <ListItemText
               primary="Last Successful Request"
               secondary={data.lastSuccessTime
-                ? new Date(data.lastSuccessTime).toLocaleString()
-                : 'Never'}
+                  ? formatForDisplay(data.lastSuccessTime)
+                  : 'Never'}
             />
           </ListItem>
           <ListItem disableGutters>

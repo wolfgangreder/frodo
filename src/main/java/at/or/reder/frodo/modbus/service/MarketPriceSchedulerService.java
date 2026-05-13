@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.modbus.service;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.modbus.repository.MarketPriceRepository;
 import at.or.reder.frodo.modbus.service.model.MarketDataResponse;
 import io.quarkus.runtime.ShutdownEvent;
@@ -28,9 +29,9 @@ import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
-import java.time.Instant;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -174,12 +175,9 @@ public class MarketPriceSchedulerService {
   int persistPrices(List<MarketDataResponse.MarketPrice> prices) {
     int saved = 0;
     for (MarketDataResponse.MarketPrice price : prices) {
-      LocalDateTime startTime = Instant.ofEpochMilli(price.getStartTimestamp())
-        .atZone(ZoneId.systemDefault())
-        .toLocalDateTime();
-      LocalDateTime endTime = Instant.ofEpochMilli(price.getEndTimestamp())
-        .atZone(ZoneId.systemDefault())
-        .toLocalDateTime();
+      // aWATTar returns standard UTC epoch ms
+      LocalDateTime startTime = TimeUtil.fromEpochMs(price.getStartTimestamp());
+      LocalDateTime endTime = TimeUtil.fromEpochMs(price.getEndTimestamp());
 
       marketPriceRepository.upsert(startTime, endTime, eurMwhToCtKwh(price.getMarketPrice()));
       saved++;
@@ -233,8 +231,8 @@ public class MarketPriceSchedulerService {
    * @param eurMwh market price in EUR/MWh
    * @return equivalent price in ct/kWh
    */
-  static java.math.BigDecimal eurMwhToCtKwh(double eurMwh) {
-    return java.math.BigDecimal.valueOf(eurMwh)
-      .divide(java.math.BigDecimal.TEN, 5, java.math.RoundingMode.HALF_UP);
+  static BigDecimal eurMwhToCtKwh(double eurMwh) {
+    return BigDecimal.valueOf(eurMwh)
+      .divide(BigDecimal.TEN, 5, RoundingMode.HALF_UP);
   }
 }

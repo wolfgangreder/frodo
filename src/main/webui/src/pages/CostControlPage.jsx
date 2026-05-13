@@ -15,6 +15,7 @@
  */
 
 import React, { useState } from 'react';
+import { formatForDisplay, nowAsDateTimeLocalValue, toDateTimeLocalValue, fromDateTimeLocalValue } from '../utils/timeZone';
 import {
   Alert,
   Box,
@@ -59,6 +60,7 @@ import {
   useCostControlPrices,
   useRefreshCostControlPrices,
   useMonthlyCosts,
+  useDailyCosts,
   useHourlyCosts,
   useTariffWindows,
   useCreateTariffWindow,
@@ -149,17 +151,93 @@ function MonthlySummaryTab() {
   );
 }
 
+// ---- Daily summary tab -----------------------------------------------------
+
+function DailySummaryTab() {
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+  const [from, setFrom] = useState(() => thirtyDaysAgo.toISOString().slice(0, 10));
+  const [to, setTo] = useState(() => today.toISOString().slice(0, 10));
+  const [query, setQuery] = useState({ from: thirtyDaysAgo.toISOString().slice(0, 10), to: today.toISOString().slice(0, 10) });
+
+  const { data: rows, isLoading, error } = useDailyCosts(query.from, query.to);
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+        <TextField
+          label="From"
+          type="date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          size="small"
+          InputLabelProps={{ shrink: true }}
+        />
+        <TextField
+          label="To (exclusive)"
+          type="date"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          size="small"
+          InputLabelProps={{ shrink: true }}
+        />
+        <Button variant="outlined" onClick={() => setQuery({ from, to })}>
+          Load
+        </Button>
+      </Stack>
+      {isLoading && <CircularProgress />}
+      {error && <Alert severity="error">Failed to load daily costs</Alert>}
+      {rows && (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Day</TableCell>
+              <TableCell align="right">Import kWh</TableCell>
+              <TableCell align="right">Export kWh</TableCell>
+              <TableCell align="right">Import Cost</TableCell>
+              <TableCell align="right">Export Income</TableCell>
+              <TableCell align="right">Fees</TableCell>
+              <TableCell align="right">Net Cost</TableCell>
+              <TableCell align="right">Hours</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.day} hover>
+                <TableCell>{r.day}</TableCell>
+                <TableCell align="right">{fmtKwh(r.totalImportKwh)}</TableCell>
+                <TableCell align="right">{fmtKwh(r.totalExportKwh)}</TableCell>
+                <TableCell align="right">{fmtEur(r.totalImportCostEur)}</TableCell>
+                <TableCell align="right">{fmtEur(r.totalExportIncomeEur)}</TableCell>
+                <TableCell align="right">{fmtEur(r.totalFeeEur)}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700 }}>{fmtEur(r.netCostEur)}</TableCell>
+                <TableCell align="right">{r.hoursCalculated}</TableCell>
+              </TableRow>
+            ))}
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} align="center">
+                  <Typography variant="body2" color="text.secondary">No data in range</Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      )}
+    </Box>
+  );
+}
+
 // ---- Hourly cost tab -------------------------------------------------------
 
 function HourlyCostTab() {
-  const now = new Date();
-  const defaultFrom = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    .toISOString().slice(0, 19);
-  const defaultTo = now.toISOString().slice(0, 19);
-
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(defaultTo);
-  const [query, setQuery] = useState({ from: defaultFrom, to: defaultTo });
+  const [from, setFrom] = useState(() => toDateTimeLocalValue(new Date(Date.now() - 24 * 60 * 60 * 1000)));
+  const [to, setTo] = useState(nowAsDateTimeLocalValue);
+  const [query, setQuery] = useState(() => ({
+    from: fromDateTimeLocalValue(toDateTimeLocalValue(new Date(Date.now() - 24 * 60 * 60 * 1000))),
+    to: fromDateTimeLocalValue(nowAsDateTimeLocalValue()),
+  }));
 
   const { data: rows, isLoading, error } = useHourlyCosts(query.from, query.to);
 
@@ -182,7 +260,7 @@ function HourlyCostTab() {
           size="small"
           InputLabelProps={{ shrink: true }}
         />
-        <Button variant="outlined" onClick={() => setQuery({ from, to })}>
+        <Button variant="outlined" onClick={() => setQuery({ from: fromDateTimeLocalValue(from), to: fromDateTimeLocalValue(to) })}>
           Load
         </Button>
       </Stack>
@@ -206,7 +284,7 @@ function HourlyCostTab() {
           <TableBody>
             {rows.map((r) => (
               <TableRow key={r.hourStart} hover>
-                <TableCell>{r.hourStart}</TableCell>
+                <TableCell>{formatForDisplay(r.hourStart)}</TableCell>
                 <TableCell align="right">{fmtKwh(r.importKwh)}</TableCell>
                 <TableCell align="right">{fmtKwh(r.exportKwh)}</TableCell>
                 <TableCell align="right">{fmtCt(r.priceImportCt)}</TableCell>
@@ -275,7 +353,7 @@ function EnergyPricesTab() {
           <TableBody>
             {prices.map((p) => (
               <TableRow key={p.startTime} hover>
-                <TableCell>{p.startTime}</TableCell>
+                <TableCell>{formatForDisplay(p.startTime)}</TableCell>
                 <TableCell align="right">
                   {p.priceImportCt != null ? fmtCt(p.priceImportCt) : '—'}
                 </TableCell>
@@ -826,7 +904,7 @@ function ConfigTab() {
       </Grid>
       {config?.updatedAt && (
         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          Last updated: {config.updatedAt}
+          Last updated: {formatForDisplay(config.updatedAt)}
         </Typography>
       )}
     </Box>
@@ -837,6 +915,7 @@ function ConfigTab() {
 
 const TABS = [
   { label: 'Monthly', value: 'monthly' },
+  { label: 'Daily', value: 'daily' },
   { label: 'Hourly', value: 'hourly' },
   { label: 'Prices', value: 'prices' },
   { label: 'Tariff Windows', value: 'tariff-windows' },
@@ -864,6 +943,7 @@ function CostControlPage() {
           </Tabs>
           <Divider sx={{ mb: 1 }} />
           {tab === 'monthly' && <MonthlySummaryTab />}
+          {tab === 'daily' && <DailySummaryTab />}
           {tab === 'hourly' && <HourlyCostTab />}
           {tab === 'prices' && <EnergyPricesTab />}
           {tab === 'tariff-windows' && <TariffWindowsTab />}

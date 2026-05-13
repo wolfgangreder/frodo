@@ -89,7 +89,7 @@ public class GpioService {
 
   // GPIO runtime state (written once during startup, read-only thereafter)
   private volatile boolean systemAvailable = false;
-  private volatile boolean isRaspberryPi5 = false;
+  private volatile boolean isRaspberryPi = false;
   private String platform = "Unknown";
   private String systemErrorMessage;
 
@@ -167,9 +167,9 @@ public class GpioService {
 
     detectPlatform();
 
-    if (!isRaspberryPi5) {
-      this.systemErrorMessage = "Not running on Raspberry Pi 5 (" + platform + ")";
-      LOG.warnf("GPIO enabled but platform is not RPi5: %s — GPIO unavailable", platform);
+    if (!isRaspberryPi) {
+      this.systemErrorMessage = "Not running on Raspberry Pi (" + platform + ")";
+      LOG.warnf("GPIO enabled but platform is not a Raspberry Pi: %s — GPIO unavailable", platform);
       return;
     }
 
@@ -333,7 +333,7 @@ public class GpioService {
     }
 
     return new GpioStatus(
-      systemAvailable, isRaspberryPi5, platform, systemErrorMessage,
+      systemAvailable, isRaspberryPi, platform, systemErrorMessage,
       Collections.unmodifiableList(pairStatusList)
     );
   }
@@ -343,13 +343,13 @@ public class GpioService {
   private void detectPlatform() {
     try {
       String cpuInfo = Files.readString(Path.of("/proc/cpuinfo"));
-      this.isRaspberryPi5 = cpuInfo.contains("Raspberry Pi 5");
+      this.isRaspberryPi = cpuInfo.contains("Raspberry Pi");
       this.platform = cpuInfo.lines()
         .filter(line -> line.startsWith("Model"))
         .findFirst()
         .map(line -> line.split(":", 2)[1].trim())
         .orElse("Unknown");
-      LOG.infof("Platform detected: %s (RPi5=%b)", platform, isRaspberryPi5);
+      LOG.infof("Platform detected: %s (RPi=%b)", platform, isRaspberryPi);
     } catch (Exception e) {
       LOG.warnf("Failed to detect platform: %s", e.getMessage());
     }

@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.cost.service;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.repository.HourlyEnergyRepository;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -29,7 +30,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -51,6 +51,9 @@ import java.util.concurrent.atomic.AtomicReference;
 public class EnergyIntegrationService {
 
   private static final Logger LOG = Logger.getLogger(EnergyIntegrationService.class);
+
+  /** Dead-band fallback used when config cannot be loaded. */
+  private static final double DEFAULT_DEAD_BAND_WATTS = 10.0;
 
   @Inject
   MeterRegistry meterRegistry;
@@ -116,7 +119,7 @@ public class EnergyIntegrationService {
     double filteredPowerW = Math.abs(powerW) <= deadBand ? 0.0 : powerW;
 
     Instant now = Instant.now();
-    int thisHour = LocalDateTime.ofInstant(now, ZoneId.systemDefault()).getHour();
+    int thisHour = TimeUtil.toUtcLdt(now).getHour();
 
     synchronized (this) {
       if (currentHour == -1) {
@@ -167,6 +170,9 @@ public class EnergyIntegrationService {
   /**
    * Flushes accumulated energy to DB at hour boundary.
    * Called while holding lock.
+   *
+   * @param boundaryInstant      the instant of the first sample in the new hour
+   * @param firstNewSamplePowerW grid power of the first sample in the new hour (W)
    */
   private void flushCurrentHour(Instant boundaryInstant, double firstNewSamplePowerW) {
     // Final trapezoidal step to boundary
@@ -193,7 +199,7 @@ public class EnergyIntegrationService {
     }
 
     // Compute hour boundaries
-    LocalDateTime hourStartLdt = LocalDateTime.ofInstant(lastSampleTime, ZoneId.systemDefault())
+    LocalDateTime hourStartLdt = TimeUtil.toUtcLdt(lastSampleTime)
       .withMinute(0).withSecond(0).withNano(0);
     LocalDateTime hourEndLdt = hourStartLdt.plusHours(1);
 
@@ -211,11 +217,20 @@ public class EnergyIntegrationService {
     }
   }
 
+  /**
+   * Returns the dead-band threshold in watts from config.
+   *
+   * <p>Power readings with absolute value at or below this threshold are treated as
+   * zero to avoid integrating sensor noise. Falls back to
+   * {@link #DEFAULT_DEAD_BAND_WATTS} if the config cannot be loaded.</p>
+   *
+   * @return dead-band threshold in watts; always &gt;= 0
+   */
   private double getDeadBandWatts() {
     try {
       return configService.load().deadBandWatts;
     } catch (Exception ex) {
-      return 10.0;
+      return DEFAULT_DEAD_BAND_WATTS;
     }
   }
 }

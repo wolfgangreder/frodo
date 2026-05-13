@@ -16,6 +16,7 @@
 
 package at.or.reder.frodo.health;
 
+import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.repository.MonthlyCostRepository;
 import io.micrometer.core.instrument.Gauge;
@@ -27,7 +28,6 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -63,6 +63,12 @@ public class CostMetrics {
   @ConfigProperty(name = "quarkus.datasource.active", defaultValue = "true")
   boolean datasourceActive;
 
+  /**
+   * Registers all cost-control Prometheus gauges at startup.
+   *
+   * <p>Skipped when cost control is disabled or the datasource is inactive —
+   * avoids gauge registration errors in test mode.</p>
+   */
   void onStart(@Observes StartupEvent event) {
     if (!costControlEnabled || !datasourceActive) {
       LOG.debug("Cost metrics not registered: cost-control disabled or datasource inactive");
@@ -94,9 +100,14 @@ public class CostMetrics {
 
   // ---- Gauge value suppliers ---------------------------------------------
 
+  /** Returns the current UTC year-month string in {@code yyyy-MM} format. */
+  private String currentYearMonth() {
+    return TimeUtil.nowUtc().format(YEAR_MONTH_FMT);
+  }
+
   private double currentImportPrice() {
     try {
-      return energyPriceRepository.findForTime(LocalDateTime.now())
+      return energyPriceRepository.findForTime(TimeUtil.nowUtc())
         .map(e -> e.priceImportCt != null ? e.priceImportCt.doubleValue() : Double.NaN)
         .orElse(Double.NaN);
     } catch (Exception ex) {
@@ -107,7 +118,7 @@ public class CostMetrics {
 
   private double currentExportPrice() {
     try {
-      return energyPriceRepository.findForTime(LocalDateTime.now())
+      return energyPriceRepository.findForTime(TimeUtil.nowUtc())
         .map(e -> e.priceExportCt != null ? e.priceExportCt.doubleValue() : Double.NaN)
         .orElse(Double.NaN);
     } catch (Exception ex) {
@@ -118,8 +129,7 @@ public class CostMetrics {
 
   private double monthlyNetCost() {
     try {
-      String yearMonth = LocalDateTime.now().format(YEAR_MONTH_FMT);
-      return monthlyCostRepository.findByYearMonth(yearMonth)
+      return monthlyCostRepository.findByYearMonth(currentYearMonth())
         .map(e -> e.netCostEur.doubleValue())
         .orElse(Double.NaN);
     } catch (Exception ex) {
@@ -130,8 +140,7 @@ public class CostMetrics {
 
   private double monthlyImportKwh() {
     try {
-      String yearMonth = LocalDateTime.now().format(YEAR_MONTH_FMT);
-      return monthlyCostRepository.findByYearMonth(yearMonth)
+      return monthlyCostRepository.findByYearMonth(currentYearMonth())
         .map(e -> e.totalImportKwh.doubleValue())
         .orElse(Double.NaN);
     } catch (Exception ex) {
@@ -142,8 +151,7 @@ public class CostMetrics {
 
   private double monthlyExportKwh() {
     try {
-      String yearMonth = LocalDateTime.now().format(YEAR_MONTH_FMT);
-      return monthlyCostRepository.findByYearMonth(yearMonth)
+      return monthlyCostRepository.findByYearMonth(currentYearMonth())
         .map(e -> e.totalExportKwh.doubleValue())
         .orElse(Double.NaN);
     } catch (Exception ex) {
