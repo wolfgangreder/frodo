@@ -94,6 +94,35 @@ To run without database (disables scheduled collection and device management):
 
 The application starts on <http://localhost:8080>.
 
+## Running in Docker
+
+### Standard Deployment (No GPIO)
+
+Uncomment the `frodo` service in `docker-compose.yml`, then:
+
+```bash
+docker compose up -d
+```
+
+### Raspberry Pi 5 with GPIO Support
+
+For GPIO-based export control on RPi5:
+
+1. **Configure GPIO group ID:**
+   ```bash
+   cp .env.example .env
+   # Edit .env — set GPIO_GROUP_ID (find with: getent group gpio | cut -d: -f3)
+   ```
+
+2. **Configure GPIO pairs** in `docker-compose.yml` (uncomment and set pin numbers)
+
+3. **Start with GPIO profile:**
+   ```bash
+   docker compose --profile gpio up -d
+   ```
+
+See [docs/DOCKER_GPIO.md](docs/DOCKER_GPIO.md) for detailed instructions and troubleshooting.
+
 ## REST API Endpoints
 
 ### Infrastructure

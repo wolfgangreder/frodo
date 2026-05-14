@@ -30,6 +30,22 @@ sudo apt install gitleaks
 # or from https://github.com/gitleaks/gitleaks#installing
 ```
 
+### Docker with GPIO (RPi5)
+
+```bash
+# Configure GPIO group ID
+cp .env.example .env
+# Edit .env: set GPIO_GROUP_ID (find with: getent group gpio | cut -d: -f3)
+
+# Start with GPIO profile
+docker compose --profile gpio up -d
+
+# View logs
+docker compose --profile gpio logs -f frodo-gpio
+```
+
+See `docs/DOCKER_GPIO.md` for troubleshooting.
+
 ### Frontend (Vite)
 
 The React frontend lives in `src/main/webui/` and is managed by Quinoa (Node.js 20.11.0 auto-downloaded to `.quinoa/node/`).

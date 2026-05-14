@@ -341,6 +341,13 @@ public class GpioService {
   // ========== Platform detection ==========
 
   private void detectPlatform() {
+    if (gpioConfig.forcePlatform()) {
+      this.isRaspberryPi = true;
+      this.platform = "Forced (Docker/Container)";
+      LOG.infof("Platform detection forced via frodo.gpio.force-platform=true — assuming Raspberry Pi");
+      return;
+    }
+
     try {
       String cpuInfo = Files.readString(Path.of("/proc/cpuinfo"));
       this.isRaspberryPi = cpuInfo.contains("Raspberry Pi");
@@ -351,7 +358,9 @@ public class GpioService {
         .orElse("Unknown");
       LOG.infof("Platform detected: %s (RPi=%b)", platform, isRaspberryPi);
     } catch (Exception e) {
-      LOG.warnf("Failed to detect platform: %s", e.getMessage());
+      LOG.warnf("Failed to detect platform from /proc/cpuinfo: %s — assuming non-RPi", e.getMessage());
+      this.isRaspberryPi = false;
+      this.platform = "Unknown (detection failed)";
     }
   }
 
