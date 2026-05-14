@@ -41,6 +41,14 @@ public interface GpioConfig {
   @WithDefault("false")
   boolean enabled();
 
+  /**
+   * Force Raspberry Pi platform detection, skipping {@code /proc/cpuinfo} check.
+   * Set to {@code true} when running inside a Docker container where
+   * {@code /proc/cpuinfo} is unavailable or does not reflect the host hardware.
+   */
+  @WithDefault("false")
+  boolean forcePlatform();
+
   @WithDefault("/dev/gpiochip0")
   String chipDevice();
 

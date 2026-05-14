@@ -29,20 +29,63 @@ services:
     networks:
       - frodo-network
 
-  # Optional: Frodo application (uncomment to run app in Docker)
+  # Frodo application with GPIO support (RPi5 only)
+  # Usage: docker compose --profile gpio up -d
+  # Requires: .env file with GPIO_GROUP_ID (see .env.example)
+  # See docs/DOCKER_GPIO.md for setup instructions
+  frodo-gpio:
+    image: docker.io/wolfgangreder/at.or.reder.frodo:latest
+    container_name: frodo-app-gpio
+    profiles:
+      - gpio
+    depends_on:
+      firebird:
+        condition: service_healthy
+    environment:
+      # Database connection
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:firebirdsql://firebird:3050//firebird/data/frodo.fdb?encoding=UTF8&charSet=utf-8
+      QUARKUS_DATASOURCE_USERNAME: sysdba
+      QUARKUS_DATASOURCE_PASSWORD: masterkey
+      # GPIO configuration — force platform detection (skip /proc/cpuinfo)
+      FRODO_GPIO_ENABLED: "true"
+      FRODO_GPIO_CHIP_DEVICE: /dev/gpiochip0
+      FRODO_GPIO_FORCE_PLATFORM: "true"
+      # GPIO pairs — uncomment and configure per deployment:
+      # FRODO_GPIO_PAIRS_RELAY1_OUTPUT_PIN: "17"
+      # FRODO_GPIO_PAIRS_RELAY1_OUTPUT_BLOCK_LEVEL: "HIGH"
+      # FRODO_GPIO_PAIRS_RELAY1_INPUT_PIN: "27"
+      # FRODO_GPIO_PAIRS_RELAY1_INPUT_ACTIVE_LEVEL: "HIGH"
+      # FRODO_GPIO_PAIRS_RELAY1_INPUT_BIAS: "PULL_DOWN"
+    devices:
+      - /dev/gpiochip0:/dev/gpiochip0
+    group_add:
+      - "${GPIO_GROUP_ID:-997}"
+    ports:
+      - "8082:8082"
+    networks:
+      - frodo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8082/q/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Frodo application (standard, no GPIO)
+  # Usage: uncomment and run: docker compose up -d frodo
   # frodo:
-  #   image: at.or.reder/frodo:latest
+  #   image: docker.io/wolfgangreder/at.or.reder.frodo:latest
   #   container_name: frodo-app
   #   depends_on:
   #     firebird:
   #       condition: service_healthy
   #   environment:
-  #     # Override database connection for Docker network
   #     QUARKUS_DATASOURCE_JDBC_URL: jdbc:firebirdsql://firebird:3050//firebird/data/frodo.fdb?encoding=UTF8&charSet=utf-8
   #     QUARKUS_DATASOURCE_USERNAME: sysdba
   #     QUARKUS_DATASOURCE_PASSWORD: masterkey
   #   ports:
-  #     - "8080:8080"
+  #     - "8082:8082"
   #   networks:
   #     - frodo-network
   #   restart: unless-stopped
