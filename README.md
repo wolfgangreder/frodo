@@ -253,6 +253,39 @@ curl -s http://localhost:8080/q/metrics
 ./gradlew build
 ```
 
+## Storybook Component Library
+
+Frodo includes a Storybook component library for the React frontend. Storybook provides an isolated development environment for UI components with interactive documentation.
+
+### Running Storybook
+
+```bash
+./gradlew storybook              # Start dev server on port 6006
+```
+
+Or from `src/main/webui`:
+
+```bash
+npm run storybook
+```
+
+Access Storybook at http://localhost:6006
+
+### Building Static Storybook
+
+```bash
+./gradlew buildStorybook         # Output: src/main/webui/storybook-static/
+```
+
+### Available Components
+
+- **Common Components**: StatusChip, LoadingSpinner, ErrorDisplay, EmptyState, PageHeader, ConfirmDialog, NotificationSnackbar
+- **Dashboard Components**: (coming soon)
+- **Device Components**: (coming soon)
+- **Metrics Components**: (coming soon)
+
+See `src/main/webui/.storybook/README.md` for detailed documentation.
+
 ## Building a Docker Image
 
 ```bash

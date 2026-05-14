@@ -108,3 +108,28 @@ tasks.named('build') {
 quarkusDev {
     jvmArgs = ['--enable-native-access=ALL-UNNAMED']
 }
+
+// Storybook tasks for component library development
+def webuiDir = file('src/main/webui')
+def quinoaNodeDir = file('.quinoa/node')
+def npmCmd = quinoaNodeDir.exists() ? "${quinoaNodeDir}/npm" : 'npm'
+
+tasks.register('storybook', Exec) {
+    group = 'storybook'
+    description = 'Start Storybook dev server on port 6006'
+    
+    workingDir webuiDir
+    commandLine npmCmd, 'run', 'storybook'
+}
+
+tasks.register('buildStorybook', Exec) {
+    group = 'storybook'
+    description = 'Build static Storybook site to storybook-static/'
+    
+    workingDir webuiDir
+    commandLine npmCmd, 'run', 'build-storybook'
+    
+    inputs.dir(file("${webuiDir}/src"))
+    inputs.dir(file("${webuiDir}/.storybook"))
+    outputs.dir(file("${webuiDir}/storybook-static"))
+}

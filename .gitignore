@@ -55,6 +55,10 @@ src/main/webui/npm-debug.log*
 src/main/webui/yarn-debug.log*
 src/main/webui/yarn-error.log*
 
+# Storybook
+src/main/webui/storybook-static/
+src/main/webui/.storybook/cache/
+
 # macOS
 .DS_Store
 
