@@ -35,6 +35,7 @@ import {
   InfoCircleIcon,
   EuroSignIcon,
 } from '@patternfly/react-icons';
+import { useUiStore } from '../../stores';
 
 // Navigation items configuration
 const navItems = [
@@ -58,6 +59,7 @@ const secondaryNavItems = [
 function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { sidebarOpen } = useUiStore();
 
   const isSelected = (path) => {
     if (path === '/') {
@@ -71,7 +73,7 @@ function Sidebar() {
   };
 
   return (
-    <PageSidebar>
+    <PageSidebar isSidebarOpen={sidebarOpen}>
       <PageSidebarBody>
         <Nav onSelect={onNavSelect} aria-label="Global navigation">
           <NavGroup title="Navigation">

@@ -16,6 +16,10 @@
 
 import apiClient from './apiClient';
 
+// Non-application management endpoints live under the same root path as the app
+// (quarkus.http.root-path) but outside /api. Derive their prefix from Vite's BASE_URL.
+const _base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+
 /**
  * System API service for application info, health, and pool status
  */
@@ -35,8 +39,8 @@ const systemApi = {
    * @returns {Promise<Object>} Health check result
    */
   getHealth: async () => {
-    const response = await apiClient.get('/q/health/ready', {
-      baseURL: '', // Override baseURL to use root path
+    const response = await apiClient.get(`${_base}/q/health/ready`, {
+      baseURL: '', // override: path is already absolute
     });
     return response.data;
   },
@@ -56,8 +60,8 @@ const systemApi = {
    * @returns {Promise<string>} Prometheus metrics text
    */
   getMetrics: async () => {
-    const response = await apiClient.get('/q/metrics', {
-      baseURL: '', // Override baseURL to use root path
+    const response = await apiClient.get(`${_base}/q/metrics`, {
+      baseURL: '', // override: path is already absolute
       headers: {
         Accept: 'text/plain',
       },

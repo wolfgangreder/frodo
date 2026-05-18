@@ -16,9 +16,14 @@
 
 import axios from 'axios';
 
+// Derive API base URL from Vite's configured base path.
+// In production (base='/frodo/'): BASE_URL='/frodo/' → baseURL='/frodo/api'
+// In dev mode the same base applies, keeping API calls consistent.
+const _base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+
 // Create axios instance with default configuration
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: `${_base}/api`,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

@@ -121,8 +121,8 @@ function DeviceList({
     <Table aria-label="Devices" variant="compact">
       <Thead>
         <Tr>
-          <Th>Name</Th>
-          <Th>Host</Th>
+          <Th modifier="fitContent">Name</Th>
+          <Th modifier="fitContent">Host</Th>
           <Th modifier="fitContent">Port</Th>
           <Th modifier="fitContent">Unit ID</Th>
           <Th modifier="fitContent">Status</Th>
@@ -133,8 +133,8 @@ function DeviceList({
       <Tbody>
         {devices.map((device) => (
           <Tr key={device.id}>
-            <Td dataLabel="Name">{device.name}</Td>
-            <Td dataLabel="Host">{device.host}</Td>
+            <Td dataLabel="Name" modifier="fitContent">{device.name}</Td>
+            <Td dataLabel="Host" modifier="fitContent">{device.host}</Td>
             <Td dataLabel="Port" modifier="fitContent">{device.port}</Td>
             <Td dataLabel="Unit ID" modifier="fitContent">{device.unitId}</Td>
             <Td dataLabel="Status" modifier="fitContent">

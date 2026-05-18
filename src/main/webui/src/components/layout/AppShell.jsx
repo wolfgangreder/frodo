@@ -24,14 +24,11 @@ import {
 import Header from './Header';
 import Sidebar from './Sidebar';
 import NotificationSnackbar from '../common/NotificationSnackbar';
-import { useUiStore } from '../../stores';
 
 /**
  * AppShell — PatternFly Page layout with Masthead, Sidebar, and main content
  */
 function AppShell() {
-  const { sidebarOpen } = useUiStore();
-
   const skipToContent = (
     <SkipToContent href="#main-content">Skip to main content</SkipToContent>
   );
@@ -40,7 +37,6 @@ function AppShell() {
     <Page
       masthead={<Header />}
       sidebar={<Sidebar />}
-      isSidebarOpen={sidebarOpen}
       skipToContent={skipToContent}
       mainContainerId="main-content"
     >
