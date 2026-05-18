@@ -16,18 +16,16 @@
 
 import React, { useMemo } from 'react';
 import {
-  Box,
   Grid,
-  Typography,
-  IconButton,
-  Stack,
-  Tooltip,
-  Chip,
+  GridItem,
   Alert,
   Button,
-} from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import WifiOffIcon from '@mui/icons-material/WifiOff';
+  Label,
+  Tooltip,
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import { SyncAltIcon } from '@patternfly/react-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useSunSpecCommon,
@@ -59,25 +57,16 @@ function formatTimeAgo(timestamp) {
 
 /**
  * DeviceDashboard - orchestrates all dashboard cards for a single device.
- *
- * Fetches SunSpec data via hooks with auto-refresh and displays in a
- * responsive grid layout. When the device is offline (discovery fails),
- * shows a graceful offline state and retries discovery every 60 s.
- *
- * @param {Object} props
- * @param {Object} props.device - Device entity from useDevice hook
  */
 function DeviceDashboard({ device }) {
   const queryClient = useQueryClient();
   const deviceId = device?.id;
 
-  // Discovery — drives all other queries; retries every 60 s when offline
   const discoveryQuery = useSunSpecDiscovery(deviceId);
   const discovery = discoveryQuery.data;
   const isOffline = discoveryQuery.isError;
   const isDiscovering = discoveryQuery.isLoading;
 
-  // Determine model availability from successful discovery
   const hasStorage = useMemo(() => {
     if (!discovery?.models) return false;
     return discovery.models.some((m) => m.modelId === 124);
@@ -93,7 +82,6 @@ function DeviceDashboard({ device }) {
     return discovery.models.some((m) => m.modelId === 123);
   }, [discovery]);
 
-  // Model queries — only enabled when discovery has succeeded
   const onlineAndReady = !!deviceId && discoveryQuery.isSuccess;
 
   const commonQuery = useSunSpecCommon(deviceId, { enabled: onlineAndReady });
@@ -101,21 +89,15 @@ function DeviceDashboard({ device }) {
   const storageQuery = useSunSpecStorage(deviceId, { enabled: onlineAndReady && hasStorage });
   const statusQuery = useSunSpecStatus(deviceId, { enabled: onlineAndReady && hasStatus });
 
-  // Last update time from most recent successful read
   const lastUpdate = inverterQuery.data?.readTime || commonQuery.data?.readTime;
 
   const handleRefreshAll = () => {
-    // Invalidate discovery first — enables model queries if device came back online
     queryClient.invalidateQueries({ queryKey: sunspecKeys.discovery(deviceId) });
     if (onlineAndReady) {
       queryClient.invalidateQueries({ queryKey: sunspecKeys.common(deviceId) });
       queryClient.invalidateQueries({ queryKey: sunspecKeys.inverter(deviceId) });
-      if (hasStorage) {
-        queryClient.invalidateQueries({ queryKey: sunspecKeys.storage(deviceId) });
-      }
-      if (hasStatus) {
-        queryClient.invalidateQueries({ queryKey: sunspecKeys.status(deviceId) });
-      }
+      if (hasStorage) queryClient.invalidateQueries({ queryKey: sunspecKeys.storage(deviceId) });
+      if (hasStatus) queryClient.invalidateQueries({ queryKey: sunspecKeys.status(deviceId) });
     }
   };
 
@@ -127,86 +109,81 @@ function DeviceDashboard({ device }) {
     statusQuery.isFetching;
 
   return (
-    <Box>
+    <div>
       {/* Toolbar */}
-      <Stack direction="row" justifyContent="flex-end" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+      <Flex
+        justifyContent={{ default: 'justifyContentFlexEnd' }}
+        alignItems={{ default: 'alignItemsCenter' }}
+        gap={{ default: 'gapSm' }}
+        style={{ marginBottom: '0.5rem' }}
+      >
         {lastUpdate && !isOffline && (
-          <Chip
-            label={`Updated ${formatTimeAgo(lastUpdate)}`}
-            size="small"
-            variant="outlined"
-            color={inverterQuery.isError ? 'error' : 'default'}
-          />
+          <FlexItem>
+            <Label
+              variant="outline"
+              color={inverterQuery.isError ? 'red' : 'grey'}
+            >
+              Updated {formatTimeAgo(lastUpdate)}
+            </Label>
+          </FlexItem>
         )}
         {isOffline && (
-          <Chip
-            icon={<WifiOffIcon />}
-            label="Offline — retrying in 60 s"
-            size="small"
-            color="warning"
-            variant="outlined"
-          />
+          <FlexItem>
+            <Label variant="outline" color="orange">
+              Offline — retrying in 60 s
+            </Label>
+          </FlexItem>
         )}
         {!isOffline && (
-          <Typography variant="caption" color="text.secondary">
-            Auto-refresh: 10 s
-          </Typography>
+          <FlexItem>
+            <span style={{ fontSize: '0.75rem', color: 'var(--pf-t--global--text-color--subtle, #6a6e73)' }}>
+              Auto-refresh: 10 s
+            </span>
+          </FlexItem>
         )}
-        <Tooltip title="Refresh all data">
-          <IconButton
-            size="small"
-            onClick={handleRefreshAll}
-            disabled={isAnyFetching}
-            aria-label="Refresh all device data"
-            sx={{
-              animation: isAnyFetching ? 'spin 1s linear infinite' : 'none',
-              '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
-            }}
-          >
-            <RefreshIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Stack>
+        <FlexItem>
+          <Tooltip content="Refresh all data">
+            <Button
+              variant="plain"
+              onClick={handleRefreshAll}
+              isDisabled={isAnyFetching}
+              aria-label="Refresh all device data"
+              style={isAnyFetching ? { animation: 'spin 1s linear infinite' } : undefined}
+            >
+              <SyncAltIcon />
+            </Button>
+          </Tooltip>
+        </FlexItem>
+      </Flex>
 
-      {/* Offline state — show compact layout with device info and notice */}
+      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+
+      {/* Offline state */}
       {isOffline && (
-        <Box>
+        <div>
           <Alert
-            severity="warning"
-            sx={{ mb: 2 }}
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                onClick={handleRefreshAll}
-                disabled={discoveryQuery.isFetching}
-              >
+            variant="warning"
+            isInline
+            title="Modbus connection unavailable — SunSpec data cannot be read. Discovery retries automatically every 60 s."
+            style={{ marginBottom: '1rem' }}
+            actionLinks={
+              <Button variant="link" isInline onClick={handleRefreshAll} isDisabled={discoveryQuery.isFetching}>
                 Retry now
               </Button>
             }
-          >
-            Modbus connection unavailable — SunSpec data cannot be read.
-            Discovery retries automatically every 60 s.
-          </Alert>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-              <DeviceStatusCard
-                device={device}
-                commonData={null}
-                inverterData={null}
-                isLoading={false}
-                isError
-              />
-            </Grid>
+          />
+          <Grid hasGutter>
+            <GridItem sm={6} lg={4}>
+              <DeviceStatusCard device={device} commonData={null} inverterData={null} isLoading={false} isError />
+            </GridItem>
           </Grid>
-        </Box>
+        </div>
       )}
 
-      {/* Online / discovering state — full 4-card grid */}
+      {/* Online / discovering state */}
       {!isOffline && (
-        <Grid container spacing={2}>
-          {/* Device Status - always shown */}
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+        <Grid hasGutter>
+          <GridItem sm={6} lg={3}>
             <DeviceStatusCard
               device={device}
               commonData={commonQuery.data}
@@ -214,38 +191,30 @@ function DeviceDashboard({ device }) {
               isLoading={isDiscovering || commonQuery.isLoading}
               isError={commonQuery.isError && inverterQuery.isError}
             />
-          </Grid>
-
-          {/* Power Metrics - always shown */}
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          </GridItem>
+          <GridItem sm={6} lg={3}>
             <PowerMetricsCard
               inverterData={inverterQuery.data}
               isLoading={isDiscovering || inverterQuery.isLoading}
               isError={inverterQuery.isError}
             />
-          </Grid>
-
-          {/* Battery Status - shown if device has storage */}
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          </GridItem>
+          <GridItem sm={6} lg={3}>
             <BatteryStatusCard
               storageData={storageQuery.data}
               isLoading={(storageQuery.isLoading && hasStorage) || isDiscovering}
               isError={storageQuery.isError}
               hasStorage={hasStorage}
             />
-          </Grid>
-
-          {/* Site Power Flow - always shown when Solar API is enabled */}
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          </GridItem>
+          <GridItem sm={6} lg={3}>
             <SitePowerFlowCard
               deviceId={deviceId}
               statusData={statusQuery.data}
               hasControls={hasControls}
             />
-          </Grid>
-
-          {/* Grid Status - shown if device has status model */}
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          </GridItem>
+          <GridItem sm={6} lg={3}>
             <GridStatusCard
               deviceId={deviceId}
               statusData={statusQuery.data}
@@ -254,10 +223,10 @@ function DeviceDashboard({ device }) {
               isError={statusQuery.isError && hasStatus}
               hasControls={hasControls}
             />
-          </Grid>
+          </GridItem>
         </Grid>
       )}
-    </Box>
+    </div>
   );
 }
 

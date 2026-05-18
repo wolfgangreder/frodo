@@ -17,106 +17,47 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Box,
-  Typography,
-  useTheme,
-  useMediaQuery,
-} from '@mui/material';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import DevicesIcon from '@mui/icons-material/Devices';
-import DescriptionIcon from '@mui/icons-material/Description';
-import EuroIcon from '@mui/icons-material/Euro';
-import InsightsIcon from '@mui/icons-material/Insights';
-import MemoryIcon from '@mui/icons-material/Memory';
-import SolarPowerIcon from '@mui/icons-material/SolarPower';
-import SettingsIcon from '@mui/icons-material/Settings';
-import InfoIcon from '@mui/icons-material/Info';
-import { useUiStore } from '../../stores';
-
-const DRAWER_WIDTH = 240;
+  Nav,
+  NavList,
+  NavItem,
+  NavGroup,
+  PageSidebar,
+  PageSidebarBody,
+} from '@patternfly/react-core';
+import {
+  HomeIcon,
+  ServerIcon,
+  FileAltIcon,
+  ChartLineIcon,
+  MicrochipIcon,
+  SunIcon,
+  CogIcon,
+  InfoCircleIcon,
+  EuroSignIcon,
+} from '@patternfly/react-icons';
 
 // Navigation items configuration
 const navItems = [
-  {
-    title: 'Dashboard',
-    path: '/',
-    icon: <DashboardIcon />,
-  },
-  {
-    title: 'Devices',
-    path: '/devices',
-    icon: <DevicesIcon />,
-  },
-  {
-    title: 'Metrics Docs',
-    path: '/metrics-docs',
-    icon: <DescriptionIcon />,
-  },
-  {
-    title: 'Grafana',
-    path: '/grafana',
-    icon: <InsightsIcon />,
-  },
-  {
-    title: 'GPIO',
-    path: '/gpio',
-    icon: <MemoryIcon />,
-  },
-  {
-    title: 'Solar API',
-    path: '/solar-api',
-    icon: <SolarPowerIcon />,
-  },
-  {
-    title: 'Cost Control',
-    path: '/cost-control',
-    icon: <EuroIcon />,
-  },
-  {
-    title: 'Settings',
-    path: '/settings',
-    icon: <SettingsIcon />,
-  },
+  { title: 'Dashboard', path: '/', icon: <HomeIcon /> },
+  { title: 'Devices', path: '/devices', icon: <ServerIcon /> },
+  { title: 'Metrics Docs', path: '/metrics-docs', icon: <FileAltIcon /> },
+  { title: 'Grafana', path: '/grafana', icon: <ChartLineIcon /> },
+  { title: 'GPIO', path: '/gpio', icon: <MicrochipIcon /> },
+  { title: 'Solar API', path: '/solar-api', icon: <SunIcon /> },
+  { title: 'Cost Control', path: '/cost-control', icon: <EuroSignIcon /> },
+  { title: 'Settings', path: '/settings', icon: <CogIcon /> },
 ];
 
 const secondaryNavItems = [
-  {
-    title: 'About',
-    path: '/about',
-    icon: <InfoIcon />,
-  },
+  { title: 'About', path: '/about', icon: <InfoCircleIcon /> },
 ];
 
 /**
- * Sidebar component with responsive behavior
- * - Permanent drawer on desktop (collapsible)
- * - Temporary drawer on mobile (overlay)
+ * Sidebar component — PatternFly Nav inside PageSidebar
  */
 function Sidebar() {
-  const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  const {
-    sidebarOpen,
-    sidebarMobileOpen,
-    setMobileSidebarOpen,
-  } = useUiStore();
-
-  const handleNavigation = (path) => {
-    navigate(path);
-    if (isMobile) {
-      setMobileSidebarOpen(false);
-    }
-  };
 
   const isSelected = (path) => {
     if (path === '/') {
@@ -125,143 +66,48 @@ function Sidebar() {
     return location.pathname.startsWith(path);
   };
 
-  const drawerContent = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Logo / Brand */}
-      <Box
-        sx={{
-          p: 2,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          borderBottom: 1,
-          borderColor: 'divider',
-        }}
-      >
-        <Typography
-          variant="h5"
-          sx={{
-            color: 'primary.main',
-            fontWeight: 700,
-          }}
-        >
-          Frodo
-        </Typography>
-        <Typography
-          variant="caption"
-          sx={{
-            color: 'text.secondary',
-            ml: 'auto',
-          }}
-        >
-          PV Monitor
-        </Typography>
-      </Box>
-
-      {/* Main Navigation */}
-      <List sx={{ flexGrow: 1, pt: 1 }}>
-        {navItems.map((item) => (
-          <ListItem key={item.path} disablePadding>
-            <ListItemButton
-              selected={isSelected(item.path)}
-              onClick={() => handleNavigation(item.path)}
-              sx={{ mx: 1, borderRadius: 1 }}
-            >
-              <ListItemIcon
-                sx={{
-                  color: isSelected(item.path) ? 'primary.main' : 'text.secondary',
-                  minWidth: 40,
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText
-                primary={item.title}
-                primaryTypographyProps={{
-                  fontWeight: isSelected(item.path) ? 600 : 400,
-                }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
-
-      <Divider />
-
-      {/* Secondary Navigation */}
-      <List sx={{ pt: 1, pb: 2 }}>
-        {secondaryNavItems.map((item) => (
-          <ListItem key={item.path} disablePadding>
-            <ListItemButton
-              selected={isSelected(item.path)}
-              onClick={() => handleNavigation(item.path)}
-              sx={{ mx: 1, borderRadius: 1 }}
-            >
-              <ListItemIcon
-                sx={{
-                  color: isSelected(item.path) ? 'primary.main' : 'text.secondary',
-                  minWidth: 40,
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText
-                primary={item.title}
-                primaryTypographyProps={{
-                  fontWeight: isSelected(item.path) ? 600 : 400,
-                }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
-    </Box>
-  );
+  const onNavSelect = (_event, result) => {
+    navigate(result.itemId);
+  };
 
   return (
-    <Box
-      component="nav"
-      sx={{
-        width: { md: sidebarOpen ? DRAWER_WIDTH : 0 },
-        flexShrink: { md: 0 },
-      }}
-    >
-      {/* Mobile drawer (temporary) */}
-      <Drawer
-        variant="temporary"
-        open={sidebarMobileOpen}
-        onClose={() => setMobileSidebarOpen(false)}
-        ModalProps={{
-          keepMounted: true, // Better mobile performance
-        }}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
-            width: DRAWER_WIDTH,
-          },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
-
-      {/* Desktop drawer (permanent) */}
-      <Drawer
-        variant="persistent"
-        open={sidebarOpen}
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
-            width: DRAWER_WIDTH,
-          },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
-    </Box>
+    <PageSidebar>
+      <PageSidebarBody>
+        <Nav onSelect={onNavSelect} aria-label="Global navigation">
+          <NavGroup title="Navigation">
+            <NavList>
+              {navItems.map((item) => (
+                <NavItem
+                  key={item.path}
+                  itemId={item.path}
+                  isActive={isSelected(item.path)}
+                  onClick={() => navigate(item.path)}
+                  icon={item.icon}
+                >
+                  {item.title}
+                </NavItem>
+              ))}
+            </NavList>
+          </NavGroup>
+          <NavGroup title="">
+            <NavList>
+              {secondaryNavItems.map((item) => (
+                <NavItem
+                  key={item.path}
+                  itemId={item.path}
+                  isActive={isSelected(item.path)}
+                  onClick={() => navigate(item.path)}
+                  icon={item.icon}
+                >
+                  {item.title}
+                </NavItem>
+              ))}
+            </NavList>
+          </NavGroup>
+        </Nav>
+      </PageSidebarBody>
+    </PageSidebar>
   );
 }
 
 export default Sidebar;
-export { DRAWER_WIDTH };

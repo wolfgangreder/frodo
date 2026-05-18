@@ -214,6 +214,17 @@ public class EnergyIntegrationService {
       costCalculationService.calculateHourlyCost(hourStartLdt);
     } catch (Exception ex) {
       LOG.errorf(ex, "Failed to persist hourly energy for %s", hourStartLdt);
+      return;
+    }
+    try {
+      costCalculationService.updateDailyCost(hourStartLdt);
+    } catch (Exception ex) {
+      LOG.errorf(ex, "Failed to update daily cost for %s", hourStartLdt);
+    }
+    try {
+      costCalculationService.updateMonthlyCost(hourStartLdt);
+    } catch (Exception ex) {
+      LOG.errorf(ex, "Failed to update monthly cost for %s", hourStartLdt);
     }
   }
 

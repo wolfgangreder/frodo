@@ -17,32 +17,31 @@
 import React from 'react';
 import {
   Alert,
-  Box,
   Card,
-  CardContent,
-  Chip,
+  CardBody,
   Grid,
+  GridItem,
+  Label,
   Skeleton,
-  Stack,
-  Typography,
-} from '@mui/material';
-import SolarPowerIcon from '@mui/icons-material/SolarPower';
-import BoltIcon from '@mui/icons-material/Bolt';
-import BatteryChargingFullIcon from '@mui/icons-material/BatteryChargingFull';
-import ElectricalServicesIcon from '@mui/icons-material/ElectricalServices';
-import HomeIcon from '@mui/icons-material/Home';
-import WaterIcon from '@mui/icons-material/Water';
+} from '@patternfly/react-core';
+import { SunIcon, BoltIcon, TintIcon } from '@patternfly/react-icons';
 import { PageHeader, LoadingSpinner, ErrorDisplay } from '../components/common';
 import { useSolarApiStatus } from '../hooks';
 import { formatTimeOnly } from '../utils/timeZone';
+
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #73bcf7)',
+  success: 'var(--pf-t--global--icon--color--status--success--default, #5ba352)',
+  warning: 'var(--pf-t--global--icon--color--status--warning--default, #f0ab00)',
+  danger: 'var(--pf-t--global--icon--color--status--danger--default, #c9190b)',
+  subtle: 'var(--pf-t--global--text--color--subtle, #6a6e73)',
+  disabled: 'var(--pf-t--global--text--color--disabled, #6a6e73)',
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Format a watt value with auto-scaling to kW
- */
 function formatPower(value) {
   if (value == null || (typeof value === 'number' && isNaN(value))) return '-';
   const num = typeof value === 'number' ? value : parseFloat(value);
@@ -51,9 +50,6 @@ function formatPower(value) {
   return `${num.toFixed(1)} W`;
 }
 
-/**
- * Format a watt-hour value with auto-scaling to kWh/MWh
- */
 function formatEnergy(value) {
   if (value == null || (typeof value === 'number' && isNaN(value))) return '-';
   const num = typeof value === 'number' ? value : parseFloat(value);
@@ -63,72 +59,60 @@ function formatEnergy(value) {
   return `${num.toFixed(0)} Wh`;
 }
 
-/**
- * Format a percentage value
- */
 function formatPercent(value) {
   if (value == null || (typeof value === 'number' && isNaN(value))) return '-';
   return `${parseFloat(value).toFixed(1)} %`;
 }
 
-/**
- * Format temperature in degrees Celsius
- */
 function formatTemperature(value) {
   if (value == null || (typeof value === 'number' && isNaN(value))) return '-';
   return `${parseFloat(value).toFixed(1)} °C`;
 }
 
-/**
- * Capitalize first letter of a string
- */
 function capitalize(str) {
   if (!str) return '-';
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
-/**
- * Map Ohmpilot state to a MUI chip color
- */
-function stateColor(state) {
-  if (!state) return 'default';
+/** Map state string to PF Label color */
+function stateLabelColor(state) {
+  if (!state) return 'grey';
   switch (state.toLowerCase()) {
-    case 'normal': return 'success';
-    case 'boost': return 'warning';
-    case 'fault': return 'error';
-    case 'startup': return 'info';
-    case 'standby': return 'default';
-    default: return 'default';
+    case 'normal': return 'green';
+    case 'boost': return 'orange';
+    case 'fault': return 'red';
+    case 'startup': return 'cyan';
+    case 'standby': return 'grey';
+    default: return 'grey';
   }
 }
 
 // ---------------------------------------------------------------------------
-// Shared metric row component
+// Shared components
 // ---------------------------------------------------------------------------
 
 function MetricRow({ label, value, primary = false }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography
-        variant={primary ? 'subtitle1' : 'body2'}
-        sx={{ fontWeight: primary ? 700 : 500, fontFamily: 'monospace' }}
-      >
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <span style={{ fontSize: '0.875rem', color: C.subtle }}>{label}</span>
+      <span style={{
+        fontWeight: primary ? 700 : 500,
+        fontFamily: 'monospace',
+        fontSize: primary ? '1rem' : '0.875rem',
+      }}>
         {value}
-      </Typography>
-    </Box>
+      </span>
+    </div>
   );
 }
 
 function MetricsSkeleton({ count }) {
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {[...Array(count)].map((_, i) => (
-        <Skeleton key={i} variant="text" width="100%" height={24} />
+        <Skeleton key={i} width="100%" height="24px" />
       ))}
-    </Box>
+    </div>
   );
 }
 
@@ -140,51 +124,34 @@ function SitePowerFlowCard({ site, isLoading }) {
   const pvActive = site?.pvPowerWatts != null && site.pvPowerWatts > 0;
 
   return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          <SolarPowerIcon sx={{ color: pvActive ? 'success.main' : 'text.disabled' }} />
-          <Typography variant="h6" sx={{ color: 'primary.main' }}>
+    <Card style={{ height: '100%' }}>
+      <CardBody>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+          <SunIcon style={{ color: pvActive ? C.success : C.disabled }} />
+          <span style={{ fontSize: '1.125rem', fontWeight: 600, color: C.primary }}>
             Site Power Flow
-          </Typography>
-        </Stack>
+          </span>
+        </div>
 
         {isLoading ? (
           <MetricsSkeleton count={6} />
         ) : !site ? (
-          <Alert severity="info" variant="outlined">No site data available</Alert>
+          <Alert variant="info" title="No site data available" isInline />
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <MetricRow
-              label="PV Production"
-              value={formatPower(site.pvPowerWatts)}
-              primary
-            />
-            <MetricRow
-              label="Grid"
-              value={formatPower(site.gridPowerWatts)}
-              primary
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <MetricRow label="PV Production" value={formatPower(site.pvPowerWatts)} primary />
+            <MetricRow label="Grid" value={formatPower(site.gridPowerWatts)} primary />
             <MetricRow
               label="Load"
               value={formatPower(site.loadPowerWatts != null ? Math.abs(site.loadPowerWatts) : null)}
               primary
             />
-            <MetricRow
-              label="Battery"
-              value={formatPower(site.batteryPowerWatts)}
-            />
-            <MetricRow
-              label="Autonomy"
-              value={formatPercent(site.autonomyPercent)}
-            />
-            <MetricRow
-              label="Self-Consumption"
-              value={formatPercent(site.selfConsumptionPercent)}
-            />
-          </Box>
+            <MetricRow label="Battery" value={formatPower(site.batteryPowerWatts)} />
+            <MetricRow label="Autonomy" value={formatPercent(site.autonomyPercent)} />
+            <MetricRow label="Self-Consumption" value={formatPercent(site.selfConsumptionPercent)} />
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
@@ -197,44 +164,28 @@ function InverterCard({ inverter, isLoading }) {
   const isGenerating = inverter?.powerWatts != null && inverter.powerWatts > 0;
 
   return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          <BoltIcon sx={{ color: isGenerating ? 'success.main' : 'text.disabled' }} />
-          <Typography variant="h6" sx={{ color: 'primary.main' }}>
+    <Card style={{ height: '100%' }}>
+      <CardBody>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+          <BoltIcon style={{ color: isGenerating ? C.success : C.disabled }} />
+          <span style={{ fontSize: '1.125rem', fontWeight: 600, color: C.primary }}>
             Inverter {inverter?.deviceId || '?'}
-          </Typography>
+          </span>
           {inverter?.batteryMode && (
-            <Chip
-              label={capitalize(inverter.batteryMode)}
-              size="small"
-              variant="outlined"
-              color="default"
-              sx={{ ml: 'auto' }}
-            />
+            <Label color="grey" style={{ marginLeft: 'auto' }}>{capitalize(inverter.batteryMode)}</Label>
           )}
-        </Stack>
+        </div>
 
         {isLoading ? (
           <MetricsSkeleton count={3} />
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <MetricRow
-              label="AC Power"
-              value={formatPower(inverter?.powerWatts)}
-              primary
-            />
-            <MetricRow
-              label="Energy Total"
-              value={formatEnergy(inverter?.energyTotalWattHours)}
-            />
-            <MetricRow
-              label="Battery SOC"
-              value={formatPercent(inverter?.batterySOCPercent)}
-            />
-          </Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <MetricRow label="AC Power" value={formatPower(inverter?.powerWatts)} primary />
+            <MetricRow label="Energy Total" value={formatEnergy(inverter?.energyTotalWattHours)} />
+            <MetricRow label="Battery SOC" value={formatPercent(inverter?.batterySOCPercent)} />
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
@@ -247,39 +198,29 @@ function OhmpilotCard({ ohmpilot, isLoading }) {
   const isActive = ohmpilot?.powerWatts != null && ohmpilot.powerWatts > 0;
 
   return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          <WaterIcon sx={{ color: isActive ? 'warning.main' : 'text.disabled' }} />
-          <Typography variant="h6" sx={{ color: 'primary.main' }}>
+    <Card style={{ height: '100%' }}>
+      <CardBody>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+          <TintIcon style={{ color: isActive ? C.warning : C.disabled }} />
+          <span style={{ fontSize: '1.125rem', fontWeight: 600, color: C.primary }}>
             Ohmpilot {ohmpilot?.componentId || '?'}
-          </Typography>
+          </span>
           {ohmpilot?.state && (
-            <Chip
-              label={capitalize(ohmpilot.state)}
-              size="small"
-              color={stateColor(ohmpilot.state)}
-              sx={{ ml: 'auto' }}
-            />
+            <Label color={stateLabelColor(ohmpilot.state)} style={{ marginLeft: 'auto' }}>
+              {capitalize(ohmpilot.state)}
+            </Label>
           )}
-        </Stack>
+        </div>
 
         {isLoading ? (
           <MetricsSkeleton count={3} />
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <MetricRow
-              label="Power"
-              value={formatPower(ohmpilot?.powerWatts)}
-              primary
-            />
-            <MetricRow
-              label="Temperature"
-              value={formatTemperature(ohmpilot?.temperatureCelsius)}
-            />
-          </Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <MetricRow label="Power" value={formatPower(ohmpilot?.powerWatts)} primary />
+            <MetricRow label="Temperature" value={formatTemperature(ohmpilot?.temperatureCelsius)} />
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
@@ -292,42 +233,34 @@ function ScrapingStatusBar({ data }) {
   if (!data) return null;
 
   return (
-    <Card sx={{ mb: 2 }}>
-      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          alignItems={{ sm: 'center' }}
-          justifyContent="space-between"
-        >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Chip
-              label={data.active ? 'Active' : 'Inactive'}
-              color={data.active ? 'success' : 'default'}
-              size="small"
-            />
-            <Typography variant="body2" color="text.secondary">
+    <Card style={{ marginBottom: 16 }}>
+      <CardBody style={{ paddingTop: 12, paddingBottom: 12 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Label color={data.active ? 'green' : 'grey'}>
+              {data.active ? 'Active' : 'Inactive'}
+            </Label>
+            <span style={{ fontSize: '0.875rem', color: C.subtle }}>
               Interval: {data.scrapeIntervalSeconds}s
-            </Typography>
-          </Stack>
-
-          <Stack direction="row" spacing={2}>
-            <Typography variant="body2" color="text.secondary">
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <span style={{ fontSize: '0.875rem', color: C.subtle }}>
               Scrapes: {data.scrapeCount.toLocaleString()}
-            </Typography>
+            </span>
             {data.errorCount > 0 && (
-              <Typography variant="body2" color="error">
+              <span style={{ fontSize: '0.875rem', color: C.danger }}>
                 Errors: {data.errorCount.toLocaleString()}
-              </Typography>
+              </span>
             )}
             {data.lastScrapeTime && (
-              <Typography variant="body2" color="text.secondary">
+              <span style={{ fontSize: '0.875rem', color: C.subtle }}>
                 Last: {formatTimeOnly(data.lastScrapeTime)}
-              </Typography>
+              </span>
             )}
-          </Stack>
-        </Stack>
-      </CardContent>
+          </div>
+        </div>
+      </CardBody>
     </Card>
   );
 }
@@ -356,19 +289,17 @@ function SolarApiPage() {
 
   if (data && !data.enabled) {
     return (
-      <Box>
+      <div>
         <PageHeader
           title="Solar API"
           subtitle="Fronius Solar API power flow metrics"
         />
-        <Alert severity="info" sx={{ mt: 2 }}>
+        <Alert variant="info" isInline style={{ marginTop: 16 }} title="">
           Solar API integration is disabled. Set{' '}
-          <Typography component="code" variant="body2" sx={{ fontFamily: 'monospace' }}>
-            frodo.solar-api.enabled=true
-          </Typography>{' '}
+          <code>frodo.solar-api.enabled=true</code>{' '}
           in your configuration to enable live power flow metrics from the Fronius inverter.
         </Alert>
-      </Box>
+      </div>
     );
   }
 
@@ -376,43 +307,41 @@ function SolarApiPage() {
   const ohmpilots = data?.ohmpilots || [];
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Solar API"
         subtitle="Live power flow from Fronius Solar API"
       />
 
-      {/* Scraping status */}
       <ScrapingStatusBar data={data} />
 
-      <Grid container spacing={2}>
-        {/* Site Power Flow - full width on small, half on medium+ */}
-        <Grid size={{ xs: 12, md: 6 }}>
+      <Grid hasGutter>
+        <GridItem span={12} md={6}>
           <SitePowerFlowCard site={data?.site} isLoading={isLoading && !data} />
-        </Grid>
+        </GridItem>
 
-        {/* Inverters */}
         {inverters.map((inv) => (
-          <Grid key={inv.deviceId} size={{ xs: 12, sm: 6, md: 6 }}>
+          <GridItem key={inv.deviceId} span={12} sm={6} md={6}>
             <InverterCard inverter={inv} isLoading={isLoading && !data} />
-          </Grid>
+          </GridItem>
         ))}
 
-        {/* Ohmpilots */}
         {ohmpilots.map((ohm) => (
-          <Grid key={ohm.componentId} size={{ xs: 12, sm: 6, md: 6 }}>
+          <GridItem key={ohm.componentId} span={12} sm={6} md={6}>
             <OhmpilotCard ohmpilot={ohm} isLoading={isLoading && !data} />
-          </Grid>
+          </GridItem>
         ))}
       </Grid>
 
-      {/* No devices at all (unusual, but possible) */}
       {inverters.length === 0 && ohmpilots.length === 0 && data?.site == null && (
-        <Alert severity="warning" sx={{ mt: 2 }}>
-          No power flow data available yet. The Solar API scraper may still be initializing.
-        </Alert>
+        <Alert
+          variant="warning"
+          title="No power flow data available yet. The Solar API scraper may still be initializing."
+          isInline
+          style={{ marginTop: 16 }}
+        />
       )}
-    </Box>
+    </div>
   );
 }
 

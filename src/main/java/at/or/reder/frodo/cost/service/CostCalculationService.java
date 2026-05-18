@@ -46,8 +46,10 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.jboss.logging.Logger;
 
 /**
@@ -158,12 +160,26 @@ public class CostCalculationService {
     LocalDateTime to = from.plusMonths(1);
     List<HourlyEnergyEntity> hours = hourlyEnergyRepository.findByDateRange(from, to);
     LOG.infof("Recalculating %d hourly costs for %s", hours.size(), yearMonth);
+    Set<String> touchedDays = new HashSet<>();
     for (HourlyEnergyEntity energy : hours) {
       try {
         doCalculate(energy.hourStart);
+        touchedDays.add(energy.hourStart.format(DAY_FMT));
       } catch (Exception ex) {
         LOG.errorf(ex, "Recalculation failed for hour %s", energy.hourStart);
       }
+    }
+    for (String day : touchedDays) {
+      try {
+        updateDailyCost(LocalDate.parse(day).atStartOfDay());
+      } catch (Exception ex) {
+        LOG.errorf(ex, "Daily cost update failed for %s during %s recalculation", day, yearMonth);
+      }
+    }
+    try {
+      updateMonthlyCost(from);
+    } catch (Exception ex) {
+      LOG.errorf(ex, "Monthly cost update failed for %s", yearMonth);
     }
   }
 
@@ -217,10 +233,6 @@ public class CostCalculationService {
     cost.netCostEur = netCostEur;
 
     hourlyCostRepository.upsert(cost);
-
-    // Real-time daily and monthly updates
-    updateDailyCost(hourStart);
-    updateMonthlyCost(hourStart);
   }
 
   private PriceResolution resolvePrice(PriceDirection direction, LocalDateTime hourStart) {
@@ -303,7 +315,8 @@ public class CostCalculationService {
     return new EffectivePrices(importCt, exportCt, timeFeeEur);
   }
 
-  private void updateDailyCost(LocalDateTime anyHourInDay) {
+  @Transactional
+  public void updateDailyCost(LocalDateTime anyHourInDay) {
     String day = anyHourInDay.format(DAY_FMT);
     LocalDateTime from = anyHourInDay.toLocalDate().atStartOfDay();
     LocalDateTime to = from.plusDays(1);
@@ -338,7 +351,8 @@ public class CostCalculationService {
     dailyCostRepository.upsert(daily);
   }
 
-  private void updateMonthlyCost(LocalDateTime anyHourInMonth) {
+  @Transactional
+  public void updateMonthlyCost(LocalDateTime anyHourInMonth) {
     String yearMonth = anyHourInMonth.format(YEAR_MONTH_FMT);
     LocalDateTime from = anyHourInMonth.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
     // Workaround: use plusMonths on date part

@@ -16,15 +16,13 @@
 
 import React from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
   Button,
-  CircularProgress,
-} from '@mui/material';
-import WarningIcon from '@mui/icons-material/Warning';
+  Spinner,
+} from '@patternfly/react-core';
 
 /**
  * Generic confirmation dialog for destructive or important actions.
@@ -37,7 +35,7 @@ import WarningIcon from '@mui/icons-material/Warning';
  * @param {string|React.ReactNode} props.message - Confirmation message
  * @param {string} [props.confirmLabel='Confirm'] - Confirm button label
  * @param {string} [props.cancelLabel='Cancel'] - Cancel button label
- * @param {'error'|'warning'|'primary'} [props.confirmColor='error'] - Confirm button color
+ * @param {'danger'|'warning'|'primary'} [props.confirmColor='danger'] - Confirm button variant
  * @param {boolean} [props.isLoading=false] - Whether action is in progress
  * @param {boolean} [props.showWarningIcon=true] - Show warning icon in title
  * @param {React.ReactNode} [props.children] - Optional extra content below message
@@ -50,54 +48,45 @@ function ConfirmDialog({
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
-  confirmColor = 'error',
+  confirmColor = 'danger',
   isLoading = false,
   showWarningIcon = true,
   children,
 }) {
+  // MUI uses 'error'; PF uses 'danger'
+  const pfVariant = confirmColor === 'error' ? 'danger' : confirmColor;
+
   return (
-    <Dialog
-      open={open}
+    <Modal
+      isOpen={open}
       onClose={isLoading ? undefined : onClose}
-      maxWidth="xs"
-      fullWidth
+      variant="small"
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-description"
     >
-      <DialogTitle
-        id="confirm-dialog-title"
-        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-      >
-        {showWarningIcon && <WarningIcon color={confirmColor} />}
-        {title}
-      </DialogTitle>
-
-      <DialogContent>
-        {message && (
-          <DialogContentText id="confirm-dialog-description">
-            {message}
-          </DialogContentText>
-        )}
+      <ModalHeader
+        title={title}
+        labelId="confirm-dialog-title"
+        titleIconVariant={showWarningIcon ? 'warning' : undefined}
+      />
+      <ModalBody id="confirm-dialog-description">
+        {message && <p>{message}</p>}
         {children}
-      </DialogContent>
-
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} disabled={isLoading}>
-          {cancelLabel}
-        </Button>
+      </ModalBody>
+      <ModalFooter>
         <Button
+          variant={pfVariant}
           onClick={onConfirm}
-          color={confirmColor}
-          variant="contained"
-          disabled={isLoading}
-          startIcon={
-            isLoading ? <CircularProgress size={20} color="inherit" /> : null
-          }
+          isDisabled={isLoading}
+          icon={isLoading ? <Spinner size="sm" aria-label="Processing" /> : undefined}
         >
           {isLoading ? 'Processing...' : confirmLabel}
         </Button>
-      </DialogActions>
-    </Dialog>
+        <Button variant="link" onClick={onClose} isDisabled={isLoading}>
+          {cancelLabel}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 

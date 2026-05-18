@@ -73,6 +73,7 @@ tasks.withType(JavaCompile).configureEach {
 
 // Generate version.properties with project version
 tasks.named('processResources') {
+    dependsOn syncFrontendVersion
     filesMatching('**/version.properties') {
         expand(projectVersion: project.version)
     }
@@ -107,6 +108,29 @@ tasks.named('build') {
 // Pass --enable-native-access=ALL-UNNAMED so the JVM suppresses the restricted-method warning.
 quarkusDev {
     jvmArgs = ['--enable-native-access=ALL-UNNAMED']
+}
+
+// Sync frontend version from gradle.properties (single source of truth).
+// Strips -SNAPSHOT suffix because npm does not support it.
+// Runs automatically before the Quinoa/npm build.
+tasks.register('syncFrontendVersion') {
+    group = 'build'
+    description = 'Writes projectVersion (without -SNAPSHOT) into the frontend package.json'
+
+    def propsFile = file('gradle.properties')
+    def pkgFile   = file('src/main/webui/package.json')
+
+    inputs.file(propsFile)
+    outputs.file(pkgFile)
+
+    doLast {
+        def npmVersion = project.version.toString().replaceAll('-SNAPSHOT$', '')
+        def pkg = pkgFile.text
+        // Replace the "version": "..." line inside package.json
+        pkg = pkg.replaceAll(/"version"\s*:\s*"[^"]*"/, '"version": "' + npmVersion + '"')
+        pkgFile.text = pkg
+        logger.lifecycle("Frontend version synced to ${npmVersion}")
+    }
 }
 
 // Storybook tasks for component library development

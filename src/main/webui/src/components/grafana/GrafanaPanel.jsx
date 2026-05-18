@@ -17,117 +17,136 @@
 import React, { useState } from 'react';
 import {
   Card,
-  CardContent,
   CardHeader,
-  IconButton,
-  Dialog,
-  DialogContent,
+  CardTitle,
+  CardBody,
+  Modal,
+  ModalBody,
+  Button,
   Tooltip,
-  Box,
-} from '@mui/material';
-import FullscreenIcon from '@mui/icons-material/Fullscreen';
-import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import {
+  ExpandAltIcon,
+  CompressAltIcon,
+  ExternalLinkAltIcon,
+} from '@patternfly/react-icons';
 import GrafanaEmbed from './GrafanaEmbed';
 
 /**
- * GrafanaPanel — MUI Card wrapper around a single Grafana panel iframe.
+ * GrafanaPanel — PF Card wrapper around a single Grafana panel iframe.
  *
  * Props:
  *   title        {string}   Card header title
  *   src          {string}   Full Grafana panel URL
  *   externalUrl  {string}   URL to open the full dashboard in a new tab (optional)
  *   aspectRatio  {number}   Width/height ratio for the embed (default 16/9)
- *   minHeight    {number}   Minimum iframe height in px (default 220 desktop, 160 mobile)
+ *   minHeight    {number}   Minimum iframe height in px (default 220)
  */
 function GrafanaPanel({ title, src, externalUrl, aspectRatio = 16 / 9 }) {
   const [fullscreen, setFullscreen] = useState(false);
 
   return (
     <>
-      <Card sx={{ height: '100%' }}>
+      <Card style={{ height: '100%' }}>
         <CardHeader
-          title={title}
-          titleTypographyProps={{ variant: 'subtitle1' }}
-          action={
-            <Box>
-              {externalUrl && (
-                <Tooltip title="Open in Grafana">
-                  <IconButton
-                    size="small"
-                    href={externalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Open panel in Grafana"
-                  >
-                    <OpenInNewIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
-              <Tooltip title="Full screen">
-                <IconButton size="small" onClick={() => setFullscreen(true)} aria-label="Enter full screen">
-                  <FullscreenIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          }
-          sx={{ pb: 0 }}
-        />
-        <CardContent sx={{ pt: 1 }}>
+          actions={{
+            actions: (
+              <Flex gap={{ default: 'gapXs' }}>
+                {externalUrl && (
+                  <FlexItem>
+                    <Tooltip content="Open in Grafana">
+                      <Button
+                        variant="plain"
+                        size="sm"
+                        component="a"
+                        href={externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Open panel in Grafana"
+                      >
+                        <ExternalLinkAltIcon />
+                      </Button>
+                    </Tooltip>
+                  </FlexItem>
+                )}
+                <FlexItem>
+                  <Tooltip content="Full screen">
+                    <Button
+                      variant="plain"
+                      size="sm"
+                      onClick={() => setFullscreen(true)}
+                      aria-label="Enter full screen"
+                    >
+                      <ExpandAltIcon />
+                    </Button>
+                  </Tooltip>
+                </FlexItem>
+              </Flex>
+            ),
+          }}
+        >
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardBody style={{ paddingTop: '0.5rem' }}>
           <GrafanaEmbed
             src={src}
             title={title}
             aspectRatio={aspectRatio}
-            minHeight={{ xs: 160, md: 220 }}
+            minHeight={220}
           />
-        </CardContent>
+        </CardBody>
       </Card>
 
-      {/* Full-screen dialog */}
-      <Dialog
-        open={fullscreen}
+      {/* Full-screen modal */}
+      <Modal
+        isOpen={fullscreen}
         onClose={() => setFullscreen(false)}
-        maxWidth={false}
-        fullWidth
-        PaperProps={{
-          sx: { m: 1, maxWidth: 'calc(100vw - 16px)', height: 'calc(100vh - 16px)' },
-        }}
+        variant="large"
+        aria-labelledby="grafana-fullscreen-title"
+        style={{ height: 'calc(100vh - 2rem)' }}
+        hasNoBodyWrapper
       >
-        <DialogContent sx={{ p: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <ModalBody style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
           {/* Header bar */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              px: 2,
-              py: 1,
-              borderBottom: 1,
-              borderColor: 'divider',
+          <Flex
+            justifyContent={{ default: 'justifyContentSpaceBetween' }}
+            alignItems={{ default: 'alignItemsCenter' }}
+            style={{
+              padding: '0.5rem 1rem',
+              borderBottom: '1px solid var(--pf-t--global--border--color--default, #d2d2d2)',
               flexShrink: 0,
             }}
           >
-            <Box component="span" sx={{ typography: 'subtitle1' }}>
-              {title}
-            </Box>
-            <Tooltip title="Exit full screen">
-              <IconButton size="small" onClick={() => setFullscreen(false)} aria-label="Exit full screen">
-                <FullscreenExitIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
+            <FlexItem>
+              <span id="grafana-fullscreen-title" style={{ fontWeight: 500 }}>{title}</span>
+            </FlexItem>
+            <FlexItem>
+              <Tooltip content="Exit full screen">
+                <Button
+                  variant="plain"
+                  size="sm"
+                  onClick={() => setFullscreen(false)}
+                  aria-label="Exit full screen"
+                >
+                  <CompressAltIcon />
+                </Button>
+              </Tooltip>
+            </FlexItem>
+          </Flex>
 
           {/* Full-size embed */}
-          <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
             <GrafanaEmbed
               src={src}
               title={title}
               aspectRatio={undefined}
-              sx={{ paddingTop: 0, height: '100%' }}
+              style={{ paddingTop: 0, height: '100%' }}
             />
-          </Box>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </ModalBody>
+      </Modal>
     </>
   );
 }

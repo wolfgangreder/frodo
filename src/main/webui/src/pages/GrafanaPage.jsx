@@ -17,30 +17,36 @@
 import React, { useState, useCallback } from 'react';
 import {
   Alert,
-  Box,
   Button,
   Card,
-  CardContent,
-  Chip,
-  CircularProgress,
+  CardBody,
   Divider,
+  FormGroup,
+  FormSelect,
+  FormSelectOption,
   Grid,
-  IconButton,
-  MenuItem,
-  Select,
-  Stack,
-  TextField,
+  GridItem,
+  Label,
+  Spinner,
+  TextInput,
+  Title,
   Tooltip,
-  Typography,
-} from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import SettingsIcon from '@mui/icons-material/Settings';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
+} from '@patternfly/react-core';
+import {
+  SyncAltIcon,
+  ExternalLinkAltIcon,
+  CogIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+} from '@patternfly/react-icons';
 import { PageHeader } from '../components/common';
 import { GrafanaPanel } from '../components/grafana';
 import { grafanaService } from '../services';
+
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #73bcf7)',
+  subtle: 'var(--pf-t--global--text--color--subtle, #6a6e73)',
+};
 
 /**
  * Predefined time range options shown in the toolbar.
@@ -57,7 +63,6 @@ const TIME_RANGES = [
 
 /**
  * Grafana connection status banner.
- * Shows a test button; on click fires a ping to Grafana /api/health.
  */
 function ConnectionBanner({ baseUrl, onChangeUrl }) {
   const [status, setStatus] = useState(null); // null | 'checking' | 'ok' | 'error'
@@ -69,83 +74,67 @@ function ConnectionBanner({ baseUrl, onChangeUrl }) {
   }, []);
 
   return (
-    <Card sx={{ mb: 3 }}>
-      <CardContent>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          alignItems={{ xs: 'stretch', sm: 'center' }}
-        >
-          <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+    <Card style={{ marginBottom: 24 }}>
+      <CardBody>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
+          <span style={{ fontSize: '0.875rem', color: C.subtle, flexShrink: 0 }}>
             Grafana URL:
-          </Typography>
-
-          <Typography
-            variant="body2"
-            sx={{ fontFamily: 'monospace', color: 'text.primary', flex: 1, wordBreak: 'break-all' }}
-          >
+          </span>
+          <span style={{ fontFamily: 'monospace', fontSize: '0.875rem', flex: 1, wordBreak: 'break-all' }}>
             {baseUrl}
-          </Typography>
+          </span>
 
           {status === 'ok' && (
-            <Chip
-              icon={<CheckCircleOutlineIcon />}
-              label="Reachable"
-              color="success"
-              size="small"
-              variant="outlined"
-            />
+            <Label color="green" icon={<CheckCircleIcon />} variant="outline">Reachable</Label>
           )}
           {status === 'error' && (
-            <Chip
-              icon={<ErrorOutlineIcon />}
-              label="Unreachable"
-              color="error"
-              size="small"
-              variant="outlined"
-            />
+            <Label color="red" icon={<ExclamationCircleIcon />} variant="outline">Unreachable</Label>
           )}
 
-          <Stack direction="row" spacing={1}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Button
-              size="small"
-              variant="outlined"
+              size="sm"
+              variant="secondary"
               onClick={handleTest}
-              disabled={status === 'checking'}
-              startIcon={status === 'checking' ? <CircularProgress size={14} /> : null}
+              isDisabled={status === 'checking'}
+              icon={status === 'checking' ? <Spinner size="sm" /> : null}
             >
               {status === 'checking' ? 'Testing…' : 'Test Connection'}
             </Button>
 
-            <Tooltip title="Open Grafana in new tab">
-              <IconButton
-                size="small"
+            <Tooltip content="Open Grafana in new tab">
+              <Button
+                variant="plain"
+                component="a"
                 href={baseUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                component="a"
                 aria-label="Open Grafana in new tab"
               >
-                <OpenInNewIcon fontSize="small" />
-              </IconButton>
+                <ExternalLinkAltIcon />
+              </Button>
             </Tooltip>
 
-            <Tooltip title="Change Grafana URL (go to Settings)">
-              <IconButton size="small" onClick={onChangeUrl} aria-label="Change Grafana URL">
-                <SettingsIcon fontSize="small" />
-              </IconButton>
+            <Tooltip content="Change Grafana URL (go to Settings)">
+              <Button
+                variant="plain"
+                onClick={onChangeUrl}
+                aria-label="Change Grafana URL"
+              >
+                <CogIcon />
+              </Button>
             </Tooltip>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
 
         {status === 'error' && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
+          <Alert variant="warning" isInline style={{ marginTop: 16 }} title="">
             Cannot reach Grafana at <strong>{baseUrl}</strong>. Make sure Grafana is running and
             has <code>GF_SECURITY_ALLOW_EMBEDDING=true</code> and{' '}
             <code>GF_AUTH_ANONYMOUS_ENABLED=true</code> set.
           </Alert>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
@@ -157,45 +146,54 @@ function UrlEditor({ initial, onSave, onCancel }) {
   const [value, setValue] = useState(initial);
 
   return (
-    <Card sx={{ mb: 3, border: 1, borderColor: 'primary.main' }}>
-      <CardContent>
-        <Typography variant="subtitle2" gutterBottom>
+    <Card style={{ marginBottom: 24, border: `1px solid ${C.primary}` }}>
+      <CardBody>
+        <Title headingLevel="h3" size="md" style={{ marginBottom: 8 }}>
           Grafana Base URL
-        </Typography>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="flex-start">
-          <TextField
-            size="small"
-            fullWidth
+        </Title>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
+          <TextInput
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(_event, val) => setValue(val)}
             placeholder="http://localhost:3000"
-            inputProps={{ style: { fontFamily: 'monospace' } }}
+            style={{ fontFamily: 'monospace', flex: 1, minWidth: 200 }}
+            aria-label="Grafana base URL"
           />
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" size="small" onClick={() => onSave(value)}>
-              Save
-            </Button>
-            <Button variant="outlined" size="small" onClick={onCancel}>
-              Cancel
-            </Button>
-          </Stack>
-        </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button variant="primary" size="sm" onClick={() => onSave(value)}>Save</Button>
+            <Button variant="secondary" size="sm" onClick={onCancel}>Cancel</Button>
+          </div>
+        </div>
+        <p style={{ fontSize: '0.75rem', color: C.subtle, marginTop: 8 }}>
           Saved in browser localStorage. Dashboard UIDs must be configured in Grafana.
-        </Typography>
-      </CardContent>
+        </p>
+      </CardBody>
     </Card>
   );
 }
 
-/**
- * GrafanaPage — embeds four Grafana panels for PV system monitoring.
- *
- * The panels expect a Grafana dashboard with the UID configured via the
- * Settings page or localStorage key "frodo.grafana.dashboardUid".
- *
- * If no dashboard UID is configured, a setup guide is shown instead.
- */
+/** Small inline UID input. */
+function DashboardUidEditor({ initial, onSave, onCancel }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
+      <TextInput
+        value={value}
+        onChange={(_event, val) => setValue(val)}
+        placeholder="e.g. abc123XYZ"
+        style={{ fontFamily: 'monospace', flex: 1, minWidth: 200 }}
+        aria-label="Dashboard UID"
+      />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button variant="primary" size="sm" onClick={() => onSave(value)}>Save</Button>
+        {initial && (
+          <Button variant="secondary" size="sm" onClick={onCancel}>Cancel</Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const DASHBOARD_UID_KEY = 'frodo.grafana.dashboardUid';
 
 const PANELS = [
@@ -232,39 +230,39 @@ function GrafanaPage() {
   const handleRefresh = () => setRefreshKey((k) => k + 1);
 
   const timeRangeActions = (
-    <>
-      <Select
-        size="small"
-        value={timeRange}
-        onChange={(e) => {
-          setTimeRange(e.target.value);
-          setRefreshKey((k) => k + 1);
-        }}
-        sx={{ minWidth: 150 }}
-      >
-        {TIME_RANGES.map((r) => (
-          <MenuItem key={r.value} value={r.value}>
-            {r.label}
-          </MenuItem>
-        ))}
-      </Select>
-      <Tooltip title="Reload panels">
-        <IconButton onClick={handleRefresh} aria-label="Reload Grafana panels">
-          <RefreshIcon />
-        </IconButton>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <FormGroup fieldId="grafana-time-range" style={{ margin: 0 }}>
+        <FormSelect
+          id="grafana-time-range"
+          value={timeRange}
+          onChange={(_event, value) => {
+            setTimeRange(value);
+            setRefreshKey((k) => k + 1);
+          }}
+          aria-label="Time range"
+          style={{ minWidth: 150 }}
+        >
+          {TIME_RANGES.map((r) => (
+            <FormSelectOption key={r.value} value={r.value} label={r.label} />
+          ))}
+        </FormSelect>
+      </FormGroup>
+      <Tooltip content="Reload panels">
+        <Button variant="plain" onClick={handleRefresh} aria-label="Reload Grafana panels">
+          <SyncAltIcon />
+        </Button>
       </Tooltip>
-    </>
+    </div>
   );
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Grafana Dashboards"
         subtitle="Embedded metrics visualizations from Grafana"
         actions={timeRangeActions}
       />
 
-      {/* Grafana connection info / URL editor */}
       {editingUrl ? (
         <UrlEditor initial={baseUrl} onSave={handleSaveUrl} onCancel={() => setEditingUrl(false)} />
       ) : (
@@ -273,54 +271,50 @@ function GrafanaPage() {
 
       {/* Dashboard UID setup */}
       {editingDashUid ? (
-        <Card sx={{ mb: 3, border: 1, borderColor: 'secondary.main' }}>
-          <CardContent>
-            <Typography variant="subtitle2" gutterBottom>
+        <Card style={{ marginBottom: 24, border: '1px solid var(--pf-t--global--color--nonstatus--purple--default, #cbc1ff)' }}>
+          <CardBody>
+            <Title headingLevel="h3" size="md" style={{ marginBottom: 8 }}>
               Grafana Dashboard UID
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            </Title>
+            <p style={{ fontSize: '0.875rem', color: C.subtle, marginBottom: 8 }}>
               Enter the UID of your Grafana dashboard. You can find it in the dashboard URL:
               <code> /d/&lt;UID&gt;/dashboard-name</code>.
-            </Typography>
+            </p>
             <DashboardUidEditor
               initial={dashboardUid}
               onSave={handleSaveDashUid}
               onCancel={() => setEditingDashUid(false)}
             />
-          </CardContent>
+          </CardBody>
         </Card>
       ) : dashboardUid ? (
-        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            Dashboard UID:
-          </Typography>
-          <Chip label={dashboardUid} size="small" variant="outlined" />
-          <Button size="small" onClick={() => setEditingDashUid(true)}>
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '0.875rem', color: C.subtle }}>Dashboard UID:</span>
+          <Label color="grey" variant="outline">{dashboardUid}</Label>
+          <Button size="sm" variant="link" onClick={() => setEditingDashUid(true)}>
             Change
           </Button>
-        </Box>
+        </div>
       ) : null}
 
-      {/* No dashboard UID configured */}
       {!dashboardUid && !editingDashUid && (
         <Alert
-          severity="info"
-          action={
-            <Button color="inherit" size="small" onClick={() => setEditingDashUid(true)}>
+          variant="info"
+          title="No Grafana dashboard UID configured. Set it above to show panels."
+          isInline
+          style={{ marginBottom: 24 }}
+          actionLinks={
+            <Button variant="link" isInline onClick={() => setEditingDashUid(true)}>
               Configure
             </Button>
           }
-          sx={{ mb: 3 }}
-        >
-          No Grafana dashboard UID configured. Set it above to show panels.
-        </Alert>
+        />
       )}
 
-      {/* Panel grid */}
       {dashboardUid && (
-        <Grid container spacing={2}>
+        <Grid hasGutter>
           {PANELS.map((panel) => (
-            <Grid key={panel.id} item xs={12} md={6}>
+            <GridItem key={panel.id} span={12} md={6}>
               <GrafanaPanel
                 key={`${refreshKey}-${panel.id}`}
                 title={panel.title}
@@ -337,34 +331,30 @@ function GrafanaPage() {
                   to: 'now',
                 })}
               />
-            </Grid>
+            </GridItem>
           ))}
         </Grid>
       )}
 
-      {/* Setup guide shown when no UID yet */}
       {!dashboardUid && (
         <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+          <CardBody>
+            <Title headingLevel="h3" size="lg" style={{ color: C.primary, marginBottom: 8 }}>
               Getting Started with Grafana
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
+            </Title>
+            <Divider style={{ marginBottom: 16 }} />
 
-            <Typography variant="body2" gutterBottom>
+            <p style={{ fontSize: '0.875rem', marginBottom: 8 }}>
               1. Start Grafana (see <code>docker-compose.yml</code>):
-            </Typography>
-            <Box
-              component="pre"
-              sx={{
-                bgcolor: 'background.default',
-                p: 1.5,
-                borderRadius: 1,
-                fontSize: '0.75rem',
-                overflowX: 'auto',
-                mb: 2,
-              }}
-            >
+            </p>
+            <pre style={{
+              background: 'var(--pf-t--global--background--color--secondary--default, #212427)',
+              padding: '12px',
+              borderRadius: 4,
+              fontSize: '0.75rem',
+              overflowX: 'auto',
+              marginBottom: 16,
+            }}>
               {`services:
   grafana:
     image: grafana/grafana:latest
@@ -373,48 +363,21 @@ function GrafanaPage() {
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`}
-            </Box>
+            </pre>
 
-            <Typography variant="body2" gutterBottom>
+            <p style={{ fontSize: '0.875rem', marginBottom: 8 }}>
               2. Add Prometheus as a data source in Grafana pointing to{' '}
               <code>http://host.docker.internal:8080/q/metrics</code>.
-            </Typography>
+            </p>
 
-            <Typography variant="body2" gutterBottom sx={{ mt: 1 }}>
+            <p style={{ fontSize: '0.875rem', marginTop: 8 }}>
               3. Create a dashboard with panels for power, battery, grid, and system metrics, then
               copy the dashboard UID from the URL and enter it above.
-            </Typography>
-          </CardContent>
+            </p>
+          </CardBody>
         </Card>
       )}
-    </Box>
-  );
-}
-
-/** Small inline UID input extracted to keep JSX manageable. */
-function DashboardUidEditor({ initial, onSave, onCancel }) {
-  const [value, setValue] = useState(initial);
-  return (
-    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="flex-start">
-      <TextField
-        size="small"
-        fullWidth
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="e.g. abc123XYZ"
-        inputProps={{ style: { fontFamily: 'monospace' } }}
-      />
-      <Stack direction="row" spacing={1}>
-        <Button variant="contained" size="small" onClick={() => onSave(value)}>
-          Save
-        </Button>
-        {initial && (
-          <Button variant="outlined" size="small" onClick={onCancel}>
-            Cancel
-          </Button>
-        )}
-      </Stack>
-    </Stack>
+    </div>
   );
 }
 

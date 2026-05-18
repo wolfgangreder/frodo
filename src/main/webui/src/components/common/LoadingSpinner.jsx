@@ -15,44 +15,26 @@
  */
 
 import React from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Bullseye, Spinner } from '@patternfly/react-core';
 
 /**
  * Loading spinner component with optional message
  */
-function LoadingSpinner({ message = 'Loading...', size = 40, fullPage = false }) {
+function LoadingSpinner({ message = 'Loading...', fullPage = false }) {
   const content = (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-        p: 4,
-      }}
-    >
-      <CircularProgress size={size} color="primary" />
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '2rem' }}>
+      <Spinner aria-label={message} />
       {message && (
-        <Typography variant="body2" color="text.secondary">
-          {message}
-        </Typography>
+        <span style={{ color: 'var(--pf-v6-global--Color--200)' }}>{message}</span>
       )}
-    </Box>
+    </div>
   );
 
   if (fullPage) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '50vh',
-        }}
-      >
+      <Bullseye style={{ minHeight: '50vh' }}>
         {content}
-      </Box>
+      </Bullseye>
     );
   }
 

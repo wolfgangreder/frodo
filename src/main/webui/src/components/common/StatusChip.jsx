@@ -15,13 +15,13 @@
  */
 
 import React from 'react';
-import { Chip } from '@mui/material';
+import { Label } from '@patternfly/react-core';
 
 const STATUS_CONFIG = {
-  CONNECTED: { color: 'success', label: 'Connected' },
-  DISCONNECTED: { color: 'error', label: 'Disconnected' },
-  UNKNOWN: { color: 'default', label: 'Unknown' },
-  CONNECTING: { color: 'warning', label: 'Connecting' },
+  CONNECTED: { color: 'green', label: 'Connected' },
+  DISCONNECTED: { color: 'red', label: 'Disconnected' },
+  UNKNOWN: { color: 'grey', label: 'Unknown' },
+  CONNECTING: { color: 'orange', label: 'Connecting' },
 };
 
 /**
@@ -29,20 +29,20 @@ const STATUS_CONFIG = {
  *
  * @param {Object} props
  * @param {string} props.status - Connection status (CONNECTED, DISCONNECTED, UNKNOWN, CONNECTING)
- * @param {'small'|'medium'} [props.size='small'] - Chip size
- * @param {'outlined'|'filled'} [props.variant='outlined'] - Chip variant
+ * @param {'sm'|'md'} [props.size='sm'] - Label size
+ * @param {'filled'|'outline'} [props.variant='outline'] - Label variant
  */
-function StatusChip({ status, size = 'small', variant = 'outlined' }) {
+function StatusChip({ status, size = 'sm', variant = 'outline' }) {
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.UNKNOWN;
 
   return (
-    <Chip
-      label={config.label}
+    <Label
       color={config.color}
-      size={size}
       variant={variant}
       aria-label={`Connection status: ${config.label}`}
-    />
+    >
+      {config.label}
+    </Label>
   );
 }
 

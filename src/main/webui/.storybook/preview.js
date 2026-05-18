@@ -15,8 +15,7 @@
  */
 
 import React from 'react';
-import { ThemeProvider, CssBaseline } from '@mui/material';
-import theme from '../src/theme';
+import '@patternfly/react-core/dist/styles/base.css';
 
 /** @type { import('@storybook/react').Preview } */
 const preview = {
@@ -43,12 +42,13 @@ const preview = {
     layout: 'centered',
   },
   decorators: [
-    (Story) => (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Story />
-      </ThemeProvider>
-    ),
+    (Story) => {
+      React.useEffect(() => {
+        document.documentElement.classList.add('pf-v6-theme-dark');
+        return () => document.documentElement.classList.remove('pf-v6-theme-dark');
+      }, []);
+      return <Story />;
+    },
   ],
 };
 

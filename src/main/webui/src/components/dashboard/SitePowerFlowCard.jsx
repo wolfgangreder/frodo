@@ -18,26 +18,30 @@ import React, { useState, useEffect } from 'react';
 import { formatForDisplay } from '../../utils/timeZone';
 import {
   Card,
-  CardContent,
-  Box,
-  Typography,
+  CardBody,
   Skeleton,
-  Stack,
   Tooltip,
   Switch,
   Alert,
-  Collapse,
-  CircularProgress,
-  TextField,
-  IconButton,
+  Spinner,
+  TextInput,
+  FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
+  Button,
   Divider,
-} from '@mui/material';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
-import BlockIcon from '@mui/icons-material/Block';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import PriceChangeIcon from '@mui/icons-material/PriceChange';
-import SaveIcon from '@mui/icons-material/Save';
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import {
+  ChartLineIcon,
+  BanIcon,
+  AngleDownIcon,
+  AngleUpIcon,
+  TagIcon,
+  SaveIcon,
+} from '@patternfly/react-icons';
 import { useSolarApiStatus } from '../../hooks/useSolarApi';
 import {
   useSunSpecControls,
@@ -46,9 +50,16 @@ import {
 } from '../../hooks/useSunSpec';
 import { usePriceControl, useSetPriceControl } from '../../hooks/usePriceControl';
 
-/**
- * Formats power in appropriate units
- */
+// PF v6 design token CSS variable references
+const C = {
+  primary:  'var(--pf-t--global--color--brand--default, #0066cc)',
+  success:  'var(--pf-t--global--color--status--success--default, #3e8635)',
+  warning:  'var(--pf-t--global--color--status--warning--default, #f0ab00)',
+  danger:   'var(--pf-t--global--color--status--danger--default, #c9190b)',
+  subtle:   'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  disabled: 'var(--pf-t--global--text-color--disabled, #b8bbbe)',
+};
+
 function formatPower(value) {
   if (value == null) return '-';
   const num = typeof value === 'number' ? value : parseFloat(value);
@@ -57,9 +68,6 @@ function formatPower(value) {
   return `${num.toFixed(0)} W`;
 }
 
-/**
- * Formats percentage
- */
 function formatPercent(value) {
   if (value == null) return '-';
   const num = typeof value === 'number' ? value : parseFloat(value);
@@ -141,243 +149,273 @@ function SitePowerFlowCard({ deviceId, statusData, hasControls }) {
   const autonomy = site?.autonomyPercent;
   const selfConsumption = site?.selfConsumptionPercent;
 
-  return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        {/* Header */}
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <ShowChartIcon sx={{ color: 'primary.main' }} />
-            <Typography variant="h6" sx={{ color: 'primary.main' }}>
-              Site Power Flow
-            </Typography>
-          </Stack>
+  const gridColor = gridW < 0 ? C.success : gridW > 0 ? C.warning : null;
+  const loadColor = loadW < 0 ? C.danger : null;
 
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            {exportBlocked && (
-              <Tooltip title="Grid export is currently blocked">
-                <BlockIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-              </Tooltip>
-            )}
-            <Typography variant="caption" sx={{ color: exportBlocked ? 'warning.main' : 'text.secondary', fontWeight: 600 }}>
-              {exportBlocked ? 'Blocked' : 'Active'}
-            </Typography>
-          </Stack>
-        </Stack>
+  return (
+    <Card style={{ height: '100%' }}>
+      <CardBody>
+        {/* Header */}
+        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} style={{ marginBottom: '1rem' }}>
+          <FlexItem>
+            <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <ChartLineIcon style={{ color: C.primary }} />
+              </FlexItem>
+              <FlexItem>
+                <span style={{ fontWeight: 600, color: C.primary }}>Site Power Flow</span>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+          <FlexItem>
+            <Flex gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsCenter' }}>
+              {exportBlocked && (
+                <FlexItem>
+                  <Tooltip content="Grid export is currently blocked">
+                    <BanIcon style={{ fontSize: 16, color: C.warning }} />
+                  </Tooltip>
+                </FlexItem>
+              )}
+              <FlexItem>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: exportBlocked ? C.warning : C.subtle }}>
+                  {exportBlocked ? 'Blocked' : 'Active'}
+                </span>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+        </Flex>
 
         {/* Body */}
         {isLoading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} variant="text" width="100%" height={24} />
-            ))}
-          </Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[...Array(4)].map((_, i) => <Skeleton key={i} height="1.5rem" />)}
+          </div>
         ) : isError ? (
-          <Typography variant="body2" color="text.secondary">
-            Solar API unavailable
-          </Typography>
+          <span style={{ fontSize: '0.875rem', color: C.subtle }}>Solar API unavailable</span>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             {/* Power flow values */}
-            <MetricRow label="Grid" value={formatPower(gridW)} color={gridW < 0 ? 'success.main' : gridW > 0 ? 'warning.main' : null} />
-            <MetricRow label="Load" value={formatPower(loadW)} color={loadW < 0 ? 'error.main' : null} />
-            <MetricRow label="PV" value={formatPower(pvW)} color="success.main" />
-            <MetricRow label="Battery" value={formatPower(battW)} color={battW > 0 ? 'warning.main' : battW < 0 ? 'success.main' : null} />
+            <MetricRow label="Grid" value={formatPower(gridW)} color={gridColor} />
+            <MetricRow label="Load" value={formatPower(loadW)} color={loadColor} />
+            <MetricRow label="PV" value={formatPower(pvW)} color={C.success} />
+            <MetricRow
+              label="Battery"
+              value={formatPower(battW)}
+              color={battW > 0 ? C.warning : battW < 0 ? C.success : null}
+            />
 
             {/* Site Statistics */}
             {(autonomy != null || selfConsumption != null) && (
-              <Box sx={{ mt: 1 }}>
-                <Divider sx={{ mb: 1.5 }} />
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+              <div style={{ marginTop: '0.5rem' }}>
+                <Divider style={{ marginBottom: '0.75rem' }} />
+                <span style={{ fontSize: '0.75rem', color: C.subtle, display: 'block', marginBottom: '0.25rem' }}>
                   Site Statistics
-                </Typography>
+                </span>
                 <MetricRow label="Autonomy" value={formatPercent(autonomy)} />
                 <MetricRow label="Self-consumption" value={formatPercent(selfConsumption)} />
-              </Box>
+              </div>
             )}
 
             {/* Block Export Control */}
             {hasControls && (
-              <Box sx={{ mt: 1 }}>
-                <Divider sx={{ mb: 1.5 }} />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Block export
-                  </Typography>
-                  <Tooltip
-                    title={
-                      controlsLoading ? 'Loading…'
-                        : exportBlocked
-                          ? 'Export blocked — click to re-enable'
-                          : 'Export active — click to block'
-                    }
-                  >
-                    <span>
-                      <Switch
-                        size="small"
-                        checked={exportBlocked}
-                        onChange={handleToggleExport}
-                        disabled={controlsLoading || isToggling}
-                        color="warning"
-                        inputProps={{ 'aria-label': 'Block grid export' }}
-                      />
-                    </span>
-                  </Tooltip>
-                </Box>
-              </Box>
+              <div style={{ marginTop: '0.5rem' }}>
+                <Divider style={{ marginBottom: '0.75rem' }} />
+                <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem>
+                    <span style={{ fontSize: '0.875rem', color: C.subtle }}>Block export</span>
+                  </FlexItem>
+                  <FlexItem>
+                    <Tooltip
+                      content={
+                        controlsLoading ? 'Loading…'
+                          : exportBlocked
+                            ? 'Export blocked — click to re-enable'
+                            : 'Export active — click to block'
+                      }
+                    >
+                      <span>
+                        <Switch
+                          id="block-export-switch"
+                          isChecked={exportBlocked}
+                          onChange={(_event, checked) => handleToggleExport()}
+                          isDisabled={controlsLoading || isToggling}
+                          aria-label="Block grid export"
+                          hasCheckIcon
+                        />
+                      </span>
+                    </Tooltip>
+                  </FlexItem>
+                </Flex>
+              </div>
             )}
 
             {/* Price Control Section */}
-            <Box sx={{ mt: 1 }}>
-              <Divider sx={{ mb: 1.5 }} />
+            <div style={{ marginTop: '0.5rem' }}>
+              <Divider style={{ marginBottom: '0.75rem' }} />
               {/* Collapsible header */}
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Stack direction="row" spacing={0.5} alignItems="center">
-                  <PriceChangeIcon
-                    sx={{ fontSize: 16, color: pcEnabled ? 'primary.main' : 'text.disabled' }}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    Price control
-                  </Typography>
-                  {pcCurrentlyBlocking && (
-                    <Tooltip title="Price control is currently limiting export">
-                      <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
-                        blocking
-                      </Typography>
-                    </Tooltip>
-                  )}
-                  {pcEnabled && !pcCurrentlyBlocking && (
-                    <Typography variant="caption" color="text.disabled">
-                      enabled
-                    </Typography>
-                  )}
-                </Stack>
-                <IconButton
-                  size="small"
-                  onClick={() => setPcOpen((o) => !o)}
-                  aria-label={pcOpen ? 'Collapse price control' : 'Expand price control'}
-                >
-                  {pcOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                </IconButton>
-              </Box>
+              <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                <FlexItem>
+                  <Flex gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsCenter' }}>
+                    <FlexItem>
+                      <TagIcon style={{ fontSize: 16, color: pcEnabled ? C.primary : C.disabled }} />
+                    </FlexItem>
+                    <FlexItem>
+                      <span style={{ fontSize: '0.875rem', color: C.subtle }}>Price control</span>
+                    </FlexItem>
+                    {pcCurrentlyBlocking && (
+                      <FlexItem>
+                        <Tooltip content="Price control is currently limiting export">
+                          <span style={{ fontSize: '0.75rem', color: C.warning, fontWeight: 600 }}>blocking</span>
+                        </Tooltip>
+                      </FlexItem>
+                    )}
+                    {pcEnabled && !pcCurrentlyBlocking && (
+                      <FlexItem>
+                        <span style={{ fontSize: '0.75rem', color: C.disabled }}>enabled</span>
+                      </FlexItem>
+                    )}
+                  </Flex>
+                </FlexItem>
+                <FlexItem>
+                  <Button
+                    variant="plain"
+                    size="sm"
+                    onClick={() => setPcOpen((o) => !o)}
+                    aria-label={pcOpen ? 'Collapse price control' : 'Expand price control'}
+                  >
+                    {pcOpen ? <AngleUpIcon /> : <AngleDownIcon />}
+                  </Button>
+                </FlexItem>
+              </Flex>
 
               {/* Collapsible form */}
-              <Collapse in={pcOpen}>
-                <Box
-                  sx={{
-                    mt: 1,
-                    p: 1.5,
-                    bgcolor: 'action.hover',
-                    borderRadius: 1,
+              {pcOpen && (
+                <div
+                  style={{
+                    marginTop: '0.5rem',
+                    padding: '0.75rem',
+                    background: 'var(--pf-t--global--background--color--secondary--default, #f0f0f0)',
+                    borderRadius: '4px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 1.5,
+                    gap: '0.75rem',
                   }}
                 >
                   {priceControlQuery.isLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-                      <CircularProgress size={20} />
-                    </Box>
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '0.5rem' }}>
+                      <Spinner size="md" />
+                    </div>
                   ) : (
                     <>
                       {/* Enable toggle */}
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="body2">Enable price control</Typography>
-                        <Switch
-                          size="small"
-                          checked={formPcEnabled}
-                          onChange={(e) => setFormPcEnabled(e.target.checked)}
-                          color="primary"
-                        />
-                      </Box>
+                      <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                        <FlexItem>
+                          <span style={{ fontSize: '0.875rem' }}>Enable price control</span>
+                        </FlexItem>
+                        <FlexItem>
+                          <Switch
+                            id="pc-enabled-switch"
+                            isChecked={formPcEnabled}
+                            onChange={(_event, checked) => setFormPcEnabled(checked)}
+                            hasCheckIcon
+                          />
+                        </FlexItem>
+                      </Flex>
 
                       {/* Tolerance input */}
-                      <TextField
-                        label="Export tolerance (W)"
-                        type="number"
-                        size="small"
-                        value={formPcTolerance}
-                        onChange={(e) => setFormPcTolerance(e.target.value)}
-                        inputProps={{ min: 0, step: 10 }}
-                        helperText="Allowed export above load+battery demand when price is negative (default: 50 W)"
-                        disabled={!formPcEnabled}
-                      />
+                      <FormGroup label="Export tolerance (W)" fieldId="pc-tolerance">
+                        <TextInput
+                          id="pc-tolerance"
+                          type="number"
+                          value={String(formPcTolerance)}
+                          onChange={(_event, value) => setFormPcTolerance(value)}
+                          isDisabled={!formPcEnabled}
+                          aria-label="Export tolerance in watts"
+                          min={0}
+                          step={10}
+                        />
+                        <FormHelperText>
+                          <HelperText>
+                            <HelperTextItem>
+                              Allowed export above load+battery demand when price is negative (default: 50 W)
+                            </HelperTextItem>
+                          </HelperText>
+                        </FormHelperText>
+                      </FormGroup>
 
                       {/* Current market price */}
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="body2" color="text.secondary">
-                          Current price
-                        </Typography>
-                        {marketPriceQuery.isLoading ? (
-                          <CircularProgress size={14} />
-                        ) : currentPrice == null ? (
-                          <Typography variant="caption" color="text.disabled">
-                            not available
-                          </Typography>
-                        ) : (
-                          <Tooltip title={`Valid ${formatForDisplay(currentPrice.startTime)} – ${formatForDisplay(currentPrice.endTime)}`}>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontFamily: 'monospace',
-                                fontWeight: 700,
-                                color: currentPrice.priceCt < 0 ? 'warning.main' : 'success.main',
-                              }}
-                            >
-                              {currentPrice.priceCt.toFixed(2)} ct/kWh
-                              {currentPrice.priceCt < 0 ? ' (blocking)' : ' (normal)'}
-                            </Typography>
-                          </Tooltip>
-                        )}
-                      </Box>
+                      <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                        <FlexItem>
+                          <span style={{ fontSize: '0.875rem', color: C.subtle }}>Current price</span>
+                        </FlexItem>
+                        <FlexItem>
+                          {marketPriceQuery.isLoading ? (
+                            <Spinner size="sm" />
+                          ) : currentPrice == null ? (
+                            <span style={{ fontSize: '0.75rem', color: C.disabled }}>not available</span>
+                          ) : (
+                            <Tooltip content={`Valid ${formatForDisplay(currentPrice.startTime)} – ${formatForDisplay(currentPrice.endTime)}`}>
+                              <span
+                                style={{
+                                  fontSize: '0.875rem',
+                                  fontFamily: 'monospace',
+                                  fontWeight: 700,
+                                  color: currentPrice.priceCt < 0 ? C.warning : C.success,
+                                }}
+                              >
+                                {currentPrice.priceCt.toFixed(2)} ct/kWh
+                                {currentPrice.priceCt < 0 ? ' (blocking)' : ' (normal)'}
+                              </span>
+                            </Tooltip>
+                          )}
+                        </FlexItem>
+                      </Flex>
 
                       {/* Summary */}
-                      <Typography variant="caption" color="text.secondary">
+                      <span style={{ fontSize: '0.75rem', color: C.subtle }}>
                         {formPcEnabled
                           ? <>When aWATTar AT price is negative, export is capped to{' '}
                               <strong>{Math.max(0, parseInt(String(formPcTolerance), 10) || 50)} W</strong> above load demand.</>
                           : 'Price-controlled export limiting is disabled.'}
-                      </Typography>
+                      </span>
 
                       {/* Save button */}
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <Tooltip title="Save price control setting">
-                          <span>
-                            <IconButton
-                              size="small"
-                              color="primary"
+                      <Flex justifyContent={{ default: 'justifyContentFlexEnd' }}>
+                        <FlexItem>
+                          <Tooltip content="Save price control setting">
+                            <Button
+                              variant="plain"
+                              size="sm"
                               onClick={handleSavePc}
-                              disabled={isSavingPc}
+                              isDisabled={isSavingPc}
                               aria-label="Save price control"
                             >
-                              {isSavingPc ? <CircularProgress size={16} /> : <SaveIcon fontSize="small" />}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </Box>
+                              {isSavingPc ? <Spinner size="sm" /> : <SaveIcon />}
+                            </Button>
+                          </Tooltip>
+                        </FlexItem>
+                      </Flex>
                     </>
                   )}
-                </Box>
-              </Collapse>
-            </Box>
+                </div>
+              )}
+            </div>
 
-          </Box>
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
 
 function MetricRow({ label, value, color }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 500, fontFamily: 'monospace', color }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <span style={{ fontSize: '0.875rem', color: C.subtle }}>{label}</span>
+      <span style={{ fontSize: '0.875rem', fontWeight: 500, fontFamily: 'monospace', color: color || undefined }}>
         {value}
-      </Typography>
-    </Box>
+      </span>
+    </div>
   );
 }
 

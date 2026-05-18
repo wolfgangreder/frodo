@@ -14,68 +14,49 @@
  * limitations under the License.
  */
 
-import React, { useState, useEffect } from 'react';
-import { Snackbar, Alert } from '@mui/material';
+import React from 'react';
+import { AlertGroup, Alert, AlertActionCloseButton } from '@patternfly/react-core';
 import { useUiStore } from '../../stores';
 
 /**
- * Global notification snackbar component with queue support.
+ * Global notification toast component with queue support.
  * Displays notifications from the UI store one at a time,
  * advancing to the next after the current one closes.
  */
 function NotificationSnackbar() {
   const { notifications, dismissNotification } = useUiStore();
-  const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState(null);
+  const current = notifications[0] || null;
 
-  // When a new notification arrives and none is showing, display it
-  useEffect(() => {
-    if (notifications.length > 0 && !current) {
-      setCurrent(notifications[0]);
-      setOpen(true);
-    }
-  }, [notifications, current]);
-
-  const handleClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setOpen(false);
-  };
-
-  const handleExited = () => {
+  const handleClose = () => {
     if (current) {
       dismissNotification(current.id);
     }
-    setCurrent(null);
   };
 
   if (!current) {
     return null;
   }
 
+  // MUI uses 'error'; PF uses 'danger'
+  const variant = current.severity === 'error' ? 'danger' : current.severity;
+
   return (
-    <Snackbar
-      key={current.id}
-      open={open}
-      autoHideDuration={current.duration}
-      onClose={handleClose}
-      TransitionProps={{ onExited: handleExited }}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      sx={{
-        mb: { xs: 7, sm: 0 },
-      }}
-    >
+    <AlertGroup isToast isLiveRegion>
       <Alert
-        onClose={handleClose}
-        severity={current.severity}
-        variant="filled"
-        sx={{ width: '100%' }}
-        role="alert"
-      >
-        {current.message}
-      </Alert>
-    </Snackbar>
+        key={current.id}
+        variant={variant}
+        title={current.message}
+        timeout={current.duration}
+        onTimeout={handleClose}
+        actionClose={
+          <AlertActionCloseButton
+            title={`Close ${variant} alert`}
+            variantLabel={variant}
+            onClose={handleClose}
+          />
+        }
+      />
+    </AlertGroup>
   );
 }
 

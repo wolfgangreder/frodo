@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Box, Skeleton } from '@mui/material';
+import { Skeleton } from '@patternfly/react-core';
 
 /**
  * GrafanaEmbed — renders a single Grafana panel as an iframe.
@@ -25,50 +25,48 @@ import { Box, Skeleton } from '@mui/material';
  *   title        {string}  Accessible title for the iframe
  *   aspectRatio  {number}  Width/height ratio (default 16/9)
  *   minHeight    {number}  Minimum height in px (default 200)
- *   sx           {object}  Extra MUI sx styles for the container Box
+ *   style        {object}  Extra inline styles for the container div
  */
-function GrafanaEmbed({ src, title = 'Grafana panel', aspectRatio = 16 / 9, minHeight = 200, sx }) {
+function GrafanaEmbed({ src, title = 'Grafana panel', aspectRatio = 16 / 9, minHeight = 200, style }) {
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError]   = useState(false);
   const iframeRef = useRef(null);
 
-  const handleLoad = () => setLoaded(true);
-  const handleError = () => {
-    setLoaded(true);
-    setError(true);
-  };
+  const handleLoad  = () => setLoaded(true);
+  const handleError = () => { setLoaded(true); setError(true); };
+
+  const paddingTop = aspectRatio ? `${(1 / aspectRatio) * 100}%` : undefined;
 
   return (
-    <Box
-      sx={{
+    <div
+      style={{
         position: 'relative',
         width: '100%',
-        paddingTop: `${(1 / aspectRatio) * 100}%`,
-        minHeight,
+        paddingTop: paddingTop || 0,
+        minHeight: paddingTop ? undefined : '100%',
+        height: paddingTop ? undefined : '100%',
         overflow: 'hidden',
-        borderRadius: 1,
-        bgcolor: 'background.default',
-        ...sx,
+        borderRadius: '4px',
+        background: 'var(--pf-t--global--background--color--primary--default, #1b1d21)',
+        ...style,
       }}
     >
       {/* Loading skeleton shown until iframe fires load */}
       {!loaded && (
         <Skeleton
-          variant="rectangular"
-          sx={{
+          style={{
             position: 'absolute',
             top: 0,
             left: 0,
             width: '100%',
             height: '100%',
           }}
-          animation="wave"
         />
       )}
 
       {error ? (
-        <Box
-          sx={{
+        <div
+          style={{
             position: 'absolute',
             top: 0,
             left: 0,
@@ -77,21 +75,21 @@ function GrafanaEmbed({ src, title = 'Grafana panel', aspectRatio = 16 / 9, minH
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'text.secondary',
+            color: 'var(--pf-t--global--text-color--subtle, #6a6e73)',
             fontSize: '0.875rem',
           }}
         >
           Failed to load Grafana panel
-        </Box>
+        </div>
       ) : (
-        <Box
+        <iframe
           ref={iframeRef}
-          component="iframe"
           src={src}
           title={title}
           onLoad={handleLoad}
           onError={handleError}
-          sx={{
+          allowFullScreen
+          style={{
             position: 'absolute',
             top: 0,
             left: 0,
@@ -101,10 +99,9 @@ function GrafanaEmbed({ src, title = 'Grafana panel', aspectRatio = 16 / 9, minH
             opacity: loaded ? 1 : 0,
             transition: 'opacity 0.3s',
           }}
-          allowFullScreen
         />
       )}
-    </Box>
+    </div>
   );
 }
 

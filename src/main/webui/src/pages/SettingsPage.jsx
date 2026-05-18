@@ -17,38 +17,43 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   Alert,
-  Box,
+  AlertActionCloseButton,
   Button,
   Card,
-  CardContent,
-  Chip,
-  CircularProgress,
+  CardBody,
+  DescriptionList,
+  DescriptionListDescription,
+  DescriptionListGroup,
+  DescriptionListTerm,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import DownloadIcon from '@mui/icons-material/Download';
-import UploadIcon from '@mui/icons-material/Upload';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
-import NetworkCheckIcon from '@mui/icons-material/NetworkCheck';
+  Label,
+  Spinner,
+  TextInput,
+  Title,
+} from '@patternfly/react-core';
+import {
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  NetworkIcon,
+  DownloadIcon,
+  UploadIcon,
+} from '@patternfly/react-icons';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '../components/common';
 import { deviceApi, metricsApi, systemApi, grafanaService } from '../services';
 import { formatForDisplay } from '../utils/timeZone';
 
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #73bcf7)',
+  success: 'var(--pf-t--global--icon--color--status--success--default, #5ba352)',
+  danger: 'var(--pf-t--global--icon--color--status--danger--default, #c9190b)',
+  subtle: 'var(--pf-t--global--text--color--subtle, #6a6e73)',
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Export all device configurations (including their metrics config) as a
- * single JSON file that can be re-imported later.
- */
 async function exportConfig() {
   const devices = await deviceApi.getAll();
 
@@ -96,9 +101,6 @@ async function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Import a config file. Returns { imported: number, errors: string[] }.
- */
 async function importConfig(file) {
   const text = await file.text();
   let config;
@@ -147,7 +149,6 @@ async function importConfig(file) {
 // Sub-sections
 // ---------------------------------------------------------------------------
 
-/** Application info + version card */
 function AppInfoSection() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['system', 'info'],
@@ -157,36 +158,38 @@ function AppInfoSection() {
   });
 
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+    <div>
+      <Title headingLevel="h3" size="md" style={{ color: C.primary, marginBottom: 12 }}>
         Application Info
-      </Typography>
-      {isLoading && <CircularProgress size={20} />}
+      </Title>
+      {isLoading && <Spinner size="sm" />}
       {error && (
-        <Typography variant="body2" color="error">
+        <span style={{ fontSize: '0.875rem', color: C.danger }}>
           Failed to load application info
-        </Typography>
+        </span>
       )}
       {data && (
-        <List dense disablePadding>
-          <ListItem disableGutters>
-            <ListItemText primary="Name" secondary={data.name} />
-          </ListItem>
-          <ListItem disableGutters>
-            <ListItemText primary="Version" secondary={data.version} />
-          </ListItem>
+        <DescriptionList isCompact>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Name</DescriptionListTerm>
+            <DescriptionListDescription>{data.name}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Version</DescriptionListTerm>
+            <DescriptionListDescription>{data.version}</DescriptionListDescription>
+          </DescriptionListGroup>
           {data.description && (
-            <ListItem disableGutters>
-              <ListItemText primary="Description" secondary={data.description} />
-            </ListItem>
+            <DescriptionListGroup>
+              <DescriptionListTerm>Description</DescriptionListTerm>
+              <DescriptionListDescription>{data.description}</DescriptionListDescription>
+            </DescriptionListGroup>
           )}
-        </List>
+        </DescriptionList>
       )}
-    </Box>
+    </div>
   );
 }
 
-/** Health status card */
 function HealthSection() {
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['system', 'health'],
@@ -199,57 +202,62 @@ function HealthSection() {
   const checks = data?.checks ?? [];
 
   return (
-    <Box>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-        <Typography variant="h6" sx={{ color: 'primary.main' }}>
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <Title headingLevel="h3" size="md" style={{ color: C.primary }}>
           Health Status
-        </Typography>
+        </Title>
         {overall === 'UP' && (
-          <Chip icon={<CheckCircleOutlineIcon />} label="UP" color="success" size="small" />
+          <Label color="green" icon={<CheckCircleIcon />}>UP</Label>
         )}
         {overall === 'DOWN' && (
-          <Chip icon={<ErrorOutlineIcon />} label="DOWN" color="error" size="small" />
+          <Label color="red" icon={<ExclamationCircleIcon />}>DOWN</Label>
         )}
         <Button
-          size="small"
-          variant="outlined"
+          size="sm"
+          variant="secondary"
           onClick={() => refetch()}
-          disabled={isFetching}
-          startIcon={isFetching ? <CircularProgress size={14} /> : null}
+          isDisabled={isFetching}
+          icon={isFetching ? <Spinner size="sm" /> : null}
         >
           {isFetching ? 'Checking…' : 'Refresh'}
         </Button>
-      </Stack>
+      </div>
 
-      {isLoading && <CircularProgress size={20} />}
+      {isLoading && <Spinner size="sm" />}
       {error && (
-        <Typography variant="body2" color="error">
+        <span style={{ fontSize: '0.875rem', color: C.danger }}>
           Failed to reach health endpoint
-        </Typography>
+        </span>
       )}
       {checks.length > 0 && (
-        <List dense disablePadding>
+        <DescriptionList isCompact>
           {checks.map((check) => (
-            <ListItem key={check.name} disableGutters>
-              <ListItemText
-                primary={check.name}
-                secondary={check.data ? JSON.stringify(check.data) : undefined}
-              />
-              <Chip
-                label={check.status}
-                color={check.status === 'UP' ? 'success' : 'error'}
-                size="small"
-                variant="outlined"
-              />
-            </ListItem>
+            <DescriptionListGroup key={check.name}>
+              <DescriptionListTerm>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {check.name}
+                  <Label
+                    color={check.status === 'UP' ? 'green' : 'red'}
+                    variant="outline"
+                  >
+                    {check.status}
+                  </Label>
+                </div>
+              </DescriptionListTerm>
+              {check.data && (
+                <DescriptionListDescription>
+                  {JSON.stringify(check.data)}
+                </DescriptionListDescription>
+              )}
+            </DescriptionListGroup>
           ))}
-        </List>
+        </DescriptionList>
       )}
-    </Box>
+    </div>
   );
 }
 
-/** Modbus connection pool stats */
 function ConnectionPoolSection() {
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['system', 'poolStatus'],
@@ -259,102 +267,87 @@ function ConnectionPoolSection() {
   });
 
   const stateColor = {
-    CONNECTED: 'success',
-    FAILED: 'error',
-    CONNECTING: 'warning',
-    DISCONNECTED: 'default',
+    CONNECTED: 'green',
+    FAILED: 'red',
+    CONNECTING: 'orange',
+    DISCONNECTED: 'grey',
   };
 
   return (
-    <Box>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-        <Typography variant="h6" sx={{ color: 'primary.main' }}>
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <Title headingLevel="h3" size="md" style={{ color: C.primary }}>
           Connection Pool
-        </Typography>
+        </Title>
         {data && (
-          <Chip
-            icon={<NetworkCheckIcon />}
-            label={data.connectionState}
-            color={stateColor[data.connectionState] || 'default'}
-            size="small"
-          />
+          <Label
+            color={stateColor[data.connectionState] || 'grey'}
+            icon={<NetworkIcon />}
+          >
+            {data.connectionState}
+          </Label>
         )}
         <Button
-          size="small"
-          variant="outlined"
+          size="sm"
+          variant="secondary"
           onClick={() => refetch()}
-          disabled={isFetching}
-          startIcon={isFetching ? <CircularProgress size={14} /> : null}
+          isDisabled={isFetching}
+          icon={isFetching ? <Spinner size="sm" /> : null}
         >
           {isFetching ? 'Refreshing…' : 'Refresh'}
         </Button>
-      </Stack>
+      </div>
 
-      {isLoading && <CircularProgress size={20} />}
+      {isLoading && <Spinner size="sm" />}
       {error && (
-        <Typography variant="body2" color="error">
+        <span style={{ fontSize: '0.875rem', color: C.danger }}>
           Failed to load pool status
-        </Typography>
+        </span>
       )}
       {data && (
-        <List dense disablePadding>
-          <ListItem disableGutters>
-            <ListItemText
-              primary="Active Connections"
-              secondary={data.activeConnections}
-            />
-          </ListItem>
-          <ListItem disableGutters>
-            <ListItemText
-              primary="Pending Requests"
-              secondary={data.pendingRequests}
-            />
-          </ListItem>
-          <ListItem disableGutters>
-            <ListItemText
-              primary="Total Requests"
-              secondary={data.totalRequests.toLocaleString()}
-            />
-          </ListItem>
-          <ListItem disableGutters>
-            <ListItemText
-              primary="Failed Requests"
-              secondary={data.failedRequests.toLocaleString()}
-            />
-          </ListItem>
-          <ListItem disableGutters>
-            <ListItemText
-              primary="Last Successful Request"
-              secondary={data.lastSuccessTime
-                  ? formatForDisplay(data.lastSuccessTime)
-                  : 'Never'}
-            />
-          </ListItem>
-          <ListItem disableGutters>
-            <ListItemText
-              primary="Active Scraping Timers"
-              secondary={data.activeScrapingTimers}
-            />
-          </ListItem>
-          <ListItem disableGutters>
-            <ListItemText
-              primary="Pool Healthy"
-              secondary={data.healthy ? 'Yes' : 'No'}
-            />
-          </ListItem>
-        </List>
+        <DescriptionList isCompact columnModifier={{ default: '2Col' }}>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Active Connections</DescriptionListTerm>
+            <DescriptionListDescription>{data.activeConnections}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Pending Requests</DescriptionListTerm>
+            <DescriptionListDescription>{data.pendingRequests}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Total Requests</DescriptionListTerm>
+            <DescriptionListDescription>{data.totalRequests.toLocaleString()}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Failed Requests</DescriptionListTerm>
+            <DescriptionListDescription>{data.failedRequests.toLocaleString()}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Last Successful Request</DescriptionListTerm>
+            <DescriptionListDescription>
+              {data.lastSuccessTime ? formatForDisplay(data.lastSuccessTime) : 'Never'}
+            </DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Active Scraping Timers</DescriptionListTerm>
+            <DescriptionListDescription>{data.activeScrapingTimers}</DescriptionListDescription>
+          </DescriptionListGroup>
+          <DescriptionListGroup>
+            <DescriptionListTerm>Pool Healthy</DescriptionListTerm>
+            <DescriptionListDescription>{data.healthy ? 'Yes' : 'No'}</DescriptionListDescription>
+          </DescriptionListGroup>
+        </DescriptionList>
       )}
-    </Box>
+    </div>
   );
 }
 
-/** Config export / import section */
 function ExportImportSection() {
   const fileRef = useRef(null);
   const [exporting, setExporting] = useState(false);
-  const [exportResult, setExportResult] = useState(null); // null | 'ok' | 'error'
+  const [exportResult, setExportResult] = useState(null);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState(null); // null | { imported, errors } | 'error'
+  const [importResult, setImportResult] = useState(null);
   const [importError, setImportError] = useState('');
 
   const handleExport = useCallback(async () => {
@@ -363,7 +356,7 @@ function ExportImportSection() {
     try {
       await exportConfig();
       setExportResult('ok');
-    } catch (err) {
+    } catch {
       setExportResult('error');
     } finally {
       setExporting(false);
@@ -390,30 +383,30 @@ function ExportImportSection() {
   }, []);
 
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+    <div>
+      <Title headingLevel="h3" size="md" style={{ color: C.primary, marginBottom: 8 }}>
         Configuration Export / Import
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      </Title>
+      <p style={{ fontSize: '0.875rem', color: C.subtle, marginBottom: 16 }}>
         Export all device configurations (including metrics settings) to a JSON file for backup or
         migration. Import to restore devices on a fresh installation.
-      </Typography>
+      </p>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <Button
-          variant="outlined"
-          startIcon={exporting ? <CircularProgress size={16} /> : <DownloadIcon />}
+          variant="secondary"
+          icon={exporting ? <Spinner size="sm" /> : <DownloadIcon />}
           onClick={handleExport}
-          disabled={exporting}
+          isDisabled={exporting}
         >
           {exporting ? 'Exporting…' : 'Export Config'}
         </Button>
 
         <Button
-          variant="outlined"
-          startIcon={importing ? <CircularProgress size={16} /> : <UploadIcon />}
+          variant="secondary"
+          icon={importing ? <Spinner size="sm" /> : <UploadIcon />}
           onClick={() => fileRef.current?.click()}
-          disabled={importing}
+          isDisabled={importing}
         >
           {importing ? 'Importing…' : 'Import Config'}
         </Button>
@@ -424,51 +417,63 @@ function ExportImportSection() {
           style={{ display: 'none' }}
           onChange={handleFileChange}
         />
-      </Stack>
+      </div>
 
       {exportResult === 'ok' && (
-        <Alert severity="success" sx={{ mt: 2 }} onClose={() => setExportResult(null)}>
-          Configuration exported successfully.
-        </Alert>
+        <Alert
+          variant="success"
+          title="Configuration exported successfully."
+          isInline
+          style={{ marginTop: 16 }}
+          actionClose={<AlertActionCloseButton onClose={() => setExportResult(null)} />}
+        />
       )}
       {exportResult === 'error' && (
-        <Alert severity="error" sx={{ mt: 2 }} onClose={() => setExportResult(null)}>
-          Export failed. Check the console for details.
-        </Alert>
+        <Alert
+          variant="danger"
+          title="Export failed. Check the console for details."
+          isInline
+          style={{ marginTop: 16 }}
+          actionClose={<AlertActionCloseButton onClose={() => setExportResult(null)} />}
+        />
       )}
 
       {importResult && importResult !== 'error' && (
         <Alert
-          severity={importResult.errors.length === 0 ? 'success' : 'warning'}
-          sx={{ mt: 2 }}
-          onClose={() => setImportResult(null)}
+          variant={importResult.errors.length === 0 ? 'success' : 'warning'}
+          title={`Imported ${importResult.imported} device(s).`}
+          isInline
+          style={{ marginTop: 16 }}
+          actionClose={<AlertActionCloseButton onClose={() => setImportResult(null)} />}
         >
-          Imported {importResult.imported} device(s).
           {importResult.errors.length > 0 && (
-            <Box component="ul" sx={{ mt: 0.5, pl: 2, mb: 0 }}>
+            <ul style={{ marginTop: 4, paddingLeft: 16, marginBottom: 0 }}>
               {importResult.errors.map((e, i) => (
                 <li key={i}>{e}</li>
               ))}
-            </Box>
+            </ul>
           )}
         </Alert>
       )}
       {importResult === 'error' && (
-        <Alert severity="error" sx={{ mt: 2 }} onClose={() => setImportResult(null)}>
-          Import failed: {importError}
-        </Alert>
+        <Alert
+          variant="danger"
+          title={`Import failed: ${importError}`}
+          isInline
+          style={{ marginTop: 16 }}
+          actionClose={<AlertActionCloseButton onClose={() => setImportResult(null)} />}
+        />
       )}
-    </Box>
+    </div>
   );
 }
 
-/** Grafana URL configuration */
 function GrafanaSettingsSection() {
   const [url, setUrl] = useState(() => grafanaService.getBaseUrl());
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(url);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null); // null | 'ok' | 'error'
+  const [testResult, setTestResult] = useState(null);
 
   const handleSave = () => {
     grafanaService.setBaseUrl(draft);
@@ -486,93 +491,68 @@ function GrafanaSettingsSection() {
   };
 
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+    <div>
+      <Title headingLevel="h3" size="md" style={{ color: C.primary, marginBottom: 8 }}>
         Grafana Integration
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      </Title>
+      <p style={{ fontSize: '0.875rem', color: C.subtle, marginBottom: 16 }}>
         Configure the Grafana server URL used to embed dashboard panels. The URL is stored in
         browser localStorage.
-      </Typography>
+      </p>
 
       {editing ? (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="flex-start">
-          <TextField
-            size="small"
-            fullWidth
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
+          <TextInput
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(_event, value) => setDraft(value)}
             placeholder="http://localhost:3000"
-            inputProps={{ style: { fontFamily: 'monospace' } }}
+            style={{ fontFamily: 'monospace', flex: 1, minWidth: 200 }}
+            aria-label="Grafana URL"
           />
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" size="small" onClick={handleSave}>
-              Save
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                setDraft(url);
-                setEditing(false);
-              }}
-            >
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button variant="primary" size="sm" onClick={handleSave}>Save</Button>
+            <Button variant="secondary" size="sm" onClick={() => { setDraft(url); setEditing(false); }}>
               Cancel
             </Button>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       ) : (
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-          <Typography
-            variant="body2"
-            sx={{ fontFamily: 'monospace', color: 'text.primary', flex: 1 }}
-          >
-            {url}
-          </Typography>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
+          <span style={{ fontFamily: 'monospace', fontSize: '0.875rem', flex: 1 }}>{url}</span>
 
           {testResult === 'ok' && (
-            <Chip
-              icon={<CheckCircleOutlineIcon />}
-              label="Reachable"
-              color="success"
-              size="small"
-              variant="outlined"
-            />
+            <Label color="green" icon={<CheckCircleIcon />} variant="outline">Reachable</Label>
           )}
           {testResult === 'error' && (
-            <Chip
-              icon={<ErrorOutlineIcon />}
-              label="Unreachable"
-              color="error"
-              size="small"
-              variant="outlined"
-            />
+            <Label color="red" icon={<ExclamationCircleIcon />} variant="outline">Unreachable</Label>
           )}
 
-          <Stack direction="row" spacing={1}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <Button
-              size="small"
-              variant="outlined"
+              size="sm"
+              variant="secondary"
               onClick={handleTest}
-              disabled={testing}
-              startIcon={testing ? <CircularProgress size={14} /> : null}
+              isDisabled={testing}
+              icon={testing ? <Spinner size="sm" /> : null}
             >
               {testing ? 'Testing…' : 'Test'}
             </Button>
-            <Button size="small" onClick={() => setEditing(true)}>
+            <Button size="sm" variant="link" onClick={() => setEditing(true)}>
               Change
             </Button>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       )}
 
       {testResult === 'error' && !editing && (
-        <Alert severity="warning" sx={{ mt: 2 }}>
-          Cannot reach Grafana at <strong>{url}</strong>. Ensure it is running and anonymous access
-          is enabled.
-        </Alert>
+        <Alert
+          variant="warning"
+          title={`Cannot reach Grafana at ${url}. Ensure it is running and anonymous access is enabled.`}
+          isInline
+          style={{ marginTop: 16 }}
+        />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -582,53 +562,50 @@ function GrafanaSettingsSection() {
 
 function SettingsPage() {
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Settings"
         subtitle="Application configuration and system status"
       />
 
-      <Stack spacing={3}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {/* App info + Health side by side on larger screens */}
         <Card>
-          <CardContent>
-            <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              spacing={3}
-              divider={<Divider orientation="vertical" flexItem />}
-            >
-              <Box sx={{ flex: 1 }}>
+          <CardBody>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
                 <AppInfoSection />
-              </Box>
-              <Box sx={{ flex: 1 }}>
+              </div>
+              <Divider
+                orientation={{ default: 'vertical' }}
+                style={{ alignSelf: 'stretch' }}
+              />
+              <div style={{ flex: 1, minWidth: 200 }}>
                 <HealthSection />
-              </Box>
-            </Stack>
-          </CardContent>
+              </div>
+            </div>
+          </CardBody>
         </Card>
 
-        {/* Connection Pool Stats */}
         <Card>
-          <CardContent>
+          <CardBody>
             <ConnectionPoolSection />
-          </CardContent>
+          </CardBody>
         </Card>
 
-        {/* Export / Import */}
         <Card>
-          <CardContent>
+          <CardBody>
             <ExportImportSection />
-          </CardContent>
+          </CardBody>
         </Card>
 
-        {/* Grafana */}
         <Card>
-          <CardContent>
+          <CardBody>
             <GrafanaSettingsSection />
-          </CardContent>
+          </CardBody>
         </Card>
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }
 

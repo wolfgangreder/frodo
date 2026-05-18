@@ -16,25 +16,21 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  Box,
   Card,
-  CardContent,
-  Chip,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
+  CardBody,
+  FormGroup,
+  FormSelect,
+  FormSelectOption,
+  Label,
+  TextInput,
+} from '@patternfly/react-core';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { PageHeader, LoadingSpinner, ErrorDisplay } from '../components/common';
 import { useMetricsDocs } from '../hooks';
+
+const C = {
+  subtle: 'var(--pf-t--global--text--color--subtle, #6a6e73)',
+};
 
 /**
  * Category labels for display
@@ -53,31 +49,29 @@ const CATEGORY_LABELS = {
 };
 
 /**
- * Color mapping for category chips
+ * Color mapping for category labels (MUI color → PF Label color)
  */
 const CATEGORY_COLORS = {
-  power: 'primary',
-  current: 'info',
-  voltage: 'warning',
-  energy: 'success',
-  temperature: 'error',
-  status: 'default',
-  rating: 'secondary',
-  setting: 'secondary',
-  control: 'warning',
-  battery: 'info',
+  power: 'blue',      // primary → blue
+  current: 'cyan',    // info → cyan
+  voltage: 'orange',  // warning → orange
+  energy: 'green',    // success → green
+  temperature: 'red', // error → red
+  status: 'grey',     // default → grey
+  rating: 'purple',   // secondary → purple
+  setting: 'purple',  // secondary → purple
+  control: 'orange',  // warning → orange
+  battery: 'cyan',    // info → cyan
 };
 
 /**
- * Metrics Documentation page - displays semantic metric definitions,
- * descriptions, units, and SunSpec field mappings.
+ * Metrics Documentation page
  */
 function MetricsDocsPage() {
   const { data, isLoading, error } = useMetricsDocs();
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [searchText, setSearchText] = useState('');
 
-  // Extract unique categories
   const categories = useMemo(() => {
     if (!data?.metrics) return [];
     const cats = [...new Set(data.metrics.map((m) => m.category))];
@@ -85,7 +79,6 @@ function MetricsDocsPage() {
     return cats;
   }, [data]);
 
-  // Filter metrics
   const filteredMetrics = useMemo(() => {
     if (!data?.metrics) return [];
     let result = data.metrics;
@@ -109,139 +102,135 @@ function MetricsDocsPage() {
 
   if (isLoading) {
     return (
-      <Box>
+      <div>
         <PageHeader
           title="Metrics Documentation"
           subtitle="Semantic metric definitions and SunSpec field mappings"
         />
         <LoadingSpinner message="Loading metrics documentation..." />
-      </Box>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box>
+      <div>
         <PageHeader
           title="Metrics Documentation"
           subtitle="Semantic metric definitions and SunSpec field mappings"
         />
         <ErrorDisplay error={error} message="Failed to load metrics documentation" />
-      </Box>
+      </div>
     );
   }
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Metrics Documentation"
         subtitle={`${data?.metrics?.length || 0} semantic metrics with ISO base unit naming`}
       />
 
       {/* Filters */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-          <TextField
-            size="small"
-            label="Search metrics"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            sx={{ minWidth: 250 }}
-          />
-          <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>Category</InputLabel>
-            <Select
-              value={categoryFilter}
-              label="Category"
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <MenuItem value="all">All categories</MenuItem>
-              {categories.map((cat) => (
-                <MenuItem key={cat} value={cat}>
-                  {CATEGORY_LABELS[cat] || cat}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto' }}>
-            {filteredMetrics.length} metric{filteredMetrics.length !== 1 ? 's' : ''}
-          </Typography>
-        </CardContent>
+      <Card style={{ marginBottom: 24 }}>
+        <CardBody>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <FormGroup label="Search" fieldId="metrics-search" style={{ minWidth: 250 }}>
+              <TextInput
+                id="metrics-search"
+                value={searchText}
+                onChange={(_event, value) => setSearchText(value)}
+                placeholder="Search metrics..."
+                aria-label="Search metrics"
+              />
+            </FormGroup>
+            <FormGroup label="Category" fieldId="metrics-category" style={{ minWidth: 180 }}>
+              <FormSelect
+                id="metrics-category"
+                value={categoryFilter}
+                onChange={(_event, value) => setCategoryFilter(value)}
+                aria-label="Filter by category"
+              >
+                <FormSelectOption value="all" label="All categories" />
+                {categories.map((cat) => (
+                  <FormSelectOption
+                    key={cat}
+                    value={cat}
+                    label={CATEGORY_LABELS[cat] || cat}
+                  />
+                ))}
+              </FormSelect>
+            </FormGroup>
+            <span style={{ fontSize: '0.875rem', color: C.subtle, marginLeft: 'auto', alignSelf: 'center' }}>
+              {filteredMetrics.length} metric{filteredMetrics.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </CardBody>
       </Card>
 
       {/* Metrics Table */}
       <Card>
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Metric Name</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Unit</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Fields / Tags</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredMetrics.map((metric) => (
-                <TableRow key={metric.metricName} hover>
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace', fontWeight: 500, whiteSpace: 'nowrap' }}
-                    >
-                      {metric.metricName}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{metric.description}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    {metric.baseUnit ? (
-                      <Chip label={metric.baseUnit} size="small" variant="outlined" />
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        unitless
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={CATEGORY_LABELS[metric.category] || metric.category}
-                      size="small"
-                      color={CATEGORY_COLORS[metric.category] || 'default'}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                      {metric.fields.map((f, idx) => (
-                        <Box key={idx} sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-                            {f.field}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            (model {f.modelIds.join(', ')})
-                          </Typography>
-                          {Object.entries(f.tags || {}).map(([k, v]) => (
-                            <Chip
-                              key={k}
-                              label={`${k}=${v}`}
-                              size="small"
-                              variant="outlined"
-                              sx={{ height: 20, fontSize: '0.7rem' }}
-                            />
-                          ))}
-                        </Box>
-                      ))}
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Table aria-label="Metrics documentation" variant="compact">
+          <Thead>
+            <Tr>
+              <Th>Metric Name</Th>
+              <Th>Description</Th>
+              <Th>Unit</Th>
+              <Th>Category</Th>
+              <Th>Fields / Tags</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {filteredMetrics.map((metric) => (
+              <Tr key={metric.metricName}>
+                <Td dataLabel="Metric Name">
+                  <span style={{ fontFamily: 'monospace', fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                    {metric.metricName}
+                  </span>
+                </Td>
+                <Td dataLabel="Description">
+                  <span style={{ fontSize: '0.875rem' }}>{metric.description}</span>
+                </Td>
+                <Td dataLabel="Unit">
+                  {metric.baseUnit ? (
+                    <Label color="grey" variant="outline">{metric.baseUnit}</Label>
+                  ) : (
+                    <span style={{ fontSize: '0.875rem', color: C.subtle }}>unitless</span>
+                  )}
+                </Td>
+                <Td dataLabel="Category">
+                  <Label color={CATEGORY_COLORS[metric.category] || 'grey'}>
+                    {CATEGORY_LABELS[metric.category] || metric.category}
+                  </Label>
+                </Td>
+                <Td dataLabel="Fields / Tags">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {metric.fields.map((f, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{f.field}</span>
+                        <span style={{ fontSize: '0.75rem', color: C.subtle }}>
+                          (model {f.modelIds.join(', ')})
+                        </span>
+                        {Object.entries(f.tags || {}).map(([k, v]) => (
+                          <Label
+                            key={k}
+                            color="grey"
+                            variant="outline"
+                            style={{ height: 20, fontSize: '0.7rem' }}
+                          >
+                            {k}={v}
+                          </Label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
       </Card>
-    </Box>
+    </div>
   );
 }
 

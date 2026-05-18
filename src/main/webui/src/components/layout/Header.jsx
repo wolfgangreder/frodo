@@ -16,83 +16,40 @@
 
 import React from 'react';
 import {
-  AppBar,
-  Toolbar,
-  IconButton,
-  Typography,
-  Box,
-  useTheme,
-  useMediaQuery,
-} from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
+  Masthead,
+  MastheadMain,
+  MastheadToggle,
+  MastheadBrand,
+  MastheadContent,
+  Button,
+} from '@patternfly/react-core';
+import { BarsIcon } from '@patternfly/react-icons';
 import { useUiStore } from '../../stores';
 
-const DRAWER_WIDTH = 240;
-
 /**
- * Header component with responsive behavior
- * - Shows hamburger menu on mobile (toggles mobile drawer)
- * - Shows hamburger menu on desktop (toggles sidebar collapse)
+ * Header component — PatternFly Masthead with sidebar toggle
  */
 function Header() {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { sidebarOpen, toggleSidebar, toggleMobileSidebar } = useUiStore();
-
-  const handleMenuClick = () => {
-    if (isMobile) {
-      toggleMobileSidebar();
-    } else {
-      toggleSidebar();
-    }
-  };
+  const { toggleSidebar } = useUiStore();
 
   return (
-    <AppBar
-      position="fixed"
-      sx={{
-        width: {
-          md: sidebarOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%',
-        },
-        ml: {
-          md: sidebarOpen ? `${DRAWER_WIDTH}px` : 0,
-        },
-        transition: theme.transitions.create(['margin', 'width'], {
-          easing: theme.transitions.easing.sharp,
-          duration: theme.transitions.duration.leavingScreen,
-        }),
-      }}
-    >
-      <Toolbar>
-        <IconButton
-          color="inherit"
-          aria-label="toggle sidebar"
-          edge="start"
-          onClick={handleMenuClick}
-          sx={{ mr: 2 }}
+    <Masthead>
+      <MastheadToggle>
+        <Button
+          variant="plain"
+          onClick={toggleSidebar}
+          aria-label="Toggle navigation"
         >
-          <MenuIcon />
-        </IconButton>
-
-        <Typography
-          variant="h6"
-          noWrap
-          component="div"
-          sx={{
-            flexGrow: 1,
-            color: 'primary.main',
-            fontWeight: 600,
-          }}
-        >
-          Frodo
-        </Typography>
-
-        {/* Future: Add header actions here (notifications, user menu, etc.) */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {/* Placeholder for future header actions */}
-        </Box>
-      </Toolbar>
-    </AppBar>
+          <BarsIcon />
+        </Button>
+      </MastheadToggle>
+      <MastheadMain>
+        <MastheadBrand>Frodo</MastheadBrand>
+      </MastheadMain>
+      <MastheadContent>
+        {/* Future: header actions (notifications, user menu, etc.) */}
+      </MastheadContent>
+    </Masthead>
   );
 }
 

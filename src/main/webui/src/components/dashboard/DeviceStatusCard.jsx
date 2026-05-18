@@ -17,17 +17,26 @@
 import React from 'react';
 import {
   Card,
-  CardContent,
-  Box,
-  Typography,
-  Chip,
+  CardBody,
+  Label,
   Skeleton,
-  Stack,
+  Flex,
+  FlexItem,
   Divider,
-} from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import WifiOffIcon from '@mui/icons-material/WifiOff';
-import HelpIcon from '@mui/icons-material/Help';
+} from '@patternfly/react-core';
+import {
+  CheckCircleIcon,
+  QuestionCircleIcon,
+} from '@patternfly/react-icons';
+
+// PF v6 design token CSS variable references
+const C = {
+  primary:   'var(--pf-t--global--color--brand--default, #0066cc)',
+  success:   'var(--pf-t--global--color--status--success--default, #3e8635)',
+  warning:   'var(--pf-t--global--color--status--warning--default, #f0ab00)',
+  subtle:    'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  disabled:  'var(--pf-t--global--text-color--disabled, #b8bbbe)',
+};
 
 /**
  * Formats a relative time string from an ISO timestamp or Instant string
@@ -46,18 +55,6 @@ function formatTimeAgo(timestamp) {
 
 /**
  * DeviceStatusCard - shows device identity and connection status.
- *
- * Always shows device entity data (name, connection) from the device prop.
- * SunSpec-derived data (manufacturer, model, serial, firmware) is layered on
- * top when the device is online.  When offline, a clear "Offline" badge and
- * message are shown without hiding the entity info.
- *
- * @param {Object} props
- * @param {Object} props.device       - Device entity (name, host, port, unitId, enabled)
- * @param {Object} props.commonData   - SunSpec Common model response (fields: Mn, Md, SN, Vr)
- * @param {Object} props.inverterData - Inverter model response (for readTime)
- * @param {boolean} props.isLoading   - Whether data is still loading
- * @param {boolean} props.isError     - Device unreachable (Modbus/SunSpec discovery failed)
  */
 function DeviceStatusCard({ device, commonData, inverterData, isLoading, isError }) {
   const fields = commonData?.fields || {};
@@ -66,100 +63,68 @@ function DeviceStatusCard({ device, commonData, inverterData, isLoading, isError
   const serial = fields.SN || null;
   const firmware = fields.Vr || null;
   const lastRead = inverterData?.readTime || commonData?.readTime || null;
-
   const isOnline = !!inverterData && !isError;
 
-  const statusChip = isLoading ? (
-    <Chip label="Connecting…" color="default" size="small" variant="outlined" />
-  ) : isError ? (
-    <Chip
-      icon={<WifiOffIcon sx={{ fontSize: 16 }} />}
-      label="Offline"
-      color="warning"
-      size="small"
-      variant="outlined"
-    />
-  ) : isOnline ? (
-    <Chip
-      icon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
-      label="Online"
-      color="success"
-      size="small"
-      variant="outlined"
-    />
-  ) : (
-    <Chip
-      icon={<HelpIcon sx={{ fontSize: 16 }} />}
-      label="Unknown"
-      color="default"
-      size="small"
-      variant="outlined"
-    />
-  );
+  const statusLabel = isLoading
+    ? <Label variant="outline" color="grey">Connecting…</Label>
+    : isError
+      ? <Label variant="outline" color="orange">Offline</Label>
+      : isOnline
+        ? <Label variant="outline" color="green" icon={<CheckCircleIcon />}>Online</Label>
+        : <Label variant="outline" color="grey" icon={<QuestionCircleIcon />}>Unknown</Label>;
 
   return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Typography variant="h6" sx={{ color: 'primary.main' }}>
-            Device Status
-          </Typography>
-          {statusChip}
-        </Stack>
+    <Card style={{ height: '100%' }}>
+      <CardBody>
+        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} style={{ marginBottom: '1rem' }}>
+          <FlexItem>
+            <span style={{ fontWeight: 600, color: C.primary }}>Device Status</span>
+          </FlexItem>
+          <FlexItem>{statusLabel}</FlexItem>
+        </Flex>
 
         {isLoading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} variant="text" width="100%" height={24} />
-            ))}
-          </Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[...Array(4)].map((_, i) => <Skeleton key={i} height="1.5rem" />)}
+          </div>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            {/* Device entity info — always visible */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
             <InfoRow label="Name" value={device?.name} />
-            <InfoRow
-              label="Connection"
-              value={`${device?.host}:${device?.port} unit ${device?.unitId}`}
-            />
+            <InfoRow label="Connection" value={`${device?.host}:${device?.port} unit ${device?.unitId}`} />
 
             {isError ? (
               <>
-                <Divider sx={{ my: 0.5 }} />
-                <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                <Divider style={{ margin: '0.25rem 0' }} />
+                <span style={{ fontSize: '0.75rem', color: C.subtle, fontStyle: 'italic' }}>
                   Modbus unreachable — SunSpec data unavailable
-                </Typography>
+                </span>
               </>
             ) : (
               <>
-                {/* SunSpec identification data — shown when online */}
                 {(manufacturer || model || serial || firmware) && (
-                  <Divider sx={{ my: 0.5 }} />
+                  <Divider style={{ margin: '0.25rem 0' }} />
                 )}
                 {manufacturer && <InfoRow label="Manufacturer" value={manufacturer} />}
                 {model && <InfoRow label="Model" value={model} />}
                 {serial && <InfoRow label="Serial" value={serial} />}
                 {firmware && <InfoRow label="Firmware" value={firmware} />}
-                <Divider sx={{ my: 0.5 }} />
+                <Divider style={{ margin: '0.25rem 0' }} />
                 <InfoRow label="Last Read" value={formatTimeAgo(lastRead)} />
               </>
             )}
-          </Box>
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
 
 function InfoRow({ label, value }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 500, textAlign: 'right', maxWidth: '60%' }}>
-        {value ?? '-'}
-      </Typography>
-    </Box>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem' }}>
+      <span style={{ fontSize: '0.875rem', color: 'var(--pf-t--global--text-color--subtle, #6a6e73)' }}>{label}</span>
+      <span style={{ fontSize: '0.875rem', fontWeight: 500, textAlign: 'right', maxWidth: '60%' }}>{value ?? '-'}</span>
+    </div>
   );
 }
 

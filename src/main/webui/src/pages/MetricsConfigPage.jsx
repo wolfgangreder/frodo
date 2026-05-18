@@ -17,20 +17,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Box,
   Button,
   Card,
-  CardContent,
+  CardBody,
   Divider,
-  FormControlLabel,
-  MenuItem,
-  Stack,
+  FormGroup,
+  FormSelect,
+  FormSelectOption,
   Switch,
-  TextField,
-  Typography,
-} from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import SaveIcon from '@mui/icons-material/Save';
+  Title,
+} from '@patternfly/react-core';
+import { ArrowLeftIcon, SaveIcon } from '@patternfly/react-icons';
 import { PageHeader, LoadingSpinner, ErrorDisplay } from '../components/common';
 import {
   ParameterSelector,
@@ -45,6 +42,10 @@ import {
   useDevice,
 } from '../hooks';
 
+const C = {
+  subtle: 'var(--pf-t--global--text--color--subtle, #6a6e73)',
+};
+
 /**
  * MetricsConfigPage - configure per-device metrics scraping
  */
@@ -53,7 +54,6 @@ function MetricsConfigPage() {
   const navigate = useNavigate();
   const parsedDeviceId = deviceId ? Number(deviceId) : null;
 
-  // Queries
   const { data: device, isLoading: isDeviceLoading } = useDevice(parsedDeviceId);
   const { data: config, isLoading: isConfigLoading } = useMetricsConfig(parsedDeviceId);
   const {
@@ -64,10 +64,8 @@ function MetricsConfigPage() {
   } = useAvailableParameters(parsedDeviceId);
   const { data: status, isLoading: isStatusLoading } = useMetricsStatus(parsedDeviceId);
 
-  // Mutation
   const updateConfig = useUpdateMetricsConfig();
 
-  // Form state
   const [enabled, setEnabled] = useState(false);
   const [scrapeIntervalSeconds, setScrapeIntervalSeconds] = useState(30);
   const [storeToDatabase, setStoreToDatabase] = useState(true);
@@ -76,7 +74,6 @@ function MetricsConfigPage() {
   const [parameterModes, setParameterModes] = useState({});
   const [isDirty, setIsDirty] = useState(false);
 
-  // Initialize form from config
   useEffect(() => {
     if (config) {
       setEnabled(config.enabled);
@@ -84,7 +81,6 @@ function MetricsConfigPage() {
       setStoreToDatabase(config.storeToDatabase ?? true);
       setRetentionDays(config.retentionDays ?? 365);
 
-      // Build selected parameter keys and mode map from config
       const enabledParams = (config.parameters || []).filter((p) => p.enabled);
       const keys = enabledParams.map((p) => `${p.sunspecModelId}_${p.fieldName}`);
       setSelectedParameters(keys);
@@ -98,8 +94,7 @@ function MetricsConfigPage() {
     }
   }, [config]);
 
-  // Track changes
-  const handleEnabledChange = useCallback((_, checked) => {
+  const handleEnabledChange = useCallback((_event, checked) => {
     setEnabled(checked);
     setIsDirty(true);
   }, []);
@@ -109,13 +104,13 @@ function MetricsConfigPage() {
     setIsDirty(true);
   }, []);
 
-  const handleStoreToDatabaseChange = useCallback((_, checked) => {
+  const handleStoreToDatabaseChange = useCallback((_event, checked) => {
     setStoreToDatabase(checked);
     setIsDirty(true);
   }, []);
 
-  const handleRetentionChange = useCallback((e) => {
-    setRetentionDays(Number(e.target.value));
+  const handleRetentionChange = useCallback((_event, value) => {
+    setRetentionDays(Number(value));
     setIsDirty(true);
   }, []);
 
@@ -129,7 +124,6 @@ function MetricsConfigPage() {
     setIsDirty(true);
   }, []);
 
-  // Build parameters array for API request
   const buildParametersPayload = useCallback(() => {
     return selectedParameters.map((key) => {
       const [modelId, ...fieldParts] = key.split('_');
@@ -144,7 +138,6 @@ function MetricsConfigPage() {
     });
   }, [selectedParameters, parameterModes]);
 
-  // Save handler
   const handleSave = useCallback(async () => {
     try {
       await updateConfig.mutateAsync({
@@ -159,157 +152,136 @@ function MetricsConfigPage() {
       });
       setIsDirty(false);
     } catch (error) {
-      // Error handled by mutation onError
       console.error('Save failed:', error);
     }
   }, [parsedDeviceId, scrapeIntervalSeconds, enabled, storeToDatabase, retentionDays, buildParametersPayload, updateConfig]);
 
-  // Available parameters for the selector
   const availableParametersList = useMemo(() => {
     return availableParams?.parameters || [];
   }, [availableParams]);
 
   const isDiscoveryBased = availableParams?.discoveryBased ?? true;
-
-  // Loading state
   const isLoading = isDeviceLoading || isConfigLoading;
 
   if (isLoading) {
     return (
-      <Box>
-        <PageHeader
-          title="Metrics Configuration"
-          subtitle="Loading..."
-        />
+      <div>
+        <PageHeader title="Metrics Configuration" subtitle="Loading..." />
         <LoadingSpinner message="Loading metrics configuration..." />
-      </Box>
+      </div>
     );
   }
 
   if (!device) {
     return (
-      <Box>
+      <div>
         <PageHeader title="Metrics Configuration" />
         <ErrorDisplay
           title="Device not found"
           message={`Device with ID ${deviceId} was not found.`}
           onRetry={() => navigate('/devices')}
         />
-      </Box>
+      </div>
     );
   }
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Metrics Configuration"
         subtitle={`${device.name} (${device.host}:${device.port} unit ${device.unitId})`}
         actions={
-          <Stack direction="row" spacing={1}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <Button
-              variant="outlined"
-              startIcon={<ArrowBackIcon />}
+              variant="secondary"
+              icon={<ArrowLeftIcon />}
               onClick={() => navigate('/devices')}
             >
               Back
             </Button>
             <Button
-              variant="contained"
-              color="primary"
-              startIcon={<SaveIcon />}
+              variant="primary"
+              icon={<SaveIcon />}
               onClick={handleSave}
-              disabled={!isDirty || updateConfig.isPending}
+              isDisabled={!isDirty || updateConfig.isPending}
             >
               {updateConfig.isPending ? 'Saving...' : 'Save'}
             </Button>
-          </Stack>
+          </div>
         }
       />
 
-      {/* Status Card */}
       <MetricsStatusCard status={status} isLoading={isStatusLoading} />
 
-      {/* Configuration Form */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
+      <Card style={{ marginBottom: 16 }}>
+        <CardBody>
+          <Title headingLevel="h3" size="lg" style={{ marginBottom: 16 }}>
             Scraping Settings
-          </Typography>
+          </Title>
 
-          {/* Enable/Disable Toggle */}
-          <FormControlLabel
-            control={
-              <Switch
-                checked={enabled}
-                onChange={handleEnabledChange}
-                color="primary"
-              />
-            }
-            label={enabled ? 'Scraping enabled' : 'Scraping disabled'}
-            sx={{ mb: 2, display: 'block' }}
+          <Switch
+            id="metrics-enabled"
+            label="Scraping enabled"
+            labelOff="Scraping disabled"
+            isChecked={enabled}
+            onChange={handleEnabledChange}
+            style={{ marginBottom: 16, display: 'block' }}
           />
 
-          {/* Scrape Interval */}
-          <Box sx={{ mb: 3, opacity: enabled ? 1 : 0.5 }}>
+          <div style={{ marginBottom: 24, opacity: enabled ? 1 : 0.5 }}>
             <ScrapingIntervalInput
               value={scrapeIntervalSeconds}
               onChange={handleIntervalChange}
               disabled={!enabled}
             />
-          </Box>
+          </div>
 
-          <Divider sx={{ my: 2 }} />
+          <Divider style={{ marginTop: 16, marginBottom: 16 }} />
 
-          {/* Database Storage Settings */}
-          <Typography variant="h6" gutterBottom>
+          <Title headingLevel="h3" size="lg" style={{ marginBottom: 16 }}>
             Data Storage
-          </Typography>
+          </Title>
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={storeToDatabase}
-                onChange={handleStoreToDatabaseChange}
-                color="primary"
-                disabled={!enabled}
-              />
-            }
+          <Switch
+            id="store-to-database"
             label="Store metrics to database (for historical queries)"
-            sx={{ mb: 2, display: 'block', opacity: enabled ? 1 : 0.5 }}
+            isChecked={storeToDatabase}
+            onChange={handleStoreToDatabaseChange}
+            isDisabled={!enabled}
+            style={{ marginBottom: 16, display: 'block', opacity: enabled ? 1 : 0.5 }}
           />
 
           {storeToDatabase && enabled && (
-            <TextField
-              select
-              label="Data Retention"
-              value={retentionDays}
-              onChange={handleRetentionChange}
-              size="small"
-              sx={{ minWidth: 200, mb: 2 }}
-            >
-              <MenuItem value={30}>30 days</MenuItem>
-              <MenuItem value={90}>90 days</MenuItem>
-              <MenuItem value={180}>180 days</MenuItem>
-              <MenuItem value={365}>1 year</MenuItem>
-              <MenuItem value={730}>2 years</MenuItem>
-            </TextField>
+            <FormGroup label="Data Retention" fieldId="retention-days" style={{ maxWidth: 240, marginBottom: 16 }}>
+              <FormSelect
+                id="retention-days"
+                value={String(retentionDays)}
+                onChange={handleRetentionChange}
+                aria-label="Data retention period"
+              >
+                <FormSelectOption value="30" label="30 days" />
+                <FormSelectOption value="90" label="90 days" />
+                <FormSelectOption value="180" label="180 days" />
+                <FormSelectOption value="365" label="1 year" />
+                <FormSelectOption value="730" label="2 years" />
+              </FormSelect>
+            </FormGroup>
           )}
 
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          <p style={{ color: C.subtle, fontSize: '0.75rem', marginBottom: 4 }}>
             Metrics are always exposed to Prometheus regardless of database storage setting.
-          </Typography>
-        </CardContent>
+          </p>
+        </CardBody>
       </Card>
 
-      {/* Parameter Selection */}
       <Card>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
+        <CardBody>
+          <Title headingLevel="h3" size="lg" style={{ marginBottom: 8 }}>
             Parameters to Collect
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          </Title>
+          <p style={{ color: C.subtle, fontSize: '0.875rem', marginBottom: 16 }}>
             Select which SunSpec fields to scrape from this device. Only numeric fields are available.
-          </Typography>
+          </p>
 
           {isParamsLoading ? (
             <LoadingSpinner message="Discovering SunSpec parameters..." />
@@ -330,9 +302,9 @@ function MetricsConfigPage() {
               onModeChange={handleModeChange}
             />
           )}
-        </CardContent>
+        </CardBody>
       </Card>
-    </Box>
+    </div>
   );
 }
 

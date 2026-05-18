@@ -17,33 +17,36 @@
 import React, { useState, useEffect } from 'react';
 import {
   Card,
-  CardContent,
-  Box,
-  Typography,
+  CardBody,
   Skeleton,
   Alert,
-  Stack,
   Switch,
   Tooltip,
-  Collapse,
-  IconButton,
-  TextField,
   Button,
   Divider,
-  CircularProgress,
-  FormControl,
-  InputLabel,
+  Spinner,
+  TextInput,
+  FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   Select,
-  MenuItem,
-} from '@mui/material';
-import ElectricalServicesIcon from '@mui/icons-material/ElectricalServices';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import BlockIcon from '@mui/icons-material/Block';
-import ScheduleIcon from '@mui/icons-material/Schedule';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import DeleteIcon from '@mui/icons-material/Delete';
+  SelectList,
+  SelectOption,
+  MenuToggle,
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import {
+  PlugIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  BanIcon,
+  ClockIcon,
+  AngleDownIcon,
+  AngleUpIcon,
+  TrashIcon,
+} from '@patternfly/react-icons';
 import {
   useSunSpecControls,
   useSetPowerLimit,
@@ -53,9 +56,23 @@ import {
   useCurrentMarketPrice,
 } from '../../hooks/useSunSpec';
 
-/**
- * Formats a Wh value with appropriate scaling
- */
+// PF v6 design token CSS variable references
+const C = {
+  primary:  'var(--pf-t--global--color--brand--default, #0066cc)',
+  success:  'var(--pf-t--global--color--status--success--default, #3e8635)',
+  warning:  'var(--pf-t--global--color--status--warning--default, #f0ab00)',
+  danger:   'var(--pf-t--global--color--status--danger--default, #c9190b)',
+  info:     'var(--pf-t--global--color--status--info--default, #0066cc)',
+  subtle:   'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  disabled: 'var(--pf-t--global--text-color--disabled, #b8bbbe)',
+};
+
+const STRATEGY_LABELS = {
+  ZERO_EXPORT_DYNAMIC: 'Zero-export dynamic (Solar API)',
+  FIXED_LIMIT:         'Hard block (fixed watt cap)',
+  PRICE_CONTROLLED:    'Price-controlled (aWATTar AT)',
+};
+
 function formatEnergy(value) {
   if (value == null) return '-';
   const num = typeof value === 'number' ? value : parseFloat(value);
@@ -65,9 +82,6 @@ function formatEnergy(value) {
   return `${num.toFixed(0)} Wh`;
 }
 
-/**
- * Determines grid status from connection bits
- */
 function getGridStatus(_pvConn, ecpConn) {
   return ecpConn != null && ecpConn > 0;
 }
@@ -92,13 +106,13 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
   const statusFields = statusData?.fields || {};
   const inverterFields = inverterData?.fields || {};
 
-  const pvConn  = statusFields.PVConn;
-  const ecpConn = statusFields.ECPConn;
+  const pvConn   = statusFields.PVConn;
+  const ecpConn  = statusFields.ECPConn;
   const storConn = statusFields.StorConn;
-  const actWh   = statusFields.ActWh;
-  const actVAh  = statusFields.ActVAh;
+  const actWh    = statusFields.ActWh;
+  const actVAh   = statusFields.ActVAh;
 
-  const acPower    = inverterFields.W != null ? parseFloat(inverterFields.W) : null;
+  const acPower     = inverterFields.W != null ? parseFloat(inverterFields.W) : null;
   const isExporting = acPower != null && acPower > 0;
   const gridConnected = getGridStatus(pvConn, ecpConn);
 
@@ -106,13 +120,13 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
     ? isExporting ? 'Exporting' : 'Connected'
     : 'Disconnected';
   const gridStatusColor = gridConnected
-    ? isExporting ? 'success.main' : 'info.main'
-    : 'error.main';
+    ? isExporting ? C.success : C.info
+    : C.danger;
 
   // ── Model 123 state ──────────────────────────────────────────────────────
-  const controlsQuery = useSunSpecControls(deviceId, hasControls);
-  const controlsFields = controlsQuery.data?.fields || {};
-  const exportBlocked  = hasControls && Number(controlsFields.WMaxLim_Ena) === 1;
+  const controlsQuery   = useSunSpecControls(deviceId, hasControls);
+  const controlsFields  = controlsQuery.data?.fields || {};
+  const exportBlocked   = hasControls && Number(controlsFields.WMaxLim_Ena) === 1;
   const controlsLoading = hasControls && controlsQuery.isLoading;
 
   const setPowerLimitMutation = useSetPowerLimit(deviceId);
@@ -122,11 +136,6 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
     if (exportBlocked) {
       setPowerLimitMutation.mutate({ enable: false });
     } else {
-      // Use the current form strategy (which reflects the saved schedule once loaded,
-      // or the default FIXED_LIMIT for new devices without a schedule).
-      // For FIXED_LIMIT: pass the watt cap so the server converts it to % of WMax
-      //   without needing a Smart Meter.
-      // For ZERO_EXPORT_DYNAMIC: omit limitWatts so the server reads the Smart Meter.
       const opts = { enable: true };
       if (formStrategy === 'FIXED_LIMIT') {
         opts.limitWatts = formLimitWatts || 500;
@@ -137,14 +146,14 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
 
   // ── Schedule section ─────────────────────────────────────────────────────
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [strategyOpen, setStrategyOpen] = useState(false);
 
-  const scheduleQuery      = useExportSchedule(deviceId, hasControls);
+  const scheduleQuery          = useExportSchedule(deviceId, hasControls);
   const setScheduleMutation    = useSetExportSchedule(deviceId);
   const deleteScheduleMutation = useDeleteExportSchedule(deviceId);
 
-  const existingSchedule = scheduleQuery.data; // null = no schedule, object = has schedule
+  const existingSchedule = scheduleQuery.data;
 
-  // Local form state, initialised from server data when available
   const [formEnabled,        setFormEnabled]        = useState(true);
   const [formBlockFrom,      setFormBlockFrom]      = useState('11:00');
   const [formEnableFrom,     setFormEnableFrom]     = useState('15:00');
@@ -152,7 +161,6 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
   const [formLimitWatts,     setFormLimitWatts]     = useState(500);
   const [formToleranceWatts, setFormToleranceWatts] = useState(50);
 
-  // Keep form in sync when server data arrives or the panel is opened
   useEffect(() => {
     if (existingSchedule) {
       setFormEnabled(existingSchedule.enabled);
@@ -189,78 +197,80 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
   const isSaving   = setScheduleMutation.isPending;
   const isDeleting = deleteScheduleMutation.isPending;
 
-  // Current market price — only fetched when a PRICE_CONTROLLED schedule is active
   const isPriceControlled = existingSchedule?.strategy === 'PRICE_CONTROLLED'
     || formStrategy === 'PRICE_CONTROLLED';
   const marketPriceQuery = useCurrentMarketPrice(isPriceControlled && scheduleOpen);
   const currentPrice = marketPriceQuery.data ?? null;
 
-  // Active schedule indicator shown next to the section toggle
-  const scheduleActive = existingSchedule?.enabled;
+  const scheduleActive  = existingSchedule?.enabled;
   const scheduledBlocked = existingSchedule?.currentlyBlocked;
 
   return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
+    <Card style={{ height: '100%' }}>
+      <CardBody>
         {/* Header */}
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <ElectricalServicesIcon
-              sx={{ color: gridConnected ? 'success.main' : 'text.disabled' }}
-            />
-            <Typography variant="h6" sx={{ color: 'primary.main' }}>
-              Grid
-            </Typography>
-          </Stack>
-
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            {exportBlocked && (
-              <Tooltip title="Grid export is currently blocked">
-                <BlockIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-              </Tooltip>
-            )}
-            <Typography variant="caption" sx={{ color: gridStatusColor, fontWeight: 600 }}>
-              {gridStatusLabel}
-            </Typography>
-          </Stack>
-        </Stack>
+        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} style={{ marginBottom: '1rem' }}>
+          <FlexItem>
+            <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <PlugIcon style={{ color: gridConnected ? C.success : C.disabled }} />
+              </FlexItem>
+              <FlexItem>
+                <span style={{ fontWeight: 600, color: C.primary }}>Grid</span>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+          <FlexItem>
+            <Flex gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsCenter' }}>
+              {exportBlocked && (
+                <FlexItem>
+                  <Tooltip content="Grid export is currently blocked">
+                    <BanIcon style={{ fontSize: 16, color: C.warning }} />
+                  </Tooltip>
+                </FlexItem>
+              )}
+              <FlexItem>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: gridStatusColor }}>
+                  {gridStatusLabel}
+                </span>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+        </Flex>
 
         {/* Body */}
         {isLoading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} variant="text" width="100%" height={24} />
-            ))}
-          </Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[...Array(4)].map((_, i) => <Skeleton key={i} height="1.5rem" />)}
+          </div>
         ) : isError ? (
-          <Alert severity="warning" variant="outlined">
-            Unable to read grid status data
-          </Alert>
+          <Alert variant="warning" isInline title="Unable to read grid status data" />
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             {/* Current AC power */}
             {acPower != null && (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  AC Power
-                </Typography>
-                <Stack direction="row" spacing={0.5} alignItems="center">
-                  {isExporting ? (
-                    <ArrowUpwardIcon sx={{ fontSize: 16, color: 'success.main' }} />
-                  ) : (
-                    <ArrowDownwardIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-                  )}
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ fontWeight: 700, fontFamily: 'monospace',
-                      color: isExporting ? 'success.main' : 'warning.main' }}
-                  >
-                    {Math.abs(acPower) >= 1000
-                      ? `${(Math.abs(acPower) / 1000).toFixed(1)} kW`
-                      : `${Math.abs(acPower).toFixed(0)} W`}
-                  </Typography>
-                </Stack>
-              </Box>
+              <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                <FlexItem>
+                  <span style={{ fontSize: '0.875rem', color: C.subtle }}>AC Power</span>
+                </FlexItem>
+                <FlexItem>
+                  <Flex gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsCenter' }}>
+                    <FlexItem>
+                      {isExporting
+                        ? <ArrowUpIcon style={{ fontSize: 16, color: C.success }} />
+                        : <ArrowDownIcon style={{ fontSize: 16, color: C.warning }} />
+                      }
+                    </FlexItem>
+                    <FlexItem>
+                      <span style={{ fontWeight: 700, fontFamily: 'monospace', color: isExporting ? C.success : C.warning }}>
+                        {Math.abs(acPower) >= 1000
+                          ? `${(Math.abs(acPower) / 1000).toFixed(1)} kW`
+                          : `${Math.abs(acPower).toFixed(0)} W`}
+                      </span>
+                    </FlexItem>
+                  </Flex>
+                </FlexItem>
+              </Flex>
             )}
 
             {/* Connection status bits */}
@@ -278,228 +288,272 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
 
             {/* Lifetime energy */}
             {actWh != null && (
-              <Box sx={{ mt: 1 }}>
-                <Typography variant="caption" color="text.secondary"
-                  sx={{ mb: 0.5, display: 'block' }}>
+              <div style={{ marginTop: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', color: C.subtle, display: 'block', marginBottom: '0.25rem' }}>
                   Lifetime Energy
-                </Typography>
+                </span>
                 <MetricRow label="Active Energy" value={formatEnergy(actWh)} />
                 {actVAh != null && (
                   <MetricRow label="Apparent Energy" value={formatEnergy(actVAh)} />
                 )}
-              </Box>
+              </div>
             )}
 
             {/* ── Controls section (Model 123) ─────────────────────────── */}
             {hasControls && (
-              <Box sx={{ mt: 1.5 }}>
-                <Divider sx={{ mb: 1.5 }} />
+              <div style={{ marginTop: '0.75rem' }}>
+                <Divider style={{ marginBottom: '0.75rem' }} />
 
                 {/* Manual toggle */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Block export
-                  </Typography>
-                  <Tooltip
-                    title={
-                      controlsLoading ? 'Loading…'
-                        : exportBlocked
-                          ? 'Export blocked — click to re-enable'
-                          : 'Export active — click to block'
-                    }
-                  >
-                    <span>
-                      <Switch
-                        size="small"
-                        checked={exportBlocked}
-                        onChange={handleToggleExport}
-                        disabled={controlsLoading || isToggling}
-                        color="warning"
-                        inputProps={{ 'aria-label': 'Block grid export' }}
-                      />
-                    </span>
-                  </Tooltip>
-                </Box>
+                <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem>
+                    <span style={{ fontSize: '0.875rem', color: C.subtle }}>Block export</span>
+                  </FlexItem>
+                  <FlexItem>
+                    <Tooltip
+                      content={
+                        controlsLoading ? 'Loading…'
+                          : exportBlocked
+                            ? 'Export blocked — click to re-enable'
+                            : 'Export active — click to block'
+                      }
+                    >
+                      <span>
+                        <Switch
+                          id="block-export-switch"
+                          isChecked={exportBlocked}
+                          onChange={(_event, checked) => handleToggleExport()}
+                          isDisabled={controlsLoading || isToggling}
+                          aria-label="Block grid export"
+                          hasCheckIcon
+                        />
+                      </span>
+                    </Tooltip>
+                  </FlexItem>
+                </Flex>
 
                 {/* Schedule toggle row */}
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mt: 0.5,
-                  }}
+                <Flex
+                  justifyContent={{ default: 'justifyContentSpaceBetween' }}
+                  alignItems={{ default: 'alignItemsCenter' }}
+                  style={{ marginTop: '0.25rem' }}
                 >
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <ScheduleIcon
-                      sx={{
-                        fontSize: 16,
-                        color: scheduleActive ? 'primary.main' : 'text.disabled',
-                      }}
-                    />
-                    <Typography variant="body2" color="text.secondary">
-                      Schedule
-                    </Typography>
-                    {scheduledBlocked && (
-                      <Tooltip title="Schedule is currently blocking export">
-                        <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
-                          active
-                        </Typography>
-                      </Tooltip>
-                    )}
-                    {scheduleActive && !scheduledBlocked && (
-                      <Typography variant="caption" color="text.disabled">
-                        {existingSchedule.strategy === 'PRICE_CONTROLLED'
-                          ? 'price-controlled'
-                          : `${existingSchedule.blockFrom}–${existingSchedule.enableFrom}`}
-                      </Typography>
-                    )}
-                  </Stack>
-                  <IconButton
-                    size="small"
-                    onClick={() => setScheduleOpen((o) => !o)}
-                    aria-label={scheduleOpen ? 'Collapse schedule' : 'Expand schedule'}
-                  >
-                    {scheduleOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                  </IconButton>
-                </Box>
+                  <FlexItem>
+                    <Flex gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsCenter' }}>
+                      <FlexItem>
+                        <ClockIcon style={{ fontSize: 16, color: scheduleActive ? C.primary : C.disabled }} />
+                      </FlexItem>
+                      <FlexItem>
+                        <span style={{ fontSize: '0.875rem', color: C.subtle }}>Schedule</span>
+                      </FlexItem>
+                      {scheduledBlocked && (
+                        <FlexItem>
+                          <Tooltip content="Schedule is currently blocking export">
+                            <span style={{ fontSize: '0.75rem', color: C.warning, fontWeight: 600 }}>active</span>
+                          </Tooltip>
+                        </FlexItem>
+                      )}
+                      {scheduleActive && !scheduledBlocked && (
+                        <FlexItem>
+                          <span style={{ fontSize: '0.75rem', color: C.disabled }}>
+                            {existingSchedule.strategy === 'PRICE_CONTROLLED'
+                              ? 'price-controlled'
+                              : `${existingSchedule.blockFrom}–${existingSchedule.enableFrom}`}
+                          </span>
+                        </FlexItem>
+                      )}
+                    </Flex>
+                  </FlexItem>
+                  <FlexItem>
+                    <Button
+                      variant="plain"
+                      size="sm"
+                      onClick={() => setScheduleOpen((o) => !o)}
+                      aria-label={scheduleOpen ? 'Collapse schedule' : 'Expand schedule'}
+                    >
+                      {scheduleOpen ? <AngleUpIcon /> : <AngleDownIcon />}
+                    </Button>
+                  </FlexItem>
+                </Flex>
 
                 {/* Collapsible schedule form */}
-                <Collapse in={scheduleOpen}>
-                  <Box
-                    sx={{
-                      mt: 1,
-                      p: 1.5,
-                      bgcolor: 'action.hover',
-                      borderRadius: 1,
+                {scheduleOpen && (
+                  <div
+                    style={{
+                      marginTop: '0.5rem',
+                      padding: '0.75rem',
+                      background: 'var(--pf-t--global--background--color--secondary--default, #f0f0f0)',
+                      borderRadius: '4px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 1.5,
+                      gap: '0.75rem',
                     }}
                   >
                     {scheduleQuery.isLoading ? (
-                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-                        <CircularProgress size={20} />
-                      </Box>
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: '0.5rem' }}>
+                        <Spinner size="md" />
+                      </div>
                     ) : (
                       <>
                         {/* Enable schedule toggle */}
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="body2">Enable schedule</Typography>
-                          <Switch
-                            size="small"
-                            checked={formEnabled}
-                            onChange={(e) => setFormEnabled(e.target.checked)}
-                            color="primary"
-                          />
-                        </Box>
+                        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                          <FlexItem>
+                            <span style={{ fontSize: '0.875rem' }}>Enable schedule</span>
+                          </FlexItem>
+                          <FlexItem>
+                            <Switch
+                              id="schedule-enabled-switch"
+                              isChecked={formEnabled}
+                              onChange={(_event, checked) => setFormEnabled(checked)}
+                              hasCheckIcon
+                            />
+                          </FlexItem>
+                        </Flex>
 
                         {/* Time fields — hidden for PRICE_CONTROLLED */}
                         {formStrategy !== 'PRICE_CONTROLLED' && (
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <TextField
-                              type="time"
-                              label="Block from"
-                              value={formBlockFrom}
-                              onChange={(e) => setFormBlockFrom(e.target.value)}
-                              size="small"
-                              fullWidth
-                              disabled={!formEnabled}
-                              slotProps={{ inputLabel: { shrink: true } }}
-                            />
-                            <TextField
-                              type="time"
-                              label="Enable from"
-                              value={formEnableFrom}
-                              onChange={(e) => setFormEnableFrom(e.target.value)}
-                              size="small"
-                              fullWidth
-                              disabled={!formEnabled}
-                              slotProps={{ inputLabel: { shrink: true } }}
-                            />
-                          </Box>
+                          <Flex gap={{ default: 'gapSm' }}>
+                            <FlexItem grow={{ default: 'grow' }}>
+                              <FormGroup label="Block from" fieldId="block-from">
+                                <TextInput
+                                  id="block-from"
+                                  type="time"
+                                  value={formBlockFrom}
+                                  onChange={(_event, value) => setFormBlockFrom(value)}
+                                  isDisabled={!formEnabled}
+                                  aria-label="Block from time"
+                                />
+                              </FormGroup>
+                            </FlexItem>
+                            <FlexItem grow={{ default: 'grow' }}>
+                              <FormGroup label="Enable from" fieldId="enable-from">
+                                <TextInput
+                                  id="enable-from"
+                                  type="time"
+                                  value={formEnableFrom}
+                                  onChange={(_event, value) => setFormEnableFrom(value)}
+                                  isDisabled={!formEnabled}
+                                  aria-label="Enable from time"
+                                />
+                              </FormGroup>
+                            </FlexItem>
+                          </Flex>
                         )}
 
                         {/* Strategy selector */}
-                        <FormControl size="small" fullWidth disabled={!formEnabled}>
-                          <InputLabel id="strategy-label">Strategy</InputLabel>
+                        <FormGroup label="Strategy" fieldId="strategy-select">
                           <Select
-                            labelId="strategy-label"
-                            value={formStrategy}
-                            label="Strategy"
-                            onChange={(e) => setFormStrategy(e.target.value)}
-                          >
-                             <MenuItem value="ZERO_EXPORT_DYNAMIC">
-                               Zero-export dynamic (Solar API)
-                             </MenuItem>
-                             <MenuItem value="FIXED_LIMIT">
-                               Hard block (fixed watt cap)
-                             </MenuItem>
-                             <MenuItem value="PRICE_CONTROLLED">
-                               Price-controlled (aWATTar AT)
-                             </MenuItem>
-                          </Select>
-                        </FormControl>
-
-                        {/* Fixed watt cap input — only shown for FIXED_LIMIT */}
-                        {formStrategy === 'FIXED_LIMIT' && (
-                          <TextField
-                            label="Power cap (W)"
-                            type="number"
-                            size="small"
-                            value={formLimitWatts}
-                            onChange={(e) => setFormLimitWatts(e.target.value)}
-                            inputProps={{ min: 1, step: 100 }}
-                            helperText="Max inverter output during the block window (default: 500 W)"
-                            disabled={!formEnabled}
-                          />
-                        )}
-
-                        {/* Export tolerance input — only shown for PRICE_CONTROLLED */}
-                        {formStrategy === 'PRICE_CONTROLLED' && (
-                          <TextField
-                            label="Export tolerance (W)"
-                            type="number"
-                            size="small"
-                            value={formToleranceWatts}
-                            onChange={(e) => setFormToleranceWatts(e.target.value)}
-                            inputProps={{ min: 0, step: 10 }}
-                            helperText="Allowed grid export above load demand when price is negative (default: 50 W)"
-                            disabled={!formEnabled}
-                          />
-                        )}
-
-                        {/* Current market price — only shown for PRICE_CONTROLLED */}
-                        {formStrategy === 'PRICE_CONTROLLED' && (
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body2" color="text.secondary">
-                              Current price
-                            </Typography>
-                            {marketPriceQuery.isLoading ? (
-                              <CircularProgress size={14} />
-                            ) : currentPrice == null ? (
-                              <Typography variant="caption" color="text.disabled">
-                                not available
-                              </Typography>
-                            ) : (
-                              <Tooltip title={`Valid ${currentPrice.startTime} – ${currentPrice.endTime}`}>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontFamily: 'monospace',
-                                    fontWeight: 700,
-                                    color: currentPrice.priceCt < 0 ? 'warning.main' : 'success.main',
-                                  }}
-                                >
-                                  {currentPrice.priceCt.toFixed(2)} ct/kWh
-                                  {currentPrice.priceCt < 0 ? ' (blocking)' : ' (normal)'}
-                                </Typography>
-                              </Tooltip>
+                            id="strategy-select"
+                            isOpen={strategyOpen}
+                            onSelect={(_event, value) => {
+                              setFormStrategy(value);
+                              setStrategyOpen(false);
+                            }}
+                            onOpenChange={(isOpen) => setStrategyOpen(isOpen)}
+                            toggle={(toggleRef) => (
+                              <MenuToggle
+                                ref={toggleRef}
+                                onClick={() => setStrategyOpen(!strategyOpen)}
+                                isExpanded={strategyOpen}
+                                isDisabled={!formEnabled}
+                                style={{ width: '100%' }}
+                              >
+                                {STRATEGY_LABELS[formStrategy] || formStrategy}
+                              </MenuToggle>
                             )}
-                          </Box>
+                          >
+                            <SelectList>
+                              <SelectOption value="ZERO_EXPORT_DYNAMIC">
+                                Zero-export dynamic (Solar API)
+                              </SelectOption>
+                              <SelectOption value="FIXED_LIMIT">
+                                Hard block (fixed watt cap)
+                              </SelectOption>
+                              <SelectOption value="PRICE_CONTROLLED">
+                                Price-controlled (aWATTar AT)
+                              </SelectOption>
+                            </SelectList>
+                          </Select>
+                        </FormGroup>
+
+                        {/* Fixed watt cap — only for FIXED_LIMIT */}
+                        {formStrategy === 'FIXED_LIMIT' && (
+                          <FormGroup label="Power cap (W)" fieldId="limit-watts">
+                            <TextInput
+                              id="limit-watts"
+                              type="number"
+                              value={String(formLimitWatts)}
+                              onChange={(_event, value) => setFormLimitWatts(value)}
+                              isDisabled={!formEnabled}
+                              min={1}
+                              step={100}
+                              aria-label="Power cap in watts"
+                            />
+                            <FormHelperText>
+                              <HelperText>
+                                <HelperTextItem>
+                                  Max inverter output during the block window (default: 500 W)
+                                </HelperTextItem>
+                              </HelperText>
+                            </FormHelperText>
+                          </FormGroup>
                         )}
 
-                        <Typography variant="caption" color="text.secondary">
+                        {/* Export tolerance — only for PRICE_CONTROLLED */}
+                        {formStrategy === 'PRICE_CONTROLLED' && (
+                          <FormGroup label="Export tolerance (W)" fieldId="tolerance-watts">
+                            <TextInput
+                              id="tolerance-watts"
+                              type="number"
+                              value={String(formToleranceWatts)}
+                              onChange={(_event, value) => setFormToleranceWatts(value)}
+                              isDisabled={!formEnabled}
+                              min={0}
+                              step={10}
+                              aria-label="Export tolerance in watts"
+                            />
+                            <FormHelperText>
+                              <HelperText>
+                                <HelperTextItem>
+                                  Allowed grid export above load demand when price is negative (default: 50 W)
+                                </HelperTextItem>
+                              </HelperText>
+                            </FormHelperText>
+                          </FormGroup>
+                        )}
+
+                        {/* Current market price — only for PRICE_CONTROLLED */}
+                        {formStrategy === 'PRICE_CONTROLLED' && (
+                          <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+                            <FlexItem>
+                              <span style={{ fontSize: '0.875rem', color: C.subtle }}>Current price</span>
+                            </FlexItem>
+                            <FlexItem>
+                              {marketPriceQuery.isLoading ? (
+                                <Spinner size="sm" />
+                              ) : currentPrice == null ? (
+                                <span style={{ fontSize: '0.75rem', color: C.disabled }}>not available</span>
+                              ) : (
+                                <Tooltip content={`Valid ${currentPrice.startTime} – ${currentPrice.endTime}`}>
+                                  <span
+                                    style={{
+                                      fontSize: '0.875rem',
+                                      fontFamily: 'monospace',
+                                      fontWeight: 700,
+                                      color: currentPrice.priceCt < 0 ? C.warning : C.success,
+                                    }}
+                                  >
+                                    {currentPrice.priceCt.toFixed(2)} ct/kWh
+                                    {currentPrice.priceCt < 0 ? ' (blocking)' : ' (normal)'}
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </FlexItem>
+                          </Flex>
+                        )}
+
+                        {/* Summary */}
+                        <span style={{ fontSize: '0.75rem', color: C.subtle }}>
                           {formStrategy === 'PRICE_CONTROLLED'
                             ? <>Price-controlled: allow up to{' '}
                                 <strong>{Math.max(0, parseInt(formToleranceWatts, 10) || 50)} W</strong>{' '}
@@ -517,60 +571,57 @@ function GridStatusCard({ deviceId, statusData, inverterData, isLoading, isError
                                   {formBlockFrom > formEnableFrom && ' (crosses midnight)'}
                                 </>
                           }
-                        </Typography>
+                        </span>
 
                         {/* Action buttons */}
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Flex gap={{ default: 'gapSm' }} justifyContent={{ default: 'justifyContentFlexEnd' }}>
                           {existingSchedule && (
-                            <Tooltip title="Delete schedule">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  color="error"
+                            <FlexItem>
+                              <Tooltip content="Delete schedule">
+                                <Button
+                                  variant="plain"
+                                  size="sm"
                                   onClick={handleDeleteSchedule}
-                                  disabled={isDeleting || isSaving}
+                                  isDisabled={isDeleting || isSaving}
                                   aria-label="Delete schedule"
+                                  style={{ color: C.danger }}
                                 >
-                                  {isDeleting
-                                    ? <CircularProgress size={16} />
-                                    : <DeleteIcon fontSize="small" />}
-                                </IconButton>
-                              </span>
-                            </Tooltip>
+                                  {isDeleting ? <Spinner size="sm" /> : <TrashIcon />}
+                                </Button>
+                              </Tooltip>
+                            </FlexItem>
                           )}
-                          <Button
-                            size="small"
-                            variant="contained"
-                            onClick={handleSaveSchedule}
-                            disabled={isSaving || isDeleting}
-                            startIcon={isSaving ? <CircularProgress size={14} /> : null}
-                          >
-                            Save
-                          </Button>
-                        </Stack>
+                          <FlexItem>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleSaveSchedule}
+                              isDisabled={isSaving || isDeleting}
+                              icon={isSaving ? <Spinner size="sm" /> : undefined}
+                            >
+                              Save
+                            </Button>
+                          </FlexItem>
+                        </Flex>
                       </>
                     )}
-                  </Box>
-                </Collapse>
-              </Box>
+                  </div>
+                )}
+              </div>
             )}
-          </Box>
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
 
 function MetricRow({ label, value }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 500, fontFamily: 'monospace' }}>
-        {value}
-      </Typography>
-    </Box>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <span style={{ fontSize: '0.875rem', color: C.subtle }}>{label}</span>
+      <span style={{ fontSize: '0.875rem', fontWeight: 500, fontFamily: 'monospace' }}>{value}</span>
+    </div>
   );
 }
 

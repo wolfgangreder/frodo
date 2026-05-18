@@ -31,6 +31,8 @@ package at.or.reder.frodo.modbus.sunspec;
  * @param scaleFactor      name of the scale factor field (e.g. "A_SF"), null for Float models
  * @param writable         true if the field is writable (R/W)
  * @param description      human-readable description of the field
+ * @param conversionFactor additional multiplier applied after scale factor (default 1.0).
+ *                         Use 0.01 to convert Pct (0–100) to cos-phi ratio (0–1).
  */
 public record SunSpecFieldDefinition(
   String name,
@@ -40,7 +42,8 @@ public record SunSpecFieldDefinition(
   String units,
   String scaleFactor,
   boolean writable,
-  String description
+  String description,
+  double conversionFactor
 ) {
 
   /**
@@ -57,7 +60,7 @@ public record SunSpecFieldDefinition(
   public static SunSpecFieldDefinition readOnly(String name, int offset, int size,
                                                  SunSpecDataType dataType, String units,
                                                  String description) {
-    return new SunSpecFieldDefinition(name, offset, size, dataType, units, null, false, description);
+    return new SunSpecFieldDefinition(name, offset, size, dataType, units, null, false, description, 1.0);
   }
 
   /**
@@ -75,7 +78,7 @@ public record SunSpecFieldDefinition(
   public static SunSpecFieldDefinition readOnlyScaled(String name, int offset, int size,
                                                        SunSpecDataType dataType, String units,
                                                        String scaleFactor, String description) {
-    return new SunSpecFieldDefinition(name, offset, size, dataType, units, scaleFactor, false, description);
+    return new SunSpecFieldDefinition(name, offset, size, dataType, units, scaleFactor, false, description, 1.0);
   }
 
   /**
@@ -93,7 +96,48 @@ public record SunSpecFieldDefinition(
   public static SunSpecFieldDefinition writable(String name, int offset, int size,
                                                  SunSpecDataType dataType, String units,
                                                  String scaleFactor, String description) {
-    return new SunSpecFieldDefinition(name, offset, size, dataType, units, scaleFactor, true, description);
+    return new SunSpecFieldDefinition(name, offset, size, dataType, units, scaleFactor, true, description, 1.0);
+  }
+
+  /**
+   * Creates a read-only field with an additional conversion factor applied after decoding.
+   * Use this for fields reported in percent that should be exposed as a ratio (0–1),
+   * e.g. PF on inverter Int+SF models where PF_SF=-1 yields values in the 0–100 range.
+   *
+   * @param name             field name
+   * @param offset           register offset
+   * @param size             register count
+   * @param dataType         data type
+   * @param units            target units string (e.g. "cos()")
+   * @param scaleFactor      name of the SF field
+   * @param description      description
+   * @param conversionFactor multiplier applied after SF scaling (e.g. 0.01 to convert Pct→ratio)
+   * @return field definition
+   */
+  public static SunSpecFieldDefinition readOnlyScaledWithFactor(String name, int offset, int size,
+                                                                  SunSpecDataType dataType, String units,
+                                                                  String scaleFactor, String description,
+                                                                  double conversionFactor) {
+    return new SunSpecFieldDefinition(name, offset, size, dataType, units, scaleFactor, false, description, conversionFactor);
+  }
+
+  /**
+   * Creates a read-only field (no SF) with an additional conversion factor applied after decoding.
+   * Use this for Float-format fields reported in percent, e.g. PF on inverter Float models.
+   *
+   * @param name             field name
+   * @param offset           register offset
+   * @param size             register count
+   * @param dataType         data type
+   * @param units            target units string (e.g. "cos()")
+   * @param description      description
+   * @param conversionFactor multiplier applied after decoding (e.g. 0.01 to convert Pct→ratio)
+   * @return field definition
+   */
+  public static SunSpecFieldDefinition readOnlyWithFactor(String name, int offset, int size,
+                                                           SunSpecDataType dataType, String units,
+                                                           String description, double conversionFactor) {
+    return new SunSpecFieldDefinition(name, offset, size, dataType, units, null, false, description, conversionFactor);
   }
 
   /**

@@ -18,40 +18,41 @@ import React, { useState } from 'react';
 import { formatForDisplay, nowAsDateTimeLocalValue, toDateTimeLocalValue, fromDateTimeLocalValue } from '../utils/timeZone';
 import {
   Alert,
-  Box,
   Button,
   Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
+  CardBody,
   Divider,
-  FormControl,
+  FormGroup,
+  FormSelect,
+  FormSelectOption,
   Grid,
-  IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
+  GridItem,
+  Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  Spinner,
   Tab,
   Tabs,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
+  TabTitleText,
+  TextInput,
   Tooltip,
-  Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import EuroIcon from '@mui/icons-material/Euro';
+} from '@patternfly/react-core';
+import {
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+} from '@patternfly/react-table';
+import {
+  PlusIcon,
+  TrashIcon,
+  PencilAltIcon,
+  SyncAltIcon,
+} from '@patternfly/react-icons';
 import { PageHeader } from '../components/common';
 import {
   useCostControlConfig,
@@ -99,9 +100,9 @@ function fmtCt(val) {
  */
 function DirectionChip({ value }) {
   const normalized = (value ?? 'BOTH').toUpperCase();
-  const color = normalized === 'IMPORT' ? 'warning' : normalized === 'EXPORT' ? 'success' : 'default';
+  const color = normalized === 'IMPORT' ? 'orange' : normalized === 'EXPORT' ? 'green' : 'grey';
   const label = normalized === 'IMPORT' ? 'Import' : normalized === 'EXPORT' ? 'Export' : 'Both';
-  return <Chip label={label} size="small" color={color} />;
+  return <Label color={color}>{label}</Label>;
 }
 
 // ---- Monthly summary tab ---------------------------------------------------
@@ -109,45 +110,46 @@ function DirectionChip({ value }) {
 function MonthlySummaryTab() {
   const { data: months, isLoading, error } = useMonthlyCosts();
 
-  if (isLoading) return <CircularProgress sx={{ mt: 2 }} />;
-  if (error) return <Alert severity="error">Failed to load monthly costs</Alert>;
+  if (isLoading) return <Spinner style={{ marginTop: 16 }} />;
+  if (error) return <Alert variant="danger" isInline title="Failed to load monthly costs" style={{ marginTop: 16 }} />;
   if (!months?.length) return (
-    <Alert severity="info" sx={{ mt: 2 }}>
-      No monthly cost data yet. Data accumulates automatically as hourly records are processed.
-    </Alert>
+    <Alert variant="info" isInline style={{ marginTop: 16 }}
+      title="No monthly cost data yet. Data accumulates automatically as hourly records are processed." />
   );
 
   return (
-    <Table size="small" sx={{ mt: 2 }}>
-      <TableHead>
-        <TableRow>
-          <TableCell>Month</TableCell>
-          <TableCell align="right">Import kWh</TableCell>
-          <TableCell align="right">Export kWh</TableCell>
-          <TableCell align="right">Import Cost</TableCell>
-          <TableCell align="right">Export Income</TableCell>
-          <TableCell align="right">Fees</TableCell>
-          <TableCell align="right">Fixed</TableCell>
-          <TableCell align="right">Net Cost</TableCell>
-          <TableCell align="right">Hours</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {months.map((m) => (
-          <TableRow key={m.yearMonth} hover>
-            <TableCell>{m.yearMonth}</TableCell>
-            <TableCell align="right">{fmtKwh(m.totalImportKwh)}</TableCell>
-            <TableCell align="right">{fmtKwh(m.totalExportKwh)}</TableCell>
-            <TableCell align="right">{fmtEur(m.totalImportCostEur)}</TableCell>
-            <TableCell align="right">{fmtEur(m.totalExportIncomeEur)}</TableCell>
-            <TableCell align="right">{fmtEur(m.totalFeeEur)}</TableCell>
-            <TableCell align="right">{fmtEur(m.fixedCostEur)}</TableCell>
-            <TableCell align="right" sx={{ fontWeight: 700 }}>{fmtEur(m.netCostEur)}</TableCell>
-            <TableCell align="right">{m.hoursCalculated}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div style={{ marginTop: 16, overflowX: 'auto' }}>
+      <Table aria-label="Monthly cost summary">
+        <Thead>
+          <Tr>
+            <Th>Month</Th>
+            <Th style={{ textAlign: 'right' }}>Import kWh</Th>
+            <Th style={{ textAlign: 'right' }}>Export kWh</Th>
+            <Th style={{ textAlign: 'right' }}>Import Cost</Th>
+            <Th style={{ textAlign: 'right' }}>Export Income</Th>
+            <Th style={{ textAlign: 'right' }}>Fees</Th>
+            <Th style={{ textAlign: 'right' }}>Fixed</Th>
+            <Th style={{ textAlign: 'right' }}>Net Cost</Th>
+            <Th style={{ textAlign: 'right' }}>Hours</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {months.map((m) => (
+            <Tr key={m.yearMonth}>
+              <Td dataLabel="Month">{m.yearMonth}</Td>
+              <Td dataLabel="Import kWh" style={{ textAlign: 'right' }}>{fmtKwh(m.totalImportKwh)}</Td>
+              <Td dataLabel="Export kWh" style={{ textAlign: 'right' }}>{fmtKwh(m.totalExportKwh)}</Td>
+              <Td dataLabel="Import Cost" style={{ textAlign: 'right' }}>{fmtEur(m.totalImportCostEur)}</Td>
+              <Td dataLabel="Export Income" style={{ textAlign: 'right' }}>{fmtEur(m.totalExportIncomeEur)}</Td>
+              <Td dataLabel="Fees" style={{ textAlign: 'right' }}>{fmtEur(m.totalFeeEur)}</Td>
+              <Td dataLabel="Fixed" style={{ textAlign: 'right' }}>{fmtEur(m.fixedCostEur)}</Td>
+              <Td dataLabel="Net Cost" style={{ textAlign: 'right', fontWeight: 700 }}>{fmtEur(m.netCostEur)}</Td>
+              <Td dataLabel="Hours" style={{ textAlign: 'right' }}>{m.hoursCalculated}</Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
+    </div>
   );
 }
 
@@ -159,73 +161,66 @@ function DailySummaryTab() {
   thirtyDaysAgo.setDate(today.getDate() - 30);
   const [from, setFrom] = useState(() => thirtyDaysAgo.toISOString().slice(0, 10));
   const [to, setTo] = useState(() => today.toISOString().slice(0, 10));
-  const [query, setQuery] = useState({ from: thirtyDaysAgo.toISOString().slice(0, 10), to: today.toISOString().slice(0, 10) });
+  const [query, setQuery] = useState({
+    from: thirtyDaysAgo.toISOString().slice(0, 10),
+    to: today.toISOString().slice(0, 10),
+  });
 
   const { data: rows, isLoading, error } = useDailyCosts(query.from, query.to);
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-        <TextField
-          label="From"
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          size="small"
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="To (exclusive)"
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          size="small"
-          InputLabelProps={{ shrink: true }}
-        />
-        <Button variant="outlined" onClick={() => setQuery({ from, to })}>
-          Load
-        </Button>
-      </Stack>
-      {isLoading && <CircularProgress />}
-      {error && <Alert severity="error">Failed to load daily costs</Alert>}
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
+        <FormGroup label="From" fieldId="daily-from">
+          <TextInput id="daily-from" type="date" value={from} onChange={(_e, v) => setFrom(v)} />
+        </FormGroup>
+        <FormGroup label="To (exclusive)" fieldId="daily-to">
+          <TextInput id="daily-to" type="date" value={to} onChange={(_e, v) => setTo(v)} />
+        </FormGroup>
+        <Button variant="secondary" onClick={() => setQuery({ from, to })}>Load</Button>
+      </div>
+      {isLoading && <Spinner />}
+      {error && <Alert variant="danger" isInline title="Failed to load daily costs" />}
       {rows && (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Day</TableCell>
-              <TableCell align="right">Import kWh</TableCell>
-              <TableCell align="right">Export kWh</TableCell>
-              <TableCell align="right">Import Cost</TableCell>
-              <TableCell align="right">Export Income</TableCell>
-              <TableCell align="right">Fees</TableCell>
-              <TableCell align="right">Net Cost</TableCell>
-              <TableCell align="right">Hours</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.day} hover>
-                <TableCell>{r.day}</TableCell>
-                <TableCell align="right">{fmtKwh(r.totalImportKwh)}</TableCell>
-                <TableCell align="right">{fmtKwh(r.totalExportKwh)}</TableCell>
-                <TableCell align="right">{fmtEur(r.totalImportCostEur)}</TableCell>
-                <TableCell align="right">{fmtEur(r.totalExportIncomeEur)}</TableCell>
-                <TableCell align="right">{fmtEur(r.totalFeeEur)}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700 }}>{fmtEur(r.netCostEur)}</TableCell>
-                <TableCell align="right">{r.hoursCalculated}</TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} align="center">
-                  <Typography variant="body2" color="text.secondary">No data in range</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+        <div style={{ overflowX: 'auto' }}>
+          <Table aria-label="Daily cost summary">
+            <Thead>
+              <Tr>
+                <Th>Day</Th>
+                <Th style={{ textAlign: 'right' }}>Import kWh</Th>
+                <Th style={{ textAlign: 'right' }}>Export kWh</Th>
+                <Th style={{ textAlign: 'right' }}>Import Cost</Th>
+                <Th style={{ textAlign: 'right' }}>Export Income</Th>
+                <Th style={{ textAlign: 'right' }}>Fees</Th>
+                <Th style={{ textAlign: 'right' }}>Net Cost</Th>
+                <Th style={{ textAlign: 'right' }}>Hours</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {rows.map((r) => (
+                <Tr key={r.day}>
+                  <Td dataLabel="Day">{r.day}</Td>
+                  <Td dataLabel="Import kWh" style={{ textAlign: 'right' }}>{fmtKwh(r.totalImportKwh)}</Td>
+                  <Td dataLabel="Export kWh" style={{ textAlign: 'right' }}>{fmtKwh(r.totalExportKwh)}</Td>
+                  <Td dataLabel="Import Cost" style={{ textAlign: 'right' }}>{fmtEur(r.totalImportCostEur)}</Td>
+                  <Td dataLabel="Export Income" style={{ textAlign: 'right' }}>{fmtEur(r.totalExportIncomeEur)}</Td>
+                  <Td dataLabel="Fees" style={{ textAlign: 'right' }}>{fmtEur(r.totalFeeEur)}</Td>
+                  <Td dataLabel="Net Cost" style={{ textAlign: 'right', fontWeight: 700 }}>{fmtEur(r.netCostEur)}</Td>
+                  <Td dataLabel="Hours" style={{ textAlign: 'right' }}>{r.hoursCalculated}</Td>
+                </Tr>
+              ))}
+              {rows.length === 0 && (
+                <Tr>
+                  <Td colSpan={8} style={{ textAlign: 'center', color: 'var(--pf-t--global--text--color--subtle, #6a6e73)' }}>
+                    No data in range
+                  </Td>
+                </Tr>
+              )}
+            </Tbody>
+          </Table>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -242,70 +237,63 @@ function HourlyCostTab() {
   const { data: rows, isLoading, error } = useHourlyCosts(query.from, query.to);
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-        <TextField
-          label="From"
-          type="datetime-local"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          size="small"
-          InputLabelProps={{ shrink: true }}
-        />
-        <TextField
-          label="To"
-          type="datetime-local"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          size="small"
-          InputLabelProps={{ shrink: true }}
-        />
-        <Button variant="outlined" onClick={() => setQuery({ from: fromDateTimeLocalValue(from), to: fromDateTimeLocalValue(to) })}>
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', marginBottom: 16 }}>
+        <FormGroup label="From" fieldId="hourly-from">
+          <TextInput id="hourly-from" type="datetime-local" value={from} onChange={(_e, v) => setFrom(v)} />
+        </FormGroup>
+        <FormGroup label="To" fieldId="hourly-to">
+          <TextInput id="hourly-to" type="datetime-local" value={to} onChange={(_e, v) => setTo(v)} />
+        </FormGroup>
+        <Button variant="secondary"
+          onClick={() => setQuery({ from: fromDateTimeLocalValue(from), to: fromDateTimeLocalValue(to) })}>
           Load
         </Button>
-      </Stack>
-      {isLoading && <CircularProgress />}
-      {error && <Alert severity="error">Failed to load hourly costs</Alert>}
+      </div>
+      {isLoading && <Spinner />}
+      {error && <Alert variant="danger" isInline title="Failed to load hourly costs" />}
       {rows && (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Hour</TableCell>
-              <TableCell align="right">Import kWh</TableCell>
-              <TableCell align="right">Export kWh</TableCell>
-              <TableCell align="right">Import Price</TableCell>
-              <TableCell align="right">Export Price</TableCell>
-              <TableCell align="right">Import Cost</TableCell>
-              <TableCell align="right">Export Income</TableCell>
-              <TableCell align="right">Fees</TableCell>
-              <TableCell align="right">Net</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.hourStart} hover>
-                <TableCell>{formatForDisplay(r.hourStart)}</TableCell>
-                <TableCell align="right">{fmtKwh(r.importKwh)}</TableCell>
-                <TableCell align="right">{fmtKwh(r.exportKwh)}</TableCell>
-                <TableCell align="right">{fmtCt(r.priceImportCt)}</TableCell>
-                <TableCell align="right">{fmtCt(r.priceExportCt)}</TableCell>
-                <TableCell align="right">{fmtEur(r.importCostEur)}</TableCell>
-                <TableCell align="right">{fmtEur(r.exportIncomeEur)}</TableCell>
-                <TableCell align="right">{fmtEur(r.feeEur)}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700 }}>{fmtEur(r.netCostEur)}</TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={9} align="center">
-                  <Typography variant="body2" color="text.secondary">No data in range</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+        <div style={{ overflowX: 'auto' }}>
+          <Table aria-label="Hourly cost data">
+            <Thead>
+              <Tr>
+                <Th>Hour</Th>
+                <Th style={{ textAlign: 'right' }}>Import kWh</Th>
+                <Th style={{ textAlign: 'right' }}>Export kWh</Th>
+                <Th style={{ textAlign: 'right' }}>Import Price</Th>
+                <Th style={{ textAlign: 'right' }}>Export Price</Th>
+                <Th style={{ textAlign: 'right' }}>Import Cost</Th>
+                <Th style={{ textAlign: 'right' }}>Export Income</Th>
+                <Th style={{ textAlign: 'right' }}>Fees</Th>
+                <Th style={{ textAlign: 'right' }}>Net</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {rows.map((r) => (
+                <Tr key={r.hourStart}>
+                  <Td dataLabel="Hour">{formatForDisplay(r.hourStart)}</Td>
+                  <Td dataLabel="Import kWh" style={{ textAlign: 'right' }}>{fmtKwh(r.importKwh)}</Td>
+                  <Td dataLabel="Export kWh" style={{ textAlign: 'right' }}>{fmtKwh(r.exportKwh)}</Td>
+                  <Td dataLabel="Import Price" style={{ textAlign: 'right' }}>{fmtCt(r.priceImportCt)}</Td>
+                  <Td dataLabel="Export Price" style={{ textAlign: 'right' }}>{fmtCt(r.priceExportCt)}</Td>
+                  <Td dataLabel="Import Cost" style={{ textAlign: 'right' }}>{fmtEur(r.importCostEur)}</Td>
+                  <Td dataLabel="Export Income" style={{ textAlign: 'right' }}>{fmtEur(r.exportIncomeEur)}</Td>
+                  <Td dataLabel="Fees" style={{ textAlign: 'right' }}>{fmtEur(r.feeEur)}</Td>
+                  <Td dataLabel="Net" style={{ textAlign: 'right', fontWeight: 700 }}>{fmtEur(r.netCostEur)}</Td>
+                </Tr>
+              ))}
+              {rows.length === 0 && (
+                <Tr>
+                  <Td colSpan={9} style={{ textAlign: 'center', color: 'var(--pf-t--global--text--color--subtle, #6a6e73)' }}>
+                    No data in range
+                  </Td>
+                </Tr>
+              )}
+            </Tbody>
+          </Table>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -316,58 +304,58 @@ function EnergyPricesTab() {
   const refreshMutation = useRefreshCostControlPrices();
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
+          variant="secondary"
+          icon={<SyncAltIcon />}
           onClick={() => refreshMutation.mutate('IMPORT')}
-          disabled={refreshMutation.isPending}
-          size="small"
+          isDisabled={refreshMutation.isPending}
         >
           Refresh Import
         </Button>
         <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
+          variant="secondary"
+          icon={<SyncAltIcon />}
           onClick={() => refreshMutation.mutate('EXPORT')}
-          disabled={refreshMutation.isPending}
-          size="small"
+          isDisabled={refreshMutation.isPending}
         >
           Refresh Export
         </Button>
-      </Stack>
-      {isLoading && <CircularProgress />}
-      {error && <Alert severity="error">Failed to load prices</Alert>}
+      </div>
+      {isLoading && <Spinner />}
+      {error && <Alert variant="danger" isInline title="Failed to load prices" />}
       {prices && (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Hour Start</TableCell>
-              <TableCell align="right">Import Price</TableCell>
-              <TableCell>Import Source</TableCell>
-              <TableCell align="right">Export Price</TableCell>
-              <TableCell>Export Source</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {prices.map((p) => (
-              <TableRow key={p.startTime} hover>
-                <TableCell>{formatForDisplay(p.startTime)}</TableCell>
-                <TableCell align="right">
-                  {p.priceImportCt != null ? fmtCt(p.priceImportCt) : '—'}
-                </TableCell>
-                <TableCell>{p.importSource ?? '—'}</TableCell>
-                <TableCell align="right">
-                  {p.priceExportCt != null ? fmtCt(p.priceExportCt) : '—'}
-                </TableCell>
-                <TableCell>{p.exportSource ?? '—'}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div style={{ overflowX: 'auto' }}>
+          <Table aria-label="Energy prices">
+            <Thead>
+              <Tr>
+                <Th>Hour Start</Th>
+                <Th style={{ textAlign: 'right' }}>Import Price</Th>
+                <Th>Import Source</Th>
+                <Th style={{ textAlign: 'right' }}>Export Price</Th>
+                <Th>Export Source</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {prices.map((p) => (
+                <Tr key={p.startTime}>
+                  <Td dataLabel="Hour Start">{formatForDisplay(p.startTime)}</Td>
+                  <Td dataLabel="Import Price" style={{ textAlign: 'right' }}>
+                    {p.priceImportCt != null ? fmtCt(p.priceImportCt) : '—'}
+                  </Td>
+                  <Td dataLabel="Import Source">{p.importSource ?? '—'}</Td>
+                  <Td dataLabel="Export Price" style={{ textAlign: 'right' }}>
+                    {p.priceExportCt != null ? fmtCt(p.priceExportCt) : '—'}
+                  </Td>
+                  <Td dataLabel="Export Source">{p.exportSource ?? '—'}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -386,50 +374,57 @@ function TariffWindowForm({ initial, onSave, onCancel }) {
     description: '',
   });
 
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  const set = (field) => (_e, v) => setForm((f) => ({ ...f, [field]: v }));
 
   return (
-    <Stack spacing={2} sx={{ pt: 1 }}>
-      <FormControl fullWidth size="small">
-        <InputLabel>Direction</InputLabel>
-        <Select value={form.direction} label="Direction" onChange={set('direction')}>
-          <MenuItem value="IMPORT">Import</MenuItem>
-          <MenuItem value="EXPORT">Export</MenuItem>
-        </Select>
-      </FormControl>
-      <Stack direction="row" spacing={2}>
-        <TextField label="Valid From (yyyy-MM-dd)" value={form.validFrom} onChange={set('validFrom')}
-          size="small" fullWidth />
-        <TextField label="Valid To (yyyy-MM-dd, empty = active)" value={form.validTo}
-          onChange={set('validTo')} size="small" fullWidth />
-      </Stack>
-      <TextField label="Days of Week (e.g. MON,TUE,WED,THU,FRI — empty = all)"
-        value={form.daysOfWeek} onChange={set('daysOfWeek')} size="small" fullWidth />
-      <Stack direction="row" spacing={2}>
-        <TextField label="Time From (HH:mm:ss)" value={form.timeFrom} onChange={set('timeFrom')}
-          size="small" fullWidth />
-        <TextField label="Time To (HH:mm:ss, 00:00:00 = end-of-day)" value={form.timeTo}
-          onChange={set('timeTo')} size="small" fullWidth />
-      </Stack>
-      <Stack direction="row" spacing={2}>
-        <TextField label="Price (ct/kWh)" type="number" value={form.priceCt}
-          onChange={set('priceCt')} size="small" fullWidth />
-        <TextField label="Priority" type="number" value={form.priority}
-          onChange={set('priority')} size="small" fullWidth />
-      </Stack>
-      <TextField label="Description" value={form.description} onChange={set('description')}
-        size="small" fullWidth />
-      <Stack direction="row" spacing={1} justifyContent="flex-end">
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button variant="contained" onClick={() => onSave({
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
+      <FormGroup label="Direction" fieldId="tw-direction">
+        <FormSelect id="tw-direction" value={form.direction} onChange={set('direction')}>
+          <FormSelectOption value="IMPORT" label="Import" />
+          <FormSelectOption value="EXPORT" label="Export" />
+        </FormSelect>
+      </FormGroup>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <FormGroup label="Valid From (yyyy-MM-dd)" fieldId="tw-valid-from" style={{ flex: 1 }}>
+          <TextInput id="tw-valid-from" value={form.validFrom} onChange={set('validFrom')} />
+        </FormGroup>
+        <FormGroup label="Valid To (yyyy-MM-dd, empty = active)" fieldId="tw-valid-to" style={{ flex: 1 }}>
+          <TextInput id="tw-valid-to" value={form.validTo} onChange={set('validTo')} />
+        </FormGroup>
+      </div>
+      <FormGroup label="Days of Week (e.g. MON,TUE,WED,THU,FRI — empty = all)" fieldId="tw-days">
+        <TextInput id="tw-days" value={form.daysOfWeek} onChange={set('daysOfWeek')} />
+      </FormGroup>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <FormGroup label="Time From (HH:mm:ss)" fieldId="tw-time-from" style={{ flex: 1 }}>
+          <TextInput id="tw-time-from" value={form.timeFrom} onChange={set('timeFrom')} />
+        </FormGroup>
+        <FormGroup label="Time To (HH:mm:ss, 00:00:00 = end-of-day)" fieldId="tw-time-to" style={{ flex: 1 }}>
+          <TextInput id="tw-time-to" value={form.timeTo} onChange={set('timeTo')} />
+        </FormGroup>
+      </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <FormGroup label="Price (ct/kWh)" fieldId="tw-price" style={{ flex: 1 }}>
+          <TextInput id="tw-price" type="number" value={String(form.priceCt)} onChange={set('priceCt')} />
+        </FormGroup>
+        <FormGroup label="Priority" fieldId="tw-priority" style={{ flex: 1 }}>
+          <TextInput id="tw-priority" type="number" value={String(form.priority)} onChange={set('priority')} />
+        </FormGroup>
+      </div>
+      <FormGroup label="Description" fieldId="tw-desc">
+        <TextInput id="tw-desc" value={form.description} onChange={set('description')} />
+      </FormGroup>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <Button variant="link" onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" onClick={() => onSave({
           ...form,
           priceCt: parseFloat(form.priceCt),
           priority: parseInt(form.priority, 10),
         })}>
           Save
         </Button>
-      </Stack>
-    </Stack>
+      </div>
+    </div>
   );
 }
 
@@ -456,79 +451,78 @@ function TariffWindowsTab() {
 
   const openCreate = () => { setEditing(null); setDialogOpen(true); };
   const openEdit = (w) => { setEditing(w); setDialogOpen(true); };
+  const closeDialog = () => { setDialogOpen(false); setEditing(null); };
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} sx={{ mb: 2 }}>
+    <div style={{ marginTop: 16 }}>
+      <Button variant="primary" icon={<PlusIcon />} onClick={openCreate} style={{ marginBottom: 16 }}>
         Add Tariff Window
       </Button>
-      {isLoading && <CircularProgress />}
-      {error && <Alert severity="error">Failed to load tariff windows</Alert>}
+      {isLoading && <Spinner />}
+      {error && <Alert variant="danger" isInline title="Failed to load tariff windows" />}
       {windows && (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Direction</TableCell>
-              <TableCell>Valid From</TableCell>
-              <TableCell>Valid To</TableCell>
-              <TableCell>Days</TableCell>
-              <TableCell>Time From</TableCell>
-              <TableCell>Time To</TableCell>
-              <TableCell align="right">Price (ct/kWh)</TableCell>
-              <TableCell align="right">Priority</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {windows.map((w) => (
-              <TableRow key={w.id} hover>
-                <TableCell><DirectionChip value={w.direction} /></TableCell>
-                <TableCell>{w.validFrom}</TableCell>
-                <TableCell>{w.validTo ?? '—'}</TableCell>
-                <TableCell>{w.daysOfWeek ?? 'All'}</TableCell>
-                <TableCell>{w.timeFrom}</TableCell>
-                <TableCell>{w.timeTo}</TableCell>
-                <TableCell align="right">{w.priceCt.toFixed(4)}</TableCell>
-                <TableCell align="right">{w.priority}</TableCell>
-                <TableCell>{w.description ?? ''}</TableCell>
-                <TableCell>
-                  <Stack direction="row">
-                    <Tooltip title="Edit">
-                      <IconButton size="small" onClick={() => openEdit(w)}><EditIcon fontSize="small" /></IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton size="small" onClick={() => deleteMut.mutate(w.id)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            ))}
-            {windows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={10} align="center">
-                  <Typography variant="body2" color="text.secondary">
+        <div style={{ overflowX: 'auto' }}>
+          <Table aria-label="Tariff windows">
+            <Thead>
+              <Tr>
+                <Th>Direction</Th>
+                <Th>Valid From</Th>
+                <Th>Valid To</Th>
+                <Th>Days</Th>
+                <Th>Time From</Th>
+                <Th>Time To</Th>
+                <Th style={{ textAlign: 'right' }}>Price (ct/kWh)</Th>
+                <Th style={{ textAlign: 'right' }}>Priority</Th>
+                <Th>Description</Th>
+                <Th />
+              </Tr>
+            </Thead>
+            <Tbody>
+              {windows.map((w) => (
+                <Tr key={w.id}>
+                  <Td dataLabel="Direction"><DirectionChip value={w.direction} /></Td>
+                  <Td dataLabel="Valid From">{w.validFrom}</Td>
+                  <Td dataLabel="Valid To">{w.validTo ?? '—'}</Td>
+                  <Td dataLabel="Days">{w.daysOfWeek ?? 'All'}</Td>
+                  <Td dataLabel="Time From">{w.timeFrom}</Td>
+                  <Td dataLabel="Time To">{w.timeTo}</Td>
+                  <Td dataLabel="Price (ct/kWh)" style={{ textAlign: 'right' }}>{w.priceCt.toFixed(4)}</Td>
+                  <Td dataLabel="Priority" style={{ textAlign: 'right' }}>{w.priority}</Td>
+                  <Td dataLabel="Description">{w.description ?? ''}</Td>
+                  <Td>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <Tooltip content="Edit">
+                        <Button variant="plain" aria-label="Edit" onClick={() => openEdit(w)}>
+                          <PencilAltIcon />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Delete">
+                        <Button variant="plain" aria-label="Delete" onClick={() => deleteMut.mutate(w.id)}>
+                          <TrashIcon />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+              {windows.length === 0 && (
+                <Tr>
+                  <Td colSpan={10} style={{ textAlign: 'center', color: 'var(--pf-t--global--text--color--subtle, #6a6e73)' }}>
                     No tariff windows configured
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                  </Td>
+                </Tr>
+              )}
+            </Tbody>
+          </Table>
+        </div>
       )}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editing ? 'Edit Tariff Window' : 'Add Tariff Window'}</DialogTitle>
-        <DialogContent>
-          <TariffWindowForm
-            initial={editing}
-            onSave={handleSave}
-            onCancel={() => { setDialogOpen(false); setEditing(null); }}
-          />
-        </DialogContent>
-      </Dialog>
-    </Box>
+      <Modal isOpen={dialogOpen} onClose={closeDialog} variant="medium">
+        <ModalHeader title={editing ? 'Edit Tariff Window' : 'Add Tariff Window'} onClose={closeDialog} />
+        <ModalBody>
+          <TariffWindowForm initial={editing} onSave={handleSave} onCancel={closeDialog} />
+        </ModalBody>
+      </Modal>
+    </div>
   );
 }
 
@@ -543,41 +537,40 @@ function GridFeeForm({ initial, onSave, onCancel }) {
     description: '',
   });
 
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  const set = (field) => (_e, v) => setForm((f) => ({ ...f, [field]: v }));
 
   return (
-    <Stack spacing={2} sx={{ pt: 1 }}>
-      <TextField label="Valid From (ISO, e.g. 2026-01-01T00:00:00)" value={form.validFrom}
-        onChange={set('validFrom')} size="small" fullWidth />
-      <FormControl fullWidth size="small">
-        <InputLabel>Fee Type</InputLabel>
-        <Select value={form.feeType} label="Fee Type" onChange={set('feeType')}>
-          <MenuItem value="PERCENT">Percent of base cost (%)</MenuItem>
-          <MenuItem value="ABSOLUTE_ENERGY">Absolute per kWh (ct/kWh)</MenuItem>
-          <MenuItem value="ABSOLUTE_TIME">Absolute per month (EUR/month)</MenuItem>
-        </Select>
-      </FormControl>
-      <TextField label="Fee Value" type="number" value={form.feeValue}
-        onChange={set('feeValue')} size="small" fullWidth />
-      <FormControl fullWidth size="small">
-        <InputLabel>Applies To</InputLabel>
-        <Select value={form.appliesTo} label="Applies To" onChange={set('appliesTo')}>
-          <MenuItem value="IMPORT">Import only</MenuItem>
-          <MenuItem value="EXPORT">Export only</MenuItem>
-          <MenuItem value="BOTH">Both</MenuItem>
-        </Select>
-      </FormControl>
-      <TextField label="Description" value={form.description} onChange={set('description')}
-        size="small" fullWidth />
-      <Stack direction="row" spacing={1} justifyContent="flex-end">
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button variant="contained" onClick={() => onSave({
-          ...form, feeValue: parseFloat(form.feeValue),
-        })}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
+      <FormGroup label="Valid From (ISO, e.g. 2026-01-01T00:00:00)" fieldId="gf-valid-from">
+        <TextInput id="gf-valid-from" value={form.validFrom} onChange={set('validFrom')} />
+      </FormGroup>
+      <FormGroup label="Fee Type" fieldId="gf-fee-type">
+        <FormSelect id="gf-fee-type" value={form.feeType} onChange={set('feeType')}>
+          <FormSelectOption value="PERCENT" label="Percent of base cost (%)" />
+          <FormSelectOption value="ABSOLUTE_ENERGY" label="Absolute per kWh (ct/kWh)" />
+          <FormSelectOption value="ABSOLUTE_TIME" label="Absolute per month (EUR/month)" />
+        </FormSelect>
+      </FormGroup>
+      <FormGroup label="Fee Value" fieldId="gf-fee-value">
+        <TextInput id="gf-fee-value" type="number" value={String(form.feeValue)} onChange={set('feeValue')} />
+      </FormGroup>
+      <FormGroup label="Applies To" fieldId="gf-applies-to">
+        <FormSelect id="gf-applies-to" value={form.appliesTo} onChange={set('appliesTo')}>
+          <FormSelectOption value="IMPORT" label="Import only" />
+          <FormSelectOption value="EXPORT" label="Export only" />
+          <FormSelectOption value="BOTH" label="Both" />
+        </FormSelect>
+      </FormGroup>
+      <FormGroup label="Description" fieldId="gf-desc">
+        <TextInput id="gf-desc" value={form.description} onChange={set('description')} />
+      </FormGroup>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <Button variant="link" onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" onClick={() => onSave({ ...form, feeValue: parseFloat(form.feeValue) })}>
           Save
         </Button>
-      </Stack>
-    </Stack>
+      </div>
+    </div>
   );
 }
 
@@ -600,80 +593,80 @@ function GridFeesTab() {
     }
   };
 
+  const openCreate = () => { setEditing(null); setDialogOpen(true); };
+  const openEdit = (f) => { setEditing(f); setDialogOpen(true); };
+  const closeDialog = () => { setDialogOpen(false); setEditing(null); };
+
   return (
-    <Box sx={{ mt: 2 }}>
-      <Button variant="contained" startIcon={<AddIcon />}
-        onClick={() => { setEditing(null); setDialogOpen(true); }} sx={{ mb: 2 }}>
+    <div style={{ marginTop: 16 }}>
+      <Button variant="primary" icon={<PlusIcon />} onClick={openCreate} style={{ marginBottom: 16 }}>
         Add Grid Fee
       </Button>
-      {isLoading && <CircularProgress />}
-      {error && <Alert severity="error">Failed to load grid fees</Alert>}
+      {isLoading && <Spinner />}
+      {error && <Alert variant="danger" isInline title="Failed to load grid fees" />}
       {fees && (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Applies To</TableCell>
-              <TableCell>Valid From</TableCell>
-              <TableCell>Fee Type</TableCell>
-              <TableCell align="right">Value</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {fees.map((f) => (
-              <TableRow key={f.id} hover>
-                <TableCell><DirectionChip value={f.appliesTo} /></TableCell>
-                <TableCell>{f.validFrom}</TableCell>
-                <TableCell>{f.feeType}</TableCell>
-                <TableCell align="right">{f.feeValue}</TableCell>
-                <TableCell>{f.description ?? ''}</TableCell>
-                <TableCell>
-                  <Stack direction="row">
-                    <Tooltip title="Edit">
-                      <IconButton size="small" onClick={() => { setEditing(f); setDialogOpen(true); }}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton size="small" onClick={() => deleteMut.mutate(f.id)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            ))}
-            {fees.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <Typography variant="body2" color="text.secondary">No grid fees configured</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+        <div style={{ overflowX: 'auto' }}>
+          <Table aria-label="Grid fees">
+            <Thead>
+              <Tr>
+                <Th>Applies To</Th>
+                <Th>Valid From</Th>
+                <Th>Fee Type</Th>
+                <Th style={{ textAlign: 'right' }}>Value</Th>
+                <Th>Description</Th>
+                <Th />
+              </Tr>
+            </Thead>
+            <Tbody>
+              {fees.map((f) => (
+                <Tr key={f.id}>
+                  <Td dataLabel="Applies To"><DirectionChip value={f.appliesTo} /></Td>
+                  <Td dataLabel="Valid From">{f.validFrom}</Td>
+                  <Td dataLabel="Fee Type">{f.feeType}</Td>
+                  <Td dataLabel="Value" style={{ textAlign: 'right' }}>{f.feeValue}</Td>
+                  <Td dataLabel="Description">{f.description ?? ''}</Td>
+                  <Td>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <Tooltip content="Edit">
+                        <Button variant="plain" aria-label="Edit" onClick={() => openEdit(f)}>
+                          <PencilAltIcon />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Delete">
+                        <Button variant="plain" aria-label="Delete" onClick={() => deleteMut.mutate(f.id)}>
+                          <TrashIcon />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+              {fees.length === 0 && (
+                <Tr>
+                  <Td colSpan={6} style={{ textAlign: 'center', color: 'var(--pf-t--global--text--color--subtle, #6a6e73)' }}>
+                    No grid fees configured
+                  </Td>
+                </Tr>
+              )}
+            </Tbody>
+          </Table>
+        </div>
       )}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editing ? 'Edit Grid Fee' : 'Add Grid Fee'}</DialogTitle>
-        <DialogContent>
-          <GridFeeForm
-            initial={editing}
-            onSave={handleSave}
-            onCancel={() => { setDialogOpen(false); setEditing(null); }}
-          />
-        </DialogContent>
-      </Dialog>
-    </Box>
+      <Modal isOpen={dialogOpen} onClose={closeDialog} variant="medium">
+        <ModalHeader title={editing ? 'Edit Grid Fee' : 'Add Grid Fee'} onClose={closeDialog} />
+        <ModalBody>
+          <GridFeeForm initial={editing} onSave={handleSave} onCancel={closeDialog} />
+        </ModalBody>
+      </Modal>
+    </div>
   );
 }
 
 // ---- Fixed costs tab -------------------------------------------------------
 
-const TODAY_ISO = new Date().toISOString().slice(0, 10); // yyyy-MM-dd for date input
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
 
 function fmtDate(isoDate) {
-  // Parse yyyy-MM-dd as local date (avoid UTC offset shifting the day)
   if (!isoDate) return '';
   const [y, m, d] = isoDate.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -686,7 +679,7 @@ function FixedCostsTab() {
   const deleteMut = useDeleteFixedCost();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editId, setEditId] = useState(null); // null = create mode, number = edit mode
+  const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ direction: 'BOTH', validFrom: TODAY_ISO, monthlyCostEur: '', description: '' });
 
   const openCreate = () => {
@@ -721,86 +714,94 @@ function FixedCostsTab() {
   };
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} sx={{ mb: 2 }}>
+    <div style={{ marginTop: 16 }}>
+      <Button variant="primary" icon={<PlusIcon />} onClick={openCreate} style={{ marginBottom: 16 }}>
         Add Fixed Cost
       </Button>
-      {isLoading && <CircularProgress />}
-      {error && <Alert severity="error">Failed to load fixed costs</Alert>}
+      {isLoading && <Spinner />}
+      {error && <Alert variant="danger" isInline title="Failed to load fixed costs" />}
       {costs && (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Direction</TableCell>
-              <TableCell>Valid From</TableCell>
-              <TableCell align="right">Monthly Cost (EUR)</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {costs.map((c) => (
-              <TableRow key={c.id} hover>
-                <TableCell><DirectionChip value={c.direction ?? 'BOTH'} /></TableCell>
-                <TableCell>{fmtDate(c.validFrom)}</TableCell>
-                <TableCell align="right">{fmtEur(c.monthlyCostEur)}</TableCell>
-                <TableCell>{c.description ?? ''}</TableCell>
-                <TableCell>
-                  <Tooltip title="Edit">
-                    <IconButton size="small" onClick={() => openEdit(c)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Delete">
-                    <IconButton size="small"
-                      onClick={() => deleteMut.mutate(c.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            ))}
-            {costs.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} align="center">
-                  <Typography variant="body2" color="text.secondary">No fixed costs configured</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+        <div style={{ overflowX: 'auto' }}>
+          <Table aria-label="Fixed costs">
+            <Thead>
+              <Tr>
+                <Th>Direction</Th>
+                <Th>Valid From</Th>
+                <Th style={{ textAlign: 'right' }}>Monthly Cost (EUR)</Th>
+                <Th>Description</Th>
+                <Th />
+              </Tr>
+            </Thead>
+            <Tbody>
+              {costs.map((c) => (
+                <Tr key={c.id}>
+                  <Td dataLabel="Direction"><DirectionChip value={c.direction ?? 'BOTH'} /></Td>
+                  <Td dataLabel="Valid From">{fmtDate(c.validFrom)}</Td>
+                  <Td dataLabel="Monthly Cost (EUR)" style={{ textAlign: 'right' }}>{fmtEur(c.monthlyCostEur)}</Td>
+                  <Td dataLabel="Description">{c.description ?? ''}</Td>
+                  <Td>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <Tooltip content="Edit">
+                        <Button variant="plain" aria-label="Edit" onClick={() => openEdit(c)}>
+                          <PencilAltIcon />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content="Delete">
+                        <Button variant="plain" aria-label="Delete" onClick={() => deleteMut.mutate(c.id)}>
+                          <TrashIcon />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+              {costs.length === 0 && (
+                <Tr>
+                  <Td colSpan={5} style={{ textAlign: 'center', color: 'var(--pf-t--global--text--color--subtle, #6a6e73)' }}>
+                    No fixed costs configured
+                  </Td>
+                </Tr>
+              )}
+            </Tbody>
+          </Table>
+        </div>
       )}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editId != null ? 'Edit Fixed Cost' : 'Add Fixed Cost'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <FormControl size="small" fullWidth>
-              <InputLabel>Direction</InputLabel>
-              <Select value={form.direction} label="Direction"
-                onChange={(e) => setForm((f) => ({ ...f, direction: e.target.value }))}>
-                <MenuItem value="BOTH">Both (import &amp; export)</MenuItem>
-                <MenuItem value="IMPORT">Import only</MenuItem>
-                <MenuItem value="EXPORT">Export only</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField label="Valid From" type="date" value={form.validFrom}
-              onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-              size="small" fullWidth InputLabelProps={{ shrink: true }}
-              helperText="Entry is active from this date onwards. Delete to deactivate." />
-            <TextField label="Monthly Cost (EUR)" type="number" value={form.monthlyCostEur}
-              onChange={(e) => setForm((f) => ({ ...f, monthlyCostEur: e.target.value }))}
-              size="small" fullWidth />
-            <TextField label="Description" value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              size="small" fullWidth />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave}>Save</Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+      <Modal isOpen={dialogOpen} onClose={() => setDialogOpen(false)} variant="small">
+        <ModalHeader
+          title={editId != null ? 'Edit Fixed Cost' : 'Add Fixed Cost'}
+          onClose={() => setDialogOpen(false)}
+        />
+        <ModalBody>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 8 }}>
+            <FormGroup label="Direction" fieldId="fc-direction">
+              <FormSelect id="fc-direction" value={form.direction}
+                onChange={(_e, v) => setForm((f) => ({ ...f, direction: v }))}>
+                <FormSelectOption value="BOTH" label="Both (import &amp; export)" />
+                <FormSelectOption value="IMPORT" label="Import only" />
+                <FormSelectOption value="EXPORT" label="Export only" />
+              </FormSelect>
+            </FormGroup>
+            <FormGroup label="Valid From" fieldId="fc-valid-from"
+              helperText="Entry is active from this date onwards. Delete to deactivate.">
+              <TextInput id="fc-valid-from" type="date" value={form.validFrom}
+                onChange={(_e, v) => setForm((f) => ({ ...f, validFrom: v }))} />
+            </FormGroup>
+            <FormGroup label="Monthly Cost (EUR)" fieldId="fc-monthly-cost">
+              <TextInput id="fc-monthly-cost" type="number" value={form.monthlyCostEur}
+                onChange={(_e, v) => setForm((f) => ({ ...f, monthlyCostEur: v }))} />
+            </FormGroup>
+            <FormGroup label="Description" fieldId="fc-desc">
+              <TextInput id="fc-desc" value={form.description}
+                onChange={(_e, v) => setForm((f) => ({ ...f, description: v }))} />
+            </FormGroup>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={handleSave}>Save</Button>
+          <Button variant="link" onClick={() => setDialogOpen(false)}>Cancel</Button>
+        </ModalFooter>
+      </Modal>
+    </div>
   );
 }
 
@@ -819,95 +820,88 @@ function ConfigTab() {
     }
   }, [config, form]);
 
-  if (isLoading || !form) return <CircularProgress sx={{ mt: 2 }} />;
+  if (isLoading || !form) return <Spinner style={{ marginTop: 16 }} />;
 
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
-  const setNum = (field) => (e) => setForm((f) => ({ ...f, [field]: Number(e.target.value) }));
+  const set = (field) => (_e, v) => setForm((f) => ({ ...f, [field]: v }));
+  const setNum = (field) => (_e, v) => setForm((f) => ({ ...f, [field]: Number(v) }));
 
-  const providerOptions = providers?.map((p) => (
-    <MenuItem key={p.providerId} value={p.providerId}>{p.displayName} ({p.providerId})</MenuItem>
-  )) ?? [];
-
-  const importProviders = providers?.filter((p) =>
-    p.supportedDirections.includes('IMPORT')
-  ) ?? [];
-  const exportProviders = providers?.filter((p) =>
-    p.supportedDirections.includes('EXPORT')
-  ) ?? [];
+  const importProviders = providers?.filter((p) => p.supportedDirections.includes('IMPORT')) ?? [];
+  const exportProviders = providers?.filter((p) => p.supportedDirections.includes('EXPORT')) ?? [];
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
-          <FormControl fullWidth size="small">
-            <InputLabel>Import Price Provider</InputLabel>
-            <Select value={form.importProviderId ?? ''} label="Import Price Provider"
-              onChange={set('importProviderId')}>
+    <div style={{ marginTop: 16 }}>
+      <Grid hasGutter>
+        <GridItem span={12} md={6}>
+          <FormGroup label="Import Price Provider" fieldId="cfg-import-provider">
+            <FormSelect id="cfg-import-provider" value={form.importProviderId ?? ''} onChange={set('importProviderId')}>
               {importProviders.map((p) => (
-                <MenuItem key={p.providerId} value={p.providerId}>
-                  {p.displayName} ({p.providerId})
-                </MenuItem>
+                <FormSelectOption key={p.providerId} value={p.providerId}
+                  label={`${p.displayName} (${p.providerId})`} />
               ))}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <FormControl fullWidth size="small">
-            <InputLabel>Export Price Provider</InputLabel>
-            <Select value={form.exportProviderId ?? ''} label="Export Price Provider"
-              onChange={set('exportProviderId')}>
+            </FormSelect>
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12} md={6}>
+          <FormGroup label="Export Price Provider" fieldId="cfg-export-provider">
+            <FormSelect id="cfg-export-provider" value={form.exportProviderId ?? ''} onChange={set('exportProviderId')}>
               {exportProviders.map((p) => (
-                <MenuItem key={p.providerId} value={p.providerId}>
-                  {p.displayName} ({p.providerId})
-                </MenuItem>
+                <FormSelectOption key={p.providerId} value={p.providerId}
+                  label={`${p.displayName} (${p.providerId})`} />
               ))}
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <TextField label="Import Fetch Cron" value={form.importFetchCron ?? ''}
-            onChange={set('importFetchCron')} size="small" fullWidth />
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <TextField label="Export Fetch Cron" value={form.exportFetchCron ?? ''}
-            onChange={set('exportFetchCron')} size="small" fullWidth />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField label="Sample Interval (seconds)" type="number"
-            value={form.sampleIntervalSeconds ?? ''} onChange={setNum('sampleIntervalSeconds')}
-            size="small" fullWidth />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField label="Dead-band (watts)" type="number"
-            value={form.deadBandWatts ?? ''} onChange={setNum('deadBandWatts')}
-            size="small" fullWidth />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField label="Retention Hourly (days)" type="number"
-            value={form.retentionHourlyDays ?? ''} onChange={setNum('retentionHourlyDays')}
-            size="small" fullWidth />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField label="Retention Monthly (years)" type="number"
-            value={form.retentionMonthlyYears ?? ''} onChange={setNum('retentionMonthlyYears')}
-            size="small" fullWidth />
-        </Grid>
-        <Grid item xs={12}>
+            </FormSelect>
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12} md={6}>
+          <FormGroup label="Import Fetch Cron" fieldId="cfg-import-cron">
+            <TextInput id="cfg-import-cron" value={form.importFetchCron ?? ''} onChange={set('importFetchCron')} />
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12} md={6}>
+          <FormGroup label="Export Fetch Cron" fieldId="cfg-export-cron">
+            <TextInput id="cfg-export-cron" value={form.exportFetchCron ?? ''} onChange={set('exportFetchCron')} />
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12} md={4}>
+          <FormGroup label="Sample Interval (seconds)" fieldId="cfg-sample-interval">
+            <TextInput id="cfg-sample-interval" type="number"
+              value={String(form.sampleIntervalSeconds ?? '')} onChange={setNum('sampleIntervalSeconds')} />
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12} md={4}>
+          <FormGroup label="Dead-band (watts)" fieldId="cfg-deadband">
+            <TextInput id="cfg-deadband" type="number"
+              value={String(form.deadBandWatts ?? '')} onChange={setNum('deadBandWatts')} />
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12} md={4}>
+          <FormGroup label="Retention Hourly (days)" fieldId="cfg-retention-hourly">
+            <TextInput id="cfg-retention-hourly" type="number"
+              value={String(form.retentionHourlyDays ?? '')} onChange={setNum('retentionHourlyDays')} />
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12} md={4}>
+          <FormGroup label="Retention Monthly (years)" fieldId="cfg-retention-monthly">
+            <TextInput id="cfg-retention-monthly" type="number"
+              value={String(form.retentionMonthlyYears ?? '')} onChange={setNum('retentionMonthlyYears')} />
+          </FormGroup>
+        </GridItem>
+        <GridItem span={12}>
           <Button
-            variant="contained"
+            variant="primary"
             onClick={() => updateMut.mutate(form)}
-            disabled={updateMut.isPending}
+            isDisabled={updateMut.isPending}
+            icon={updateMut.isPending ? <Spinner size="sm" /> : null}
           >
-            {updateMut.isPending ? <CircularProgress size={18} /> : 'Save Configuration'}
+            Save Configuration
           </Button>
-        </Grid>
+        </GridItem>
       </Grid>
       {config?.updatedAt && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+        <p style={{ fontSize: '0.75rem', color: 'var(--pf-t--global--text--color--subtle, #6a6e73)', marginTop: 8 }}>
           Last updated: {formatForDisplay(config.updatedAt)}
-        </Typography>
+        </p>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -928,20 +922,19 @@ function CostControlPage() {
   const [tab, setTab] = useState('monthly');
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Cost Control"
         subtitle="Track grid energy costs and income"
-        icon={<EuroIcon />}
       />
       <Card>
-        <CardContent>
-          <Tabs value={tab} onChange={(_e, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
+        <CardBody>
+          <Tabs activeKey={tab} onSelect={(_e, k) => setTab(k)}>
             {TABS.map((t) => (
-              <Tab key={t.value} label={t.label} value={t.value} />
+              <Tab key={t.value} eventKey={t.value} title={<TabTitleText>{t.label}</TabTitleText>} />
             ))}
           </Tabs>
-          <Divider sx={{ mb: 1 }} />
+          <Divider style={{ marginBottom: 4 }} />
           {tab === 'monthly' && <MonthlySummaryTab />}
           {tab === 'daily' && <DailySummaryTab />}
           {tab === 'hourly' && <HourlyCostTab />}
@@ -950,9 +943,9 @@ function CostControlPage() {
           {tab === 'grid-fees' && <GridFeesTab />}
           {tab === 'fixed-costs' && <FixedCostsTab />}
           {tab === 'config' && <ConfigTab />}
-        </CardContent>
+        </CardBody>
       </Card>
-    </Box>
+    </div>
   );
 }
 

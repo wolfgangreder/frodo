@@ -17,18 +17,27 @@
 import React from 'react';
 import {
   Alert,
-  Box,
   Card,
-  CardContent,
-  Chip,
-  Stack,
-  Typography,
-} from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import PauseCircleIcon from '@mui/icons-material/PauseCircle';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
+  CardBody,
+  Label,
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import {
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  PauseIcon,
+  QuestionCircleIcon,
+} from '@patternfly/react-icons';
 import { formatForDisplay, formatTimeAgo } from '../../utils/timeZone';
+
+const C = {
+  primary:  'var(--pf-t--global--color--brand--default, #0066cc)',
+  subtle:   'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  disabled: 'var(--pf-t--global--text-color--disabled, #b8bbbe)',
+  success:  'var(--pf-t--global--color--status--success--default, #3e8635)',
+  danger:   'var(--pf-t--global--color--status--danger--default, #c9190b)',
+};
 
 /**
  * MetricsStatusCard - displays current scraping status
@@ -38,41 +47,36 @@ import { formatForDisplay, formatTimeAgo } from '../../utils/timeZone';
  * @param {boolean} props.isLoading - Whether status is loading
  */
 function MetricsStatusCard({ status, isLoading = false }) {
-  if (isLoading || !status) {
-    return null;
-  }
+  if (isLoading || !status) return null;
 
   if (!status.configured) {
     return (
-      <Alert severity="info" sx={{ mb: 2 }}>
-        Metrics scraping is not yet configured for this device. Configure parameters below to start collecting data.
-      </Alert>
+      <Alert
+        variant="info"
+        isInline
+        title="Metrics scraping is not yet configured for this device. Configure parameters below to start collecting data."
+        style={{ marginBottom: '1rem' }}
+      />
     );
   }
 
   const statusIcon = () => {
-    if (!status.enabled) return <PauseCircleIcon color="action" />;
+    if (!status.enabled) return <PauseIcon style={{ color: C.disabled }} />;
     switch (status.lastScrapeStatus) {
-      case 'SUCCESS':
-        return <CheckCircleIcon color="success" />;
+      case 'SUCCESS':   return <CheckCircleIcon style={{ color: C.success }} />;
       case 'FAILED':
-      case 'TIMEOUT':
-        return <ErrorIcon color="error" />;
-      default:
-        return <HelpOutlineIcon color="action" />;
+      case 'TIMEOUT':   return <ExclamationCircleIcon style={{ color: C.danger }} />;
+      default:          return <QuestionCircleIcon style={{ color: C.disabled }} />;
     }
   };
 
   const statusColor = () => {
-    if (!status.enabled) return 'default';
+    if (!status.enabled) return 'grey';
     switch (status.lastScrapeStatus) {
-      case 'SUCCESS':
-        return 'success';
+      case 'SUCCESS':   return 'green';
       case 'FAILED':
-      case 'TIMEOUT':
-        return 'error';
-      default:
-        return 'default';
+      case 'TIMEOUT':   return 'red';
+      default:          return 'grey';
     }
   };
 
@@ -83,57 +87,65 @@ function MetricsStatusCard({ status, isLoading = false }) {
   };
 
   return (
-    <Card variant="outlined" sx={{ mb: 2 }}>
-      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexGrow: 1 }}>
-            {statusIcon()}
-            <Box>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="subtitle2">Scraping Status</Typography>
-                <Chip
-                  label={statusLabel()}
-                  size="small"
-                  color={statusColor()}
-                  variant={status.enabled ? 'filled' : 'outlined'}
-                />
-              </Stack>
-              {status.lastScrapeTime && (
-                <Typography variant="caption" color="text.secondary">
-                  Last scrape: {formatForDisplay(status.lastScrapeTime)} ({formatTimeAgo(status.lastScrapeTime)})
-                </Typography>
-              )}
-            </Box>
-          </Stack>
+    <Card isCompact style={{ marginBottom: '1rem' }}>
+      <CardBody>
+        <Flex
+          direction={{ default: 'column', sm: 'row' }}
+          alignItems={{ sm: 'alignItemsCenter' }}
+          gap={{ default: 'gapMd' }}
+        >
+          <FlexItem grow={{ default: 'grow' }}>
+            <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>{statusIcon()}</FlexItem>
+              <FlexItem>
+                <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+                  <FlexItem>
+                    <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>Scraping Status</span>
+                  </FlexItem>
+                  <FlexItem>
+                    <Label color={statusColor()} variant={status.enabled ? 'filled' : 'outline'}>
+                      {statusLabel()}
+                    </Label>
+                  </FlexItem>
+                </Flex>
+                {status.lastScrapeTime && (
+                  <div style={{ fontSize: '0.75rem', color: C.subtle, marginTop: '0.125rem' }}>
+                    Last scrape: {formatForDisplay(status.lastScrapeTime)} ({formatTimeAgo(status.lastScrapeTime)})
+                  </div>
+                )}
+              </FlexItem>
+            </Flex>
+          </FlexItem>
 
-          <Stack direction="row" spacing={2}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" color="primary">
-                {status.enabledParameterCount || 0}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Parameters
-              </Typography>
-            </Box>
-            {status.scrapeIntervalSeconds && (
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h6" color="primary">
-                  {status.scrapeIntervalSeconds}s
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Interval
-                </Typography>
-              </Box>
-            )}
-          </Stack>
-        </Stack>
+          <FlexItem>
+            <Flex gap={{ default: 'gapLg' }}>
+              <FlexItem style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: C.primary }}>
+                  {status.enabledParameterCount || 0}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: C.subtle }}>Parameters</div>
+              </FlexItem>
+              {status.scrapeIntervalSeconds && (
+                <FlexItem style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: C.primary }}>
+                    {status.scrapeIntervalSeconds}s
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: C.subtle }}>Interval</div>
+                </FlexItem>
+              )}
+            </Flex>
+          </FlexItem>
+        </Flex>
 
         {status.lastScrapeStatus === 'FAILED' && status.lastErrorMessage && (
-          <Alert severity="error" sx={{ mt: 1 }} variant="outlined">
-            {status.lastErrorMessage}
-          </Alert>
+          <Alert
+            variant="danger"
+            isInline
+            title={status.lastErrorMessage}
+            style={{ marginTop: '0.5rem' }}
+          />
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }

@@ -14,30 +14,24 @@
  * limitations under the License.
  */
 
-import { Snackbar, Alert } from '@mui/material';
+import React from 'react';
+import { Alert, AlertActionCloseButton } from '@patternfly/react-core';
 
 /**
  * Simplified NotificationSnackbar for Storybook demonstration.
- * The actual component uses Zustand store for queue management.
+ * The actual component uses a Zustand store for queue management and renders
+ * a PF Alert in a fixed bottom-right container.
  */
-function NotificationSnackbarDemo({ open, message, severity, onClose }) {
+function NotificationSnackbarDemo({ open, message, variant, onClose }) {
+  if (!open) return <span style={{ color: 'var(--pf-t--global--text--color--subtle)' }}>(notification hidden)</span>;
   return (
-    <Snackbar
-      open={open}
-      autoHideDuration={6000}
-      onClose={onClose}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-    >
+    <div style={{ minWidth: 320, maxWidth: 480 }}>
       <Alert
-        onClose={onClose}
-        severity={severity}
-        variant="filled"
-        sx={{ width: '100%' }}
-        role="alert"
-      >
-        {message}
-      </Alert>
-    </Snackbar>
+        variant={variant}
+        title={message}
+        actionClose={<AlertActionCloseButton onClose={onClose} />}
+      />
+    </div>
   );
 }
 
@@ -45,22 +39,22 @@ export default {
   title: 'Common/NotificationSnackbar',
   component: NotificationSnackbarDemo,
   parameters: {
-    layout: 'fullscreen',
+    layout: 'centered',
   },
   tags: ['autodocs'],
   argTypes: {
     open: {
       control: 'boolean',
-      description: 'Whether snackbar is visible',
+      description: 'Whether notification is visible',
     },
     message: {
       control: 'text',
       description: 'Notification message',
     },
-    severity: {
+    variant: {
       control: 'select',
-      options: ['success', 'info', 'warning', 'error'],
-      description: 'Notification severity',
+      options: ['success', 'info', 'warning', 'danger'],
+      description: 'Notification variant',
     },
   },
 };
@@ -69,7 +63,7 @@ export const Success = {
   args: {
     open: true,
     message: 'Device saved successfully',
-    severity: 'success',
+    variant: 'success',
   },
 };
 
@@ -77,7 +71,7 @@ export const Info = {
   args: {
     open: true,
     message: 'Metrics scraping started',
-    severity: 'info',
+    variant: 'info',
   },
 };
 
@@ -85,7 +79,7 @@ export const Warning = {
   args: {
     open: true,
     message: 'Connection timeout - retrying...',
-    severity: 'warning',
+    variant: 'warning',
   },
 };
 
@@ -93,7 +87,7 @@ export const Error = {
   args: {
     open: true,
     message: 'Failed to delete device',
-    severity: 'error',
+    variant: 'danger',
   },
 };
 
@@ -101,7 +95,7 @@ export const LongMessage = {
   args: {
     open: true,
     message: 'The operation completed successfully but some warnings were encountered during processing',
-    severity: 'warning',
+    variant: 'warning',
   },
 };
 
@@ -109,6 +103,6 @@ export const Closed = {
   args: {
     open: false,
     message: 'This notification is hidden',
-    severity: 'info',
+    variant: 'info',
   },
 };

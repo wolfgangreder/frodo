@@ -91,3 +91,4 @@ refdoc/
 /.quinoa/
 /.opencode/
 /bin/
+/src/main/webui/nbproject/private/

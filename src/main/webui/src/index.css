@@ -1,11 +1,11 @@
-/* Global styles - MUI CssBaseline handles most base styles */
+/* Global styles - PatternFly base CSS imported in index.js */
 
 /* Ensure smooth scrolling */
 html {
   scroll-behavior: smooth;
 }
 
-/* Custom scrollbar for webkit browsers (theme handles this too, but as fallback) */
+/* Custom scrollbar for webkit browsers */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

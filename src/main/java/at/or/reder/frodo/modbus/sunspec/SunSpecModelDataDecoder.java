@@ -68,12 +68,18 @@ public final class SunSpecModelDataDecoder {
         if (sfField != null && sfField.offset() + sfField.size() <= registers.length) {
           Integer sf = SunSpecRegisterDecoder.decodeSunssf(registers, sfField.offset());
           if (sf != null && value != null) {
-            // Produce a scaled double value
-            double scaledValue = ((Number) value).doubleValue() * Math.pow(10, sf);
+            // Produce a scaled double value, then apply any additional conversion factor
+            double scaledValue = ((Number) value).doubleValue() * Math.pow(10, sf) * field.conversionFactor();
             builder.put(field.name(), scaledValue);
             continue;
           }
         }
+      }
+
+      // Apply conversion factor for non-SF numeric fields (e.g. Float PF)
+      if (field.conversionFactor() != 1.0 && value instanceof Number) {
+        builder.put(field.name(), ((Number) value).doubleValue() * field.conversionFactor());
+        continue;
       }
 
       builder.put(field.name(), value);

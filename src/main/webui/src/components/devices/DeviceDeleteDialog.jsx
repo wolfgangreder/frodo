@@ -16,21 +16,20 @@
 
 import React from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
   Button,
-  CircularProgress,
-  Typography,
-  Box,
-} from '@mui/material';
-import WarningIcon from '@mui/icons-material/Warning';
+  Spinner,
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import { ExclamationTriangleIcon } from '@patternfly/react-icons';
 
 /**
  * Device delete confirmation dialog
- * 
+ *
  * @param {Object} props
  * @param {boolean} props.open - Whether dialog is open
  * @param {Function} props.onClose - Callback when dialog closes
@@ -47,54 +46,61 @@ function DeviceDeleteDialog({
 }) {
   if (!device) return null;
 
+  const C = {
+    danger:  'var(--pf-t--global--color--status--danger--default, #c9190b)',
+    subtle:  'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  };
+
   return (
-    <Dialog
-      open={open}
+    <Modal
+      isOpen={open}
       onClose={onClose}
-      maxWidth="xs"
-      fullWidth
+      variant="small"
+      aria-labelledby="delete-device-title"
     >
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <WarningIcon color="error" />
-        Delete Device
-      </DialogTitle>
-
-      <DialogContent>
-        <DialogContentText>
+      <ModalHeader
+        title={
+          <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+            <FlexItem>
+              <ExclamationTriangleIcon style={{ color: C.danger }} />
+            </FlexItem>
+            <FlexItem id="delete-device-title">Delete Device</FlexItem>
+          </Flex>
+        }
+      />
+      <ModalBody>
+        <p>
           Are you sure you want to delete the device{' '}
-          <Typography component="span" fontWeight="bold">
-            "{device.name}"
-          </Typography>
-          ?
-        </DialogContentText>
-        <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            <strong>Host:</strong> {device.host}:{device.port}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            <strong>Unit ID:</strong> {device.unitId}
-          </Typography>
-        </Box>
-        <DialogContentText sx={{ mt: 2 }} color="error.main">
-          This action cannot be undone. All historical data for this device will be permanently deleted.
-        </DialogContentText>
-      </DialogContent>
-
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} disabled={isDeleting}>
-          Cancel
-        </Button>
-        <Button
-          onClick={() => onConfirm(device.id)}
-          color="error"
-          variant="contained"
-          disabled={isDeleting}
-          startIcon={isDeleting && <CircularProgress size={20} color="inherit" />}
+          <strong>"{device.name}"</strong>?
+        </p>
+        <div
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem',
+            background: 'var(--pf-t--global--background--color--secondary--default, #f0f0f0)',
+            borderRadius: '4px',
+          }}
         >
+          <p style={{ fontSize: '0.875rem', color: C.subtle, margin: '0.25rem 0' }}>
+            <strong>Host:</strong> {device.host}:{device.port}
+          </p>
+          <p style={{ fontSize: '0.875rem', color: C.subtle, margin: '0.25rem 0' }}>
+            <strong>Unit ID:</strong> {device.unitId}
+          </p>
+        </div>
+        <p style={{ marginTop: '1rem', color: C.danger, fontSize: '0.875rem' }}>
+          This action cannot be undone. All historical data for this device will be permanently deleted.
+        </p>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="danger" onClick={() => onConfirm(device.id)} isDisabled={isDeleting} icon={isDeleting ? <Spinner size="sm" /> : undefined}>
           {isDeleting ? 'Deleting...' : 'Delete'}
         </Button>
-      </DialogActions>
-    </Dialog>
+        <Button variant="link" onClick={onClose} isDisabled={isDeleting}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
