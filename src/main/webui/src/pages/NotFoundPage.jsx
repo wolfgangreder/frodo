@@ -15,10 +15,14 @@
  */
 
 import React from 'react';
-import { Box, Button, Typography } from '@mui/material';
+import { Button } from '@patternfly/react-core';
+import { ExclamationCircleIcon, HomeIcon } from '@patternfly/react-icons';
 import { useNavigate } from 'react-router-dom';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
-import HomeIcon from '@mui/icons-material/Home';
+
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #0066cc)',
+  subtle:  'var(--pf-t--global--text-color--subtle, #6a6e73)',
+};
 
 /**
  * 404 Not Found page
@@ -27,36 +31,33 @@ function NotFoundPage() {
   const navigate = useNavigate();
 
   return (
-    <Box
-      sx={{
+    <div
+      style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '60vh',
         textAlign: 'center',
-        p: 3,
+        padding: '1.5rem',
       }}
     >
-      <ErrorOutlineIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
-      <Typography variant="h2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-        404
-      </Typography>
-      <Typography variant="h5" color="text.secondary" sx={{ mb: 1 }}>
+      <ExclamationCircleIcon style={{ fontSize: 80, width: 80, height: 80, color: C.subtle, marginBottom: '1rem' }} />
+      <h2 style={{ fontWeight: 700, color: C.primary, margin: '0 0 0.25rem' }}>404</h2>
+      <h5 style={{ color: C.subtle, margin: '0 0 0.25rem', fontWeight: 400, fontSize: '1.25rem' }}>
         Page Not Found
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 400 }}>
-        The page you're looking for doesn't exist or has been moved.
-      </Typography>
+      </h5>
+      <p style={{ color: C.subtle, maxWidth: 400, marginBottom: '2rem' }}>
+        The page you&apos;re looking for doesn&apos;t exist or has been moved.
+      </p>
       <Button
-        variant="contained"
-        color="primary"
-        startIcon={<HomeIcon />}
+        variant="primary"
+        icon={<HomeIcon />}
         onClick={() => navigate('/')}
       >
         Back to Dashboard
       </Button>
-    </Box>
+    </div>
   );
 }
 

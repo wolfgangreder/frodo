@@ -17,27 +17,25 @@
 import React, { useState } from 'react';
 import {
   Alert,
-  Box,
   Button,
   Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  Typography,
-} from '@mui/material';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import MemoryIcon from '@mui/icons-material/Memory';
+  CardBody,
+  FormGroup,
+  FormSelect,
+  FormSelectOption,
+  Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  Spinner,
+} from '@patternfly/react-core';
+import {
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ExclamationTriangleIcon,
+  MicrochipIcon,
+} from '@patternfly/react-icons';
 import { PageHeader } from '../components/common';
 import {
   useGpioStatus,
@@ -49,6 +47,15 @@ import {
 } from '../hooks/useGpio';
 import { useDeviceList } from '../hooks';
 
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #73bcf7)',
+  success: 'var(--pf-t--global--icon--color--status--success--default, #5ba352)',
+  warning: 'var(--pf-t--global--icon--color--status--warning--default, #f0ab00)',
+  danger: 'var(--pf-t--global--icon--color--status--danger--default, #c9190b)',
+  subtle: 'var(--pf-t--global--text--color--subtle, #6a6e73)',
+  disabled: 'var(--pf-t--global--text--color--disabled, #6a6e73)',
+};
+
 /**
  * GPIO system status banner.
  */
@@ -57,34 +64,32 @@ function GpioSystemStatus({ status }) {
 
   return (
     <Card>
-      <CardContent>
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-          <Typography variant="h6" sx={{ color: 'primary.main' }}>
+      <CardBody>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: '1.125rem', fontWeight: 600, color: C.primary }}>
             GPIO Export Control
-          </Typography>
+          </span>
           {status.available ? (
-            <Chip icon={<CheckCircleOutlineIcon />} label="Available" color="success" size="small" />
+            <Label color="green" icon={<CheckCircleIcon />}>Available</Label>
           ) : (
-            <Chip icon={<ErrorOutlineIcon />} label="Unavailable" color="error" size="small" />
+            <Label color="red" icon={<ExclamationCircleIcon />}>Unavailable</Label>
           )}
-        </Stack>
-        <Stack direction="row" spacing={3}>
-          <Typography variant="body2" color="text.secondary">
+        </div>
+        <div style={{ display: 'flex', gap: 24 }}>
+          <span style={{ fontSize: '0.875rem', color: C.subtle }}>
             Platform: {status.platform || 'Unknown'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          </span>
+          <span style={{ fontSize: '0.875rem', color: C.subtle }}>
             Raspberry Pi: {status.isRaspberryPi ? 'Yes' : 'No'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          </span>
+          <span style={{ fontSize: '0.875rem', color: C.subtle }}>
             Pairs: {status.pairs?.length ?? 0}
-          </Typography>
-        </Stack>
+          </span>
+        </div>
         {status.errorMessage && (
-          <Alert severity="error" sx={{ mt: 1 }}>
-            {status.errorMessage}
-          </Alert>
+          <Alert variant="danger" title={status.errorMessage} isInline style={{ marginTop: 8 }} />
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
@@ -100,167 +105,140 @@ function GpioPairCard({ pair, devices, onAssign, onUnassign }) {
 
   return (
     <Card>
-      <CardContent>
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-          <MemoryIcon color={pair.available ? 'primary' : 'disabled'} />
-          <Typography variant="h6">
-            {pair.name}
-          </Typography>
+      <CardBody>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+          <MicrochipIcon style={{ color: pair.available ? C.primary : C.disabled }} />
+          <span style={{ fontSize: '1.125rem', fontWeight: 600 }}>{pair.name}</span>
           {pair.available ? (
-            <Chip label="Ready" color="success" size="small" variant="outlined" />
+            <Label color="green" variant="outline">Ready</Label>
           ) : (
-            <Chip label="Unavailable" color="error" size="small" variant="outlined" />
+            <Label color="red" variant="outline">Unavailable</Label>
           )}
-        </Stack>
+        </div>
 
-        {/* External mode warning */}
         {pair.externalModeActive && (
-          <Alert severity="warning" icon={<WarningAmberIcon />} sx={{ mb: 2 }}>
-            External override switch active — automatic control suspended
-          </Alert>
+          <Alert
+            variant="warning"
+            title="External override switch active — automatic control suspended"
+            isInline
+            style={{ marginBottom: 16 }}
+          />
         )}
 
-        {/* Manual override info */}
         {pair.outputManualOverride && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Manual test mode — scheduler writes are suppressed
-          </Alert>
+          <Alert
+            variant="info"
+            title="Manual test mode — scheduler writes are suppressed"
+            isInline
+            style={{ marginBottom: 16 }}
+          />
         )}
 
         {pair.errorMessage && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {pair.errorMessage}
-          </Alert>
+          <Alert variant="danger" title={pair.errorMessage} isInline style={{ marginBottom: 16 }} />
         )}
 
-        {/* Pin states */}
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} sx={{ mb: 2 }}>
-          <Box>
-            <Typography variant="body2" color="text.secondary">Output Pin</Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
-                GPIO {pair.outputPin}
-              </Typography>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: '0.875rem', color: C.subtle, marginBottom: 4 }}>Output Pin</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontFamily: 'monospace' }}>GPIO {pair.outputPin}</span>
               {pair.outputPinState != null && (
-                <Chip
-                  label={pair.outputPinState ? 'HIGH' : 'LOW'}
-                  color={pair.outputPinState ? 'error' : 'success'}
-                  size="small"
-                />
+                <Label color={pair.outputPinState ? 'red' : 'green'}>
+                  {pair.outputPinState ? 'HIGH' : 'LOW'}
+                </Label>
               )}
-            </Stack>
-          </Box>
-          <Box>
-            <Typography variant="body2" color="text.secondary">Input Pin</Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
-                GPIO {pair.inputPin}
-              </Typography>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.875rem', color: C.subtle, marginBottom: 4 }}>Input Pin</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontFamily: 'monospace' }}>GPIO {pair.inputPin}</span>
               {pair.inputPinState != null && (
-                <Chip
-                  label={pair.inputPinState ? 'HIGH' : 'LOW'}
-                  color={pair.inputPinState ? 'warning' : 'default'}
-                  size="small"
-                  variant="outlined"
-                />
+                <Label color={pair.inputPinState ? 'orange' : 'grey'} variant="outline">
+                  {pair.inputPinState ? 'HIGH' : 'LOW'}
+                </Label>
               )}
               {pair.inputBias && (
-                <Chip
-                  label={pair.inputBias.replace('_', ' ')}
-                  size="small"
-                  variant="outlined"
-                  color="default"
-                />
+                <Label color="grey" variant="outline">
+                  {pair.inputBias.replace('_', ' ')}
+                </Label>
               )}
-            </Stack>
-          </Box>
-          <Box>
-            <Typography variant="body2" color="text.secondary">External Mode</Typography>
-            <Typography variant="body1">
-              {pair.externalModeActive ? 'ACTIVE' : 'Inactive'}
-            </Typography>
-          </Box>
-        </Stack>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.875rem', color: C.subtle, marginBottom: 4 }}>External Mode</div>
+            <span>{pair.externalModeActive ? 'ACTIVE' : 'Inactive'}</span>
+          </div>
+        </div>
 
-        {/* Manual output controls */}
         {pair.available && (
-          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <Button
-              size="small"
-              variant={pair.outputManualOverride ? 'contained' : 'outlined'}
-              color="warning"
+              size="sm"
+              variant={pair.outputManualOverride ? 'primary' : 'secondary'}
               onClick={() => setManual.mutate({ name: pair.name, high: true })}
-              disabled={setManual.isPending}
+              isDisabled={setManual.isPending}
             >
               Set HIGH
             </Button>
             <Button
-              size="small"
-              variant={pair.outputManualOverride ? 'contained' : 'outlined'}
-              color="info"
+              size="sm"
+              variant={pair.outputManualOverride ? 'primary' : 'secondary'}
               onClick={() => setManual.mutate({ name: pair.name, high: false })}
-              disabled={setManual.isPending}
+              isDisabled={setManual.isPending}
             >
               Set LOW
             </Button>
             {pair.outputManualOverride && (
               <Button
-                size="small"
-                variant="outlined"
+                size="sm"
+                variant="secondary"
                 onClick={() => clearManual.mutate({ name: pair.name })}
-                disabled={clearManual.isPending}
+                isDisabled={clearManual.isPending}
               >
                 Clear Override
               </Button>
             )}
-          </Stack>
+          </div>
         )}
 
-        {/* Device assignment */}
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Typography variant="body2" color="text.secondary">
-            Assigned device:
-          </Typography>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.875rem', color: C.subtle }}>Assigned device:</span>
           {assignedDevice ? (
             <>
-              <Typography variant="body2">
+              <span style={{ fontSize: '0.875rem' }}>
                 {assignedDevice.name} (ID {assignedDevice.id})
-              </Typography>
-              <Button size="small" variant="outlined" onClick={() => onAssign(pair.name)}>
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => onAssign(pair.name)}>
                 Change
               </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                onClick={() => onUnassign(pair.assignedDeviceId)}
-              >
+              <Button size="sm" variant="danger" onClick={() => onUnassign(pair.assignedDeviceId)}>
                 Remove
               </Button>
             </>
           ) : (
             <>
-              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              <span style={{ fontSize: '0.875rem', color: C.subtle, fontStyle: 'italic' }}>
                 (unassigned)
-              </Typography>
-              <Button size="small" variant="outlined" onClick={() => onAssign(pair.name)}>
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => onAssign(pair.name)}>
                 Assign
               </Button>
             </>
           )}
-        </Stack>
-      </CardContent>
+        </div>
+      </CardBody>
     </Card>
   );
 }
 
 /**
- * Dialog to assign a GPIO pair to a device.
+ * Modal to assign a GPIO pair to a device.
  */
 function AssignmentDialog({ open, pairName, devices, assignments, onClose, onSave }) {
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
 
-  // Filter out devices already assigned to other pairs
   const assignedDeviceIds = (assignments ?? [])
     .filter((a) => a.gpioPairName !== pairName)
     .map((a) => a.deviceId);
@@ -270,46 +248,46 @@ function AssignmentDialog({ open, pairName, devices, assignments, onClose, onSav
 
   const handleSave = () => {
     if (selectedDeviceId) {
-      onSave(selectedDeviceId, pairName);
+      onSave(Number(selectedDeviceId), pairName);
       setSelectedDeviceId('');
     }
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Assign GPIO Pair "{pairName}" to Device</DialogTitle>
-      <DialogContent>
-        <FormControl fullWidth sx={{ mt: 1 }}>
-          <InputLabel>Device</InputLabel>
-          <Select
+    <Modal isOpen={open} onClose={onClose} variant="medium">
+      <ModalHeader title={`Assign GPIO Pair "${pairName}" to Device`} />
+      <ModalBody>
+        <FormGroup label="Device" fieldId="gpio-device-select" style={{ marginTop: 8 }}>
+          <FormSelect
+            id="gpio-device-select"
             value={selectedDeviceId}
-            label="Device"
-            onChange={(e) => setSelectedDeviceId(e.target.value)}
+            onChange={(_event, value) => setSelectedDeviceId(value)}
+            aria-label="Select device"
           >
+            <FormSelectOption value="" label="— select a device —" isDisabled />
             {availableDevices.map((d) => (
-              <MenuItem key={d.id} value={d.id}>
-                {d.name} (ID {d.id})
-              </MenuItem>
+              <FormSelectOption key={d.id} value={String(d.id)} label={`${d.name} (ID ${d.id})`} />
             ))}
-          </Select>
-        </FormControl>
+          </FormSelect>
+        </FormGroup>
         {availableDevices.length === 0 && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            No available devices. All enabled devices are already assigned to GPIO pairs.
-          </Alert>
+          <Alert
+            variant="info"
+            title="No available devices. All enabled devices are already assigned to GPIO pairs."
+            isInline
+            style={{ marginTop: 16 }}
+          />
         )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={!selectedDeviceId}
-        >
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="primary" onClick={handleSave} isDisabled={!selectedDeviceId}>
           Assign
         </Button>
-      </DialogActions>
-    </Dialog>
+        <Button variant="link" onClick={onClose}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
@@ -339,26 +317,24 @@ function GpioPage() {
   };
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="GPIO Export Control"
         subtitle="Manage GPIO-based export control relay pairs (Raspberry Pi)"
       />
 
       {isLoading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-        </Box>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
+          <Spinner />
+        </div>
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load GPIO status: {error.message}
-        </Alert>
+        <Alert variant="danger" title={`Failed to load GPIO status: ${error.message}`} isInline style={{ marginBottom: 16 }} />
       )}
 
       {status && (
-        <Stack spacing={3}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <GpioSystemStatus status={status} />
 
           {status.pairs?.map((pair) => (
@@ -372,12 +348,13 @@ function GpioPage() {
           ))}
 
           {(!status.pairs || status.pairs.length === 0) && (
-            <Alert severity="info">
-              No GPIO pairs configured. Add pairs in application.properties
-              (frodo.gpio.pairs.&lt;name&gt;.*).
-            </Alert>
+            <Alert
+              variant="info"
+              title="No GPIO pairs configured. Add pairs in application.properties (frodo.gpio.pairs.<name>.*)."
+              isInline
+            />
           )}
-        </Stack>
+        </div>
       )}
 
       <AssignmentDialog
@@ -388,7 +365,7 @@ function GpioPage() {
         onClose={() => setAssignDialog({ open: false, pairName: null })}
         onSave={handleSaveAssignment}
       />
-    </Box>
+    </div>
   );
 }
 

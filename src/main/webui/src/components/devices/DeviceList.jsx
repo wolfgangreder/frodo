@@ -14,48 +14,65 @@
  * limitations under the License.
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  Chip,
+  Label,
+  Button,
   Tooltip,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import InfoIcon from '@mui/icons-material/Info';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import TimelineIcon from '@mui/icons-material/Timeline';
-import DashboardIcon from '@mui/icons-material/Dashboard';
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
+import {
+  PencilAltIcon,
+  TrashIcon,
+  InfoCircleIcon,
+  SyncAltIcon,
+  ChartLineIcon,
+  TachometerAltIcon,
+} from '@patternfly/react-icons';
 import { StatusChip } from '../common';
 import DeviceCard from './DeviceCard';
 
+const C = {
+  primary:  'var(--pf-t--global--color--brand--default, #0066cc)',
+  success:  'var(--pf-t--global--color--status--success--default, #3e8635)',
+  warning:  'var(--pf-t--global--color--status--warning--default, #f0ab00)',
+  danger:   'var(--pf-t--global--color--status--danger--default, #c9190b)',
+  info:     'var(--pf-t--global--color--status--info--default, #0066cc)',
+  subtle:   'var(--pf-t--global--text-color--subtle, #6a6e73)',
+};
+
 /**
- * Enabled status chip component
+ * Simple responsive hook — replaces MUI useMediaQuery
+ */
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < breakpoint
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
+/**
+ * Enabled label chip
  */
 function EnabledChip({ enabled }) {
   return (
-    <Chip
-      label={enabled ? 'Enabled' : 'Disabled'}
-      color={enabled ? 'primary' : 'default'}
-      size="small"
-      variant={enabled ? 'filled' : 'outlined'}
-    />
+    <Label color={enabled ? 'blue' : 'grey'} variant={enabled ? 'filled' : 'outline'}>
+      {enabled ? 'Enabled' : 'Disabled'}
+    </Label>
   );
 }
 
 /**
  * Device list component - displays devices in table (desktop) or cards (mobile)
- * 
+ *
  * @param {Object} props
  * @param {Array} props.devices - List of devices to display
  * @param {Function} props.onEdit - Callback when edit is clicked
@@ -76,13 +93,12 @@ function DeviceList({
   onDashboard,
   isRefreshing = false,
 }) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useIsMobile();
 
-  // Mobile view - use cards
+  // Mobile view — cards
   if (isMobile) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {devices.map((device) => (
           <DeviceCard
             key={device.id}
@@ -96,114 +112,87 @@ function DeviceList({
             isRefreshing={isRefreshing}
           />
         ))}
-      </Box>
+      </div>
     );
   }
 
-  // Desktop view - use table
+  // Desktop view — table
   return (
-    <TableContainer component={Paper} sx={{ bgcolor: 'background.paper' }}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Name</TableCell>
-            <TableCell>Host</TableCell>
-            <TableCell align="center">Port</TableCell>
-            <TableCell align="center">Unit ID</TableCell>
-            <TableCell align="center">Status</TableCell>
-            <TableCell align="center">Enabled</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {devices.map((device) => (
-            <TableRow
-              key={device.id}
-              hover
-              sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-            >
-              <TableCell component="th" scope="row">
-                {device.name}
-              </TableCell>
-              <TableCell>{device.host}</TableCell>
-              <TableCell align="center">{device.port}</TableCell>
-              <TableCell align="center">{device.unitId}</TableCell>
-              <TableCell align="center">
-                <StatusChip status={device.connectionStatus} />
-              </TableCell>
-              <TableCell align="center">
-                <EnabledChip enabled={device.enabled} />
-              </TableCell>
-              <TableCell align="right">
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                  <Tooltip title="Device Dashboard">
-                    <IconButton
-                      size="small"
-                      onClick={() => onDashboard?.(device)}
-                      color="success"
-                      aria-label={`Open dashboard for ${device.name}`}
-                    >
-                      <DashboardIcon fontSize="small" />
-                    </IconButton>
+    <Table aria-label="Devices" variant="compact">
+      <Thead>
+        <Tr>
+          <Th modifier="fitContent">Name</Th>
+          <Th modifier="fitContent">Host</Th>
+          <Th modifier="fitContent">Port</Th>
+          <Th modifier="fitContent">Unit ID</Th>
+          <Th modifier="fitContent">Status</Th>
+          <Th modifier="fitContent">Enabled</Th>
+          <Th modifier="fitContent" aria-label="Actions" />
+        </Tr>
+      </Thead>
+      <Tbody>
+        {devices.map((device) => (
+          <Tr key={device.id}>
+            <Td dataLabel="Name" modifier="fitContent">{device.name}</Td>
+            <Td dataLabel="Host" modifier="fitContent">{device.host}</Td>
+            <Td dataLabel="Port" modifier="fitContent">{device.port}</Td>
+            <Td dataLabel="Unit ID" modifier="fitContent">{device.unitId}</Td>
+            <Td dataLabel="Status" modifier="fitContent">
+              <StatusChip status={device.connectionStatus} />
+            </Td>
+            <Td dataLabel="Enabled" modifier="fitContent">
+              <EnabledChip enabled={device.enabled} />
+            </Td>
+            <Td dataLabel="Actions" modifier="fitContent">
+              <Flex gap={{ default: 'gapXs' }} justifyContent={{ default: 'justifyContentFlexEnd' }}>
+                <FlexItem>
+                  <Tooltip content="Device Dashboard">
+                    <Button variant="plain" size="sm" onClick={() => onDashboard?.(device)} aria-label={`Open dashboard for ${device.name}`}>
+                      <TachometerAltIcon style={{ color: C.success }} />
+                    </Button>
                   </Tooltip>
-                  <Tooltip title="Metrics Configuration">
-                    <IconButton
-                      size="small"
-                      onClick={() => onMetrics?.(device)}
-                      color="warning"
-                      aria-label={`Configure metrics for ${device.name}`}
-                    >
-                      <TimelineIcon fontSize="small" />
-                    </IconButton>
+                </FlexItem>
+                <FlexItem>
+                  <Tooltip content="Metrics Configuration">
+                    <Button variant="plain" size="sm" onClick={() => onMetrics?.(device)} aria-label={`Configure metrics for ${device.name}`}>
+                      <ChartLineIcon style={{ color: C.warning }} />
+                    </Button>
                   </Tooltip>
-                  <Tooltip title="View Device Info">
-                    <IconButton
-                      size="small"
-                      onClick={() => onViewInfo?.(device)}
-                      color="info"
-                      aria-label={`View info for ${device.name}`}
-                    >
-                      <InfoIcon fontSize="small" />
-                    </IconButton>
+                </FlexItem>
+                <FlexItem>
+                  <Tooltip content="View Device Info">
+                    <Button variant="plain" size="sm" onClick={() => onViewInfo?.(device)} aria-label={`View info for ${device.name}`}>
+                      <InfoCircleIcon style={{ color: C.info }} />
+                    </Button>
                   </Tooltip>
-                  <Tooltip title="Refresh Device Info">
-                    <IconButton
-                      size="small"
-                      onClick={() => onRefreshInfo?.(device)}
-                      disabled={isRefreshing}
-                      color="secondary"
-                      aria-label={`Refresh info for ${device.name}`}
-                    >
-                      <RefreshIcon fontSize="small" />
-                    </IconButton>
+                </FlexItem>
+                <FlexItem>
+                  <Tooltip content="Refresh Device Info">
+                    <Button variant="plain" size="sm" onClick={() => onRefreshInfo?.(device)} isDisabled={isRefreshing} aria-label={`Refresh info for ${device.name}`}>
+                      <SyncAltIcon style={{ color: C.subtle }} />
+                    </Button>
                   </Tooltip>
-                  <Tooltip title="Edit Device">
-                    <IconButton
-                      size="small"
-                      onClick={() => onEdit?.(device)}
-                      color="primary"
-                      aria-label={`Edit ${device.name}`}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
+                </FlexItem>
+                <FlexItem>
+                  <Tooltip content="Edit Device">
+                    <Button variant="plain" size="sm" onClick={() => onEdit?.(device)} aria-label={`Edit ${device.name}`}>
+                      <PencilAltIcon style={{ color: C.primary }} />
+                    </Button>
                   </Tooltip>
-                  <Tooltip title="Delete Device">
-                    <IconButton
-                      size="small"
-                      onClick={() => onDelete?.(device)}
-                      color="error"
-                      aria-label={`Delete ${device.name}`}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                </FlexItem>
+                <FlexItem>
+                  <Tooltip content="Delete Device">
+                    <Button variant="plain" size="sm" onClick={() => onDelete?.(device)} aria-label={`Delete ${device.name}`}>
+                      <TrashIcon style={{ color: C.danger }} />
+                    </Button>
                   </Tooltip>
-                </Box>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+                </FlexItem>
+              </Flex>
+            </Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
   );
 }
 

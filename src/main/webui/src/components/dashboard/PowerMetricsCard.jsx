@@ -17,16 +17,24 @@
 import React, { useMemo } from 'react';
 import {
   Card,
-  CardContent,
-  Box,
-  Typography,
-  Skeleton,
+  CardBody,
   Alert,
-  Stack,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
-import BoltIcon from '@mui/icons-material/Bolt';
+  Skeleton,
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import { BoltIcon } from '@patternfly/react-icons';
+
+// PF v6 design token CSS variable references
+const C = {
+  primary:   'var(--pf-t--global--color--brand--default, #0066cc)',
+  success:   'var(--pf-t--global--color--status--success--default, #3e8635)',
+  warning:   'var(--pf-t--global--color--status--warning--default, #f0ab00)',
+  danger:    'var(--pf-t--global--color--status--danger--default, #c9190b)',
+  info:      'var(--pf-t--global--color--status--info--default, #0066cc)',
+  subtle:    'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  disabled:  'var(--pf-t--global--text-color--disabled, #b8bbbe)',
+};
 
 /**
  * Formats a numeric value with appropriate decimal places and unit
@@ -38,17 +46,9 @@ function formatValue(value, unit, decimals = 1) {
   const num = typeof value === 'number' ? value : parseFloat(value);
   if (isNaN(num)) return '-';
 
-  // Auto-scale large watt-hour values
-  if (unit === 'Wh' && Math.abs(num) >= 1000000) {
-    return `${(num / 1000000).toFixed(1)} MWh`;
-  }
-  if (unit === 'Wh' && Math.abs(num) >= 1000) {
-    return `${(num / 1000).toFixed(1)} kWh`;
-  }
-  // Auto-scale large watt values
-  if (unit === 'W' && Math.abs(num) >= 1000) {
-    return `${(num / 1000).toFixed(decimals)} kW`;
-  }
+  if (unit === 'Wh' && Math.abs(num) >= 1000000) return `${(num / 1000000).toFixed(1)} MWh`;
+  if (unit === 'Wh' && Math.abs(num) >= 1000) return `${(num / 1000).toFixed(1)} kWh`;
+  if (unit === 'W' && Math.abs(num) >= 1000) return `${(num / 1000).toFixed(decimals)} kW`;
 
   return `${num.toFixed(decimals)} ${unit}`;
 }
@@ -57,134 +57,110 @@ function formatValue(value, unit, decimals = 1) {
  * Maps inverter operating state enum to display label and color
  */
 function getOperatingState(st) {
-  if (st == null) return { label: 'Unknown', color: 'text.disabled' };
+  if (st == null) return { label: 'Unknown', color: C.disabled };
   const stateMap = {
-    1: { label: 'Off', color: 'text.disabled' },
-    2: { label: 'Sleeping', color: 'warning.main' },
-    3: { label: 'Starting', color: 'warning.main' },
-    4: { label: 'Running (MPPT)', color: 'success.main' },
-    5: { label: 'Throttled', color: 'warning.main' },
-    6: { label: 'Shutting Down', color: 'warning.main' },
-    7: { label: 'Fault', color: 'error.main' },
-    8: { label: 'Standby', color: 'info.main' },
+    1: { label: 'Off',              color: C.disabled },
+    2: { label: 'Sleeping',         color: C.warning },
+    3: { label: 'Starting',         color: C.warning },
+    4: { label: 'Running (MPPT)',    color: C.success },
+    5: { label: 'Throttled',        color: C.warning },
+    6: { label: 'Shutting Down',    color: C.warning },
+    7: { label: 'Fault',            color: C.danger },
+    8: { label: 'Standby',          color: C.info },
   };
-  return stateMap[st] || { label: `State ${st}`, color: 'text.secondary' };
+  return stateMap[st] || { label: `State ${st}`, color: C.subtle };
 }
 
 /**
  * PowerMetricsCard - displays real-time AC/DC power, voltage, current, frequency, energy
- *
- * @param {Object} props
- * @param {Object} props.inverterData - SunSpec inverter model response (fields map)
- * @param {boolean} props.isLoading - Whether data is still loading
- * @param {boolean} props.isError - Whether a fetch error occurred
  */
 function PowerMetricsCard({ inverterData, isLoading, isError }) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
   const fields = inverterData?.fields || {};
-
   const state = useMemo(() => getOperatingState(fields.St), [fields.St]);
-
   const isGenerating = fields.St === 4 && fields.W != null && fields.W > 0;
 
-  // Primary metrics always shown
   const primaryMetrics = [
-    { label: 'AC Power', value: fields.W, unit: 'W', decimals: 0 },
-    { label: 'Energy Total', value: fields.WH, unit: 'Wh', decimals: 0 },
+    { label: 'AC Power',     value: fields.W,    unit: 'W',  decimals: 0 },
+    { label: 'Energy Total', value: fields.WH,   unit: 'Wh', decimals: 0 },
   ];
 
-  // Secondary metrics hidden on mobile
   const secondaryMetrics = [
-    { label: 'AC Voltage', value: fields.PhVphA, unit: 'V', decimals: 1 },
-    { label: 'AC Current', value: fields.A, unit: 'A', decimals: 2 },
-    { label: 'Frequency', value: fields.Hz, unit: 'Hz', decimals: 2 },
-    { label: 'Power Factor', value: fields.PF, unit: '%', decimals: 1 },
+    { label: 'AC Voltage',    value: fields.PhVphA, unit: 'V',   decimals: 1 },
+    { label: 'AC Current',    value: fields.A,      unit: 'A',   decimals: 2 },
+    { label: 'Frequency',     value: fields.Hz,     unit: 'Hz',  decimals: 2 },
+    { label: 'Power Factor',  value: fields.PF,     unit: 'cos(\u03C6)',   decimals: 2 },
   ];
 
   const dcMetrics = [
     { label: 'DC Voltage', value: fields.DCV, unit: 'V', decimals: 1 },
     { label: 'DC Current', value: fields.DCA, unit: 'A', decimals: 2 },
-    { label: 'DC Power', value: fields.DCW, unit: 'W', decimals: 0 },
+    { label: 'DC Power',   value: fields.DCW, unit: 'W', decimals: 0 },
   ];
 
   return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <BoltIcon sx={{ color: isGenerating ? 'success.main' : 'text.disabled' }} />
-            <Typography variant="h6" sx={{ color: 'primary.main' }}>
-              Power
-            </Typography>
-          </Stack>
-          <Typography variant="caption" sx={{ color: state.color, fontWeight: 600 }}>
-            {state.label}
-          </Typography>
-        </Stack>
+    <Card style={{ height: '100%' }}>
+      <CardBody>
+        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} style={{ marginBottom: '1rem' }}>
+          <FlexItem>
+            <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <BoltIcon style={{ color: isGenerating ? C.success : C.disabled }} />
+              </FlexItem>
+              <FlexItem>
+                <span style={{ fontWeight: 600, color: C.primary }}>Power</span>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+          <FlexItem>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: state.color }}>
+              {state.label}
+            </span>
+          </FlexItem>
+        </Flex>
 
         {isLoading ? (
-          <MetricsSkeleton count={isMobile ? 2 : 6} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[...Array(6)].map((_, i) => <Skeleton key={i} height="1.5rem" />)}
+          </div>
         ) : isError ? (
-          <Alert severity="warning" variant="outlined">
-            Unable to read inverter data
-          </Alert>
+          <Alert variant="warning" isInline title="Unable to read inverter data" />
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {/* Primary metrics - always visible */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             {primaryMetrics.map((m) => (
               <MetricRow key={m.label} label={m.label} value={formatValue(m.value, m.unit, m.decimals)} primary />
             ))}
-
-            {/* Secondary + DC metrics - hidden on mobile */}
-            {!isMobile && (
+            {secondaryMetrics.map((m) => (
+              <MetricRow key={m.label} label={m.label} value={formatValue(m.value, m.unit, m.decimals)} />
+            ))}
+            {dcMetrics.some((m) => m.value != null) && (
               <>
-                {secondaryMetrics.map((m) => (
+                <span style={{ fontSize: '0.75rem', color: C.subtle, marginTop: '0.5rem', marginBottom: '0.25rem' }}>
+                  DC Side
+                </span>
+                {dcMetrics.map((m) => (
                   <MetricRow key={m.label} label={m.label} value={formatValue(m.value, m.unit, m.decimals)} />
                 ))}
-                {dcMetrics.some((m) => m.value != null) && (
-                  <>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, mb: 0.5 }}>
-                      DC Side
-                    </Typography>
-                    {dcMetrics.map((m) => (
-                      <MetricRow key={m.label} label={m.label} value={formatValue(m.value, m.unit, m.decimals)} />
-                    ))}
-                  </>
-                )}
               </>
             )}
-          </Box>
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
 
 function MetricRow({ label, value, primary = false }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography
-        variant={primary ? 'subtitle1' : 'body2'}
-        sx={{ fontWeight: primary ? 700 : 500, fontFamily: 'monospace' }}
-      >
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <span style={{ fontSize: '0.875rem', color: 'var(--pf-t--global--text-color--subtle, #6a6e73)' }}>{label}</span>
+      <span style={{
+        fontSize: primary ? '1rem' : '0.875rem',
+        fontWeight: primary ? 700 : 500,
+        fontFamily: 'monospace',
+      }}>
         {value}
-      </Typography>
-    </Box>
-  );
-}
-
-function MetricsSkeleton({ count }) {
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      {[...Array(count)].map((_, i) => (
-        <Skeleton key={i} variant="text" width="100%" height={24} />
-      ))}
-    </Box>
+      </span>
+    </div>
   );
 }
 

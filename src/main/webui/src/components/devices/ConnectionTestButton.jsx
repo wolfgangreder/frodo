@@ -15,12 +15,12 @@
  */
 
 import React from 'react';
-import { Button, CircularProgress } from '@mui/material';
-import WifiTetheringIcon from '@mui/icons-material/WifiTethering';
+import { Button, Spinner } from '@patternfly/react-core';
+import { WifiIcon } from '@patternfly/react-icons';
 
 /**
  * Connection test button component
- * 
+ *
  * @param {Object} props
  * @param {Function} props.onTest - Callback when test is clicked
  * @param {boolean} props.isTesting - Whether test is in progress
@@ -29,17 +29,10 @@ import WifiTetheringIcon from '@mui/icons-material/WifiTethering';
 function ConnectionTestButton({ onTest, isTesting = false, disabled = false }) {
   return (
     <Button
-      variant="outlined"
-      color="secondary"
+      variant="secondary"
       onClick={onTest}
-      disabled={disabled || isTesting}
-      startIcon={
-        isTesting ? (
-          <CircularProgress size={20} color="inherit" />
-        ) : (
-          <WifiTetheringIcon />
-        )
-      }
+      isDisabled={disabled || isTesting}
+      icon={isTesting ? <Spinner size="sm" /> : <WifiIcon />}
     >
       {isTesting ? 'Testing...' : 'Test Connection'}
     </Button>

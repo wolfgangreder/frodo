@@ -100,7 +100,7 @@ class SunSpecFieldDefinitionTest {
   @Test
   void testHasScaleFactorFalseEmpty() {
     SunSpecFieldDefinition field = new SunSpecFieldDefinition(
-      "test", 0, 1, SunSpecDataType.UINT16, null, "", false, "test");
+      "test", 0, 1, SunSpecDataType.UINT16, null, "", false, "test", 1.0);
     assertFalse(field.hasScaleFactor());
   }
 

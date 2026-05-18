@@ -31,13 +31,13 @@ export default {
     },
     size: {
       control: 'radio',
-      options: ['small', 'medium'],
-      description: 'Chip size',
+      options: ['sm', 'md'],
+      description: 'Label size',
     },
     variant: {
       control: 'radio',
-      options: ['outlined', 'filled'],
-      description: 'Chip variant',
+      options: ['outline', 'filled'],
+      description: 'Label variant',
     },
   },
 };
@@ -45,47 +45,47 @@ export default {
 export const Connected = {
   args: {
     status: 'CONNECTED',
-    size: 'small',
-    variant: 'outlined',
+    size: 'sm',
+    variant: 'outline',
   },
 };
 
 export const Disconnected = {
   args: {
     status: 'DISCONNECTED',
-    size: 'small',
-    variant: 'outlined',
+    size: 'sm',
+    variant: 'outline',
   },
 };
 
 export const Unknown = {
   args: {
     status: 'UNKNOWN',
-    size: 'small',
-    variant: 'outlined',
+    size: 'sm',
+    variant: 'outline',
   },
 };
 
 export const Connecting = {
   args: {
     status: 'CONNECTING',
-    size: 'small',
-    variant: 'outlined',
+    size: 'sm',
+    variant: 'outline',
   },
 };
 
 export const MediumSize = {
   args: {
     status: 'CONNECTED',
-    size: 'medium',
-    variant: 'outlined',
+    size: 'md',
+    variant: 'outline',
   },
 };
 
 export const FilledVariant = {
   args: {
     status: 'CONNECTED',
-    size: 'small',
+    size: 'sm',
     variant: 'filled',
   },
 };

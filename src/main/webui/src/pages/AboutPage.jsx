@@ -16,17 +16,30 @@
 
 import React from 'react';
 import {
-  Box,
   Card,
-  CardContent,
-  Typography,
-  Link,
+  CardBody,
   Divider,
   Grid,
-} from '@mui/material';
+  GridItem,
+} from '@patternfly/react-core';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader, LoadingSpinner } from '../components/common';
 import { systemApi } from '../services';
+
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #0066cc)',
+  subtle:  'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  link:    'var(--pf-t--global--color--brand--default, #0066cc)',
+};
+
+function InfoRow({ label, value }) {
+  return (
+    <div style={{ marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: '0.75rem', color: C.subtle }}>{label}</div>
+      <div style={{ fontSize: '0.875rem' }}>{value}</div>
+    </div>
+  );
+}
 
 /**
  * About page - application information and resources
@@ -38,117 +51,91 @@ function AboutPage() {
   });
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="About"
         subtitle="Information about Frodo PV Monitoring System"
       />
 
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 6 }}>
+      <Grid hasGutter>
+        <GridItem span={12} md={6}>
           <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+            <CardBody>
+              <h3 style={{ color: C.primary, marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>
                 Application
-              </Typography>
+              </h3>
               {isLoading ? (
                 <LoadingSpinner message="" size={24} />
               ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Name</Typography>
-                    <Typography variant="body1">{appInfo?.name || 'Frodo'}</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Version</Typography>
-                    <Typography variant="body1">{appInfo?.version || '0.0.0'}</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Description</Typography>
-                    <Typography variant="body1">
-                      {appInfo?.description || 'Modbus protocol connector for PV devices'}
-                    </Typography>
-                  </Box>
-                </Box>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <InfoRow label="Name" value={appInfo?.name || 'Frodo'} />
+                  <InfoRow label="Version" value={appInfo?.version || '0.0.0'} />
+                  <InfoRow label="Description" value={appInfo?.description || 'Modbus protocol connector for PV devices'} />
+                </div>
               )}
-            </CardContent>
+            </CardBody>
           </Card>
-        </Grid>
+        </GridItem>
 
-        <Grid size={{ xs: 12, md: 6 }}>
+        <GridItem span={12} md={6}>
           <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+            <CardBody>
+              <h3 style={{ color: C.primary, marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>
                 Technology Stack
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">Backend</Typography>
-                  <Typography variant="body2">Quarkus 3.x, Java 21</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">Frontend</Typography>
-                  <Typography variant="body2">React 19, MUI 6</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">Protocol</Typography>
-                  <Typography variant="body2">Modbus TCP, SunSpec</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">Database</Typography>
-                  <Typography variant="body2">FirebirdSQL</Typography>
-                </Box>
-              </Box>
-            </CardContent>
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {[
+                  { label: 'Backend',  value: 'Quarkus 3.x, Java 25' },
+                  { label: 'Frontend', value: 'React 19, PatternFly 6' },
+                  { label: 'Protocol', value: 'Modbus TCP, SunSpec' },
+                  { label: 'Database', value: 'FirebirdSQL' },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.875rem', color: C.subtle }}>{label}</span>
+                    <span style={{ fontSize: '0.875rem' }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
           </Card>
-        </Grid>
+        </GridItem>
 
-        <Grid size={{ xs: 12 }}>
+        <GridItem span={12}>
           <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+            <CardBody>
+              <h3 style={{ color: C.primary, marginTop: 0, marginBottom: '1rem', fontSize: '1rem' }}>
                 Resources
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Link
-                  href="/swagger-ui"
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ color: 'secondary.main' }}
-                >
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <a href="/swagger-ui" target="_blank" rel="noreferrer" style={{ color: C.link }}>
                   Swagger UI - Interactive API Documentation
-                </Link>
-                <Link
-                  href="/q/openapi"
-                  target="_blank"
-                  rel="noreferrer"
-                  sx={{ color: 'secondary.main' }}
-                >
+                </a>
+                <a href="/q/openapi" target="_blank" rel="noreferrer" style={{ color: C.link }}>
                   OpenAPI Specification (JSON)
-                </Link>
-                <Divider sx={{ my: 1 }} />
-                <Link
+                </a>
+                <Divider style={{ margin: '0.5rem 0' }} />
+                <a
                   href="https://sunspec.org/sunspec-modbus-specifications/"
                   target="_blank"
                   rel="noreferrer"
-                  sx={{ color: 'secondary.main' }}
+                  style={{ color: C.link }}
                 >
                   SunSpec Modbus Specifications
-                </Link>
-                <Link
+                </a>
+                <a
                   href="https://quarkus.io/guides/"
                   target="_blank"
                   rel="noreferrer"
-                  sx={{ color: 'secondary.main' }}
+                  style={{ color: C.link }}
                 >
                   Quarkus Documentation
-                </Link>
-              </Box>
-            </CardContent>
+                </a>
+              </div>
+            </CardBody>
           </Card>
-        </Grid>
+        </GridItem>
       </Grid>
-    </Box>
+    </div>
   );
 }
 

@@ -16,43 +16,42 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  Grid,
-  Typography,
-  Chip,
-  MenuItem,
-  TextField,
   Alert,
-} from '@mui/material';
+  Card,
+  CardBody,
+  Grid,
+  GridItem,
+  Label,
+  MenuToggle,
+  Select,
+  SelectOption,
+  Title,
+} from '@patternfly/react-core';
+import { NetworkWiredIcon } from '@patternfly/react-icons';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader, LoadingSpinner, ErrorDisplay, EmptyState } from '../components/common';
-import RouterIcon from '@mui/icons-material/Router';
+import { PageHeader, LoadingSpinner, ErrorDisplay, EmptyStateComponent } from '../components/common';
 import { DeviceDashboard } from '../components/dashboard';
 import { useDeviceList } from '../hooks';
 import { systemApi } from '../services';
 
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #73bcf7)',
+  info: 'var(--pf-t--global--icon--color--status--info--default, #2b9af3)',
+  subtle: 'var(--pf-t--global--text--color--subtle, #6a6e73)',
+};
+
 /**
  * Dashboard page - main overview of PV system status
- *
- * Shows a device selector (when multiple devices) and real-time
- * SunSpec dashboard cards for the selected device.
  */
 function DashboardPage() {
   const navigate = useNavigate();
 
-  // App info
-  const {
-    data: appInfo,
-    isLoading: isAppInfoLoading,
-  } = useQuery({
+  const { data: appInfo } = useQuery({
     queryKey: ['appInfo'],
     queryFn: systemApi.getInfo,
   });
 
-  // Device list
   const {
     data: devices,
     isLoading: isDevicesLoading,
@@ -61,13 +60,12 @@ function DashboardPage() {
     refetch: refetchDevices,
   } = useDeviceList();
 
-  // Selected device ID (stored in local state, persisted in sessionStorage)
   const [selectedDeviceId, setSelectedDeviceId] = useState(() => {
     const stored = sessionStorage.getItem('dashboard.selectedDeviceId');
     return stored ? Number(stored) : null;
   });
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
 
-  // Auto-select first enabled device when devices load
   useEffect(() => {
     if (devices && devices.length > 0 && selectedDeviceId == null) {
       const enabledDevice = devices.find((d) => d.enabled) || devices[0];
@@ -75,7 +73,6 @@ function DashboardPage() {
     }
   }, [devices, selectedDeviceId]);
 
-  // Persist selection
   useEffect(() => {
     if (selectedDeviceId != null) {
       sessionStorage.setItem('dashboard.selectedDeviceId', String(selectedDeviceId));
@@ -83,10 +80,11 @@ function DashboardPage() {
   }, [selectedDeviceId]);
 
   const selectedDevice = devices?.find((d) => d.id === selectedDeviceId) || null;
+  const selectedDeviceLabel = selectedDevice
+    ? `${selectedDevice.name}${!selectedDevice.enabled ? ' (disabled)' : ''}`
+    : 'Select device';
 
-  const isLoading = isDevicesLoading || isAppInfoLoading;
-
-  if (isLoading) {
+  if (isDevicesLoading) {
     return <LoadingSpinner message="Loading dashboard..." fullPage />;
   }
 
@@ -102,105 +100,113 @@ function DashboardPage() {
   }
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Dashboard"
         subtitle="Real-time PV system monitoring"
         actions={
           devices && devices.length > 1 ? (
-            <TextField
-              select
-              size="small"
-              label="Device"
-              value={selectedDeviceId || ''}
-              onChange={(e) => setSelectedDeviceId(Number(e.target.value))}
-              sx={{ minWidth: 200 }}
+            <Select
+              isOpen={isSelectOpen}
+              onOpenChange={setIsSelectOpen}
+              toggle={(ref) => (
+                <MenuToggle
+                  ref={ref}
+                  onClick={() => setIsSelectOpen(!isSelectOpen)}
+                  isExpanded={isSelectOpen}
+                  style={{ minWidth: 200 }}
+                >
+                  {selectedDeviceLabel}
+                </MenuToggle>
+              )}
+              onSelect={(_e, value) => {
+                setSelectedDeviceId(Number(value));
+                setIsSelectOpen(false);
+              }}
+              selected={selectedDeviceId != null ? String(selectedDeviceId) : ''}
             >
-              {devices.map((d) => (
-                <MenuItem key={d.id} value={d.id}>
+              {(devices || []).map((d) => (
+                <SelectOption key={d.id} value={String(d.id)}>
                   {d.name}{!d.enabled ? ' (disabled)' : ''}
-                </MenuItem>
+                </SelectOption>
               ))}
-            </TextField>
+            </Select>
           ) : null
         }
       />
 
-      {/* No devices configured */}
       {(!devices || devices.length === 0) ? (
-        <EmptyState
+        <EmptyStateComponent
           title="No Devices Configured"
           description="Add a Modbus device to start monitoring your PV system."
-          icon={<RouterIcon sx={{ fontSize: 48, opacity: 0.5 }} />}
+          icon={<NetworkWiredIcon style={{ fontSize: 48, opacity: 0.5 }} />}
           actionLabel="Go to Devices"
           onAction={() => navigate('/devices')}
         />
       ) : !selectedDevice ? (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          Select a device to view its dashboard.
-        </Alert>
+        <Alert variant="info" title="Select a device to view its dashboard." isInline style={{ marginTop: 16 }} />
       ) : !selectedDevice.enabled ? (
-        <Box>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            This device is disabled. Enable it in the device configuration to start monitoring.
-          </Alert>
+        <div>
+          <Alert
+            variant="warning"
+            title="This device is disabled. Enable it in the device configuration to start monitoring."
+            isInline
+            style={{ marginBottom: 16 }}
+          />
           <DeviceDashboard device={selectedDevice} />
-        </Box>
+        </div>
       ) : (
         <DeviceDashboard device={selectedDevice} />
       )}
 
-      {/* App info footer */}
-      <Grid container spacing={2} sx={{ mt: 3 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+      <Grid hasGutter style={{ marginTop: 24 }}>
+        <GridItem span={12} sm={6} md={4}>
           <Card>
-            <CardContent>
-              <Typography variant="subtitle2" color="primary.main" gutterBottom>
+            <CardBody>
+              <Title headingLevel="h3" size="md" style={{ color: C.primary, marginBottom: 8 }}>
                 Application
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">Name</Typography>
-                  <Typography variant="body2">{appInfo?.name || 'Frodo'}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" color="text.secondary">Version</Typography>
-                  <Chip label={appInfo?.version || '0.0.0'} size="small" color="primary" />
-                </Box>
-              </Box>
-            </CardContent>
+              </Title>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: C.subtle, fontSize: '0.875rem' }}>Name</span>
+                  <span style={{ fontSize: '0.875rem' }}>{appInfo?.name || 'Frodo'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: C.subtle, fontSize: '0.875rem' }}>Version</span>
+                  <Label color="blue">{appInfo?.version || '0.0.0'}</Label>
+                </div>
+              </div>
+            </CardBody>
           </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+        </GridItem>
+        <GridItem span={12} sm={6} md={4}>
           <Card>
-            <CardContent>
-              <Typography variant="subtitle2" color="primary.main" gutterBottom>
+            <CardBody>
+              <Title headingLevel="h3" size="md" style={{ color: C.primary, marginBottom: 8 }}>
                 Quick Links
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              </Title>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {[
                   { href: '/swagger-ui', label: 'Swagger UI' },
                   { href: '/q/metrics', label: 'Prometheus Metrics' },
                   { href: '/q/health', label: 'Health Check' },
                 ].map((link) => (
-                  <Typography
+                  <a
                     key={link.href}
-                    component="a"
                     href={link.href}
                     target="_blank"
                     rel="noreferrer"
-                    variant="body2"
-                    sx={{ color: 'secondary.main', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                    style={{ color: C.info, textDecoration: 'none', fontSize: '0.875rem' }}
                   >
                     {link.label}
-                  </Typography>
+                  </a>
                 ))}
-              </Box>
-            </CardContent>
+              </div>
+            </CardBody>
           </Card>
-        </Grid>
+        </GridItem>
       </Grid>
-    </Box>
+    </div>
   );
 }
 

@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
+import React from 'react';
 import { fn } from '@storybook/test';
-import EmptyState from './EmptyState';
-import DevicesIcon from '@mui/icons-material/Devices';
-import SearchIcon from '@mui/icons-material/Search';
+import EmptyStateComponent from './EmptyState';
+import { NetworkWiredIcon, SearchIcon } from '@patternfly/react-icons';
+// Note: EmptyStateComponent's `icon` prop expects a component type, not JSX.
 
 export default {
   title: 'Common/EmptyState',
-  component: EmptyState,
+  component: EmptyStateComponent,
   parameters: {
     layout: 'padded',
   },
@@ -68,7 +69,7 @@ export const WithCustomIcon = {
     title: 'No devices found',
     description: 'Try adjusting your search or add a new device.',
     actionLabel: 'Add Device',
-    icon: <DevicesIcon sx={{ fontSize: 48, opacity: 0.5 }} />,
+    icon: NetworkWiredIcon,
   },
 };
 
@@ -76,7 +77,7 @@ export const SearchResults = {
   args: {
     title: 'No results found',
     description: 'Try different search terms or clear your filters.',
-    icon: <SearchIcon sx={{ fontSize: 48, opacity: 0.5 }} />,
+    icon: SearchIcon,
   },
 };
 

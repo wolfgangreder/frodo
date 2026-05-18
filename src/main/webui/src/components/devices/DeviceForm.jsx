@@ -16,25 +16,32 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
   Button,
-  TextField,
-  FormControlLabel,
+  TextInput,
+  FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   Switch,
-  Box,
   Alert,
-  CircularProgress,
-  Typography,
+  Spinner,
   Divider,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import { CheckCircleIcon, ExclamationCircleIcon } from '@patternfly/react-icons';
 import ConnectionTestButton from './ConnectionTestButton';
+
+const C = {
+  primary: 'var(--pf-t--global--color--brand--default, #0066cc)',
+  success: 'var(--pf-t--global--color--status--success--default, #3e8635)',
+  danger:  'var(--pf-t--global--color--status--danger--default, #c9190b)',
+  subtle:  'var(--pf-t--global--text-color--subtle, #6a6e73)',
+};
 
 /**
  * Default form values for new device
@@ -49,7 +56,7 @@ const defaultFormValues = {
 
 /**
  * Device form dialog for creating/editing devices
- * 
+ *
  * @param {Object} props
  * @param {boolean} props.open - Whether dialog is open
  * @param {Function} props.onClose - Callback when dialog closes
@@ -66,13 +73,10 @@ function DeviceForm({
   isSubmitting = false,
   onTestConnection,
 }) {
-  const theme = useTheme();
-  const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  
   const [formValues, setFormValues] = useState(defaultFormValues);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors]         = useState({});
   const [testResult, setTestResult] = useState(null);
-  const [isTesting, setIsTesting] = useState(false);
+  const [isTesting, setIsTesting]   = useState(false);
 
   const isEditMode = !!device;
 
@@ -81,10 +85,10 @@ function DeviceForm({
     if (open) {
       if (device) {
         setFormValues({
-          name: device.name || '',
-          host: device.host || '',
-          port: device.port || 502,
-          unitId: device.unitId || 1,
+          name:    device.name    || '',
+          host:    device.host    || '',
+          port:    device.port    || 502,
+          unitId:  device.unitId  || 1,
           enabled: device.enabled ?? true,
         });
       } else {
@@ -100,91 +104,42 @@ function DeviceForm({
     setTestResult(null);
   }, [formValues.host, formValues.port, formValues.unitId]);
 
-  /**
-   * Handle input change
-   */
-  const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
-    setFormValues((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
-    // Clear error for this field
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: null }));
-    }
+  const setField = (name, value) => {
+    setFormValues((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
 
-  /**
-   * Handle number input change
-   */
-  const handleNumberChange = (event) => {
-    const { name, value } = event.target;
-    const numValue = value === '' ? '' : parseInt(value, 10);
-    setFormValues((prev) => ({
-      ...prev,
-      [name]: numValue,
-    }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: null }));
-    }
-  };
-
-  /**
-   * Validate form
-   */
   const validate = () => {
     const newErrors = {};
-
-    if (!formValues.name.trim()) {
-      newErrors.name = 'Name is required';
-    }
-
-    if (!formValues.host.trim()) {
-      newErrors.host = 'Host is required';
-    }
-
-    if (!formValues.port || formValues.port < 1 || formValues.port > 65535) {
+    if (!formValues.name.trim()) newErrors.name = 'Name is required';
+    if (!formValues.host.trim()) newErrors.host = 'Host is required';
+    if (!formValues.port || formValues.port < 1 || formValues.port > 65535)
       newErrors.port = 'Port must be between 1 and 65535';
-    }
-
-    if (formValues.unitId === '' || formValues.unitId < 1 || formValues.unitId > 247) {
+    if (formValues.unitId === '' || formValues.unitId < 1 || formValues.unitId > 247)
       newErrors.unitId = 'Unit ID must be between 1 and 247';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  /**
-   * Handle form submission
-   */
   const handleSubmit = (event) => {
     event.preventDefault();
     if (validate()) {
       onSubmit({
         ...formValues,
-        port: parseInt(formValues.port, 10),
+        port:   parseInt(formValues.port,   10),
         unitId: parseInt(formValues.unitId, 10),
       });
     }
   };
 
-  /**
-   * Handle connection test
-   */
   const handleTestConnection = async () => {
-    // Validate connection fields first
     const connectionErrors = {};
-    if (!formValues.host.trim()) {
+    if (!formValues.host.trim())
       connectionErrors.host = 'Host is required for testing';
-    }
-    if (!formValues.port || formValues.port < 1 || formValues.port > 65535) {
+    if (!formValues.port || formValues.port < 1 || formValues.port > 65535)
       connectionErrors.port = 'Valid port required for testing';
-    }
-    if (formValues.unitId === '' || formValues.unitId < 1 || formValues.unitId > 247) {
+    if (formValues.unitId === '' || formValues.unitId < 1 || formValues.unitId > 247)
       connectionErrors.unitId = 'Valid Unit ID required for testing';
-    }
 
     if (Object.keys(connectionErrors).length > 0) {
       setErrors((prev) => ({ ...prev, ...connectionErrors }));
@@ -196,8 +151,8 @@ function DeviceForm({
 
     try {
       const result = await onTestConnection({
-        host: formValues.host,
-        port: parseInt(formValues.port, 10),
+        host:   formValues.host,
+        port:   parseInt(formValues.port,   10),
         unitId: parseInt(formValues.unitId, 10),
       });
       setTestResult({ success: true, data: result });
@@ -211,182 +166,211 @@ function DeviceForm({
     }
   };
 
-  /**
-   * Check if connection params are valid for testing
-   */
-  const canTest = formValues.host.trim() && 
+  const canTest =
+    formValues.host.trim() &&
     formValues.port >= 1 && formValues.port <= 65535 &&
     formValues.unitId >= 1 && formValues.unitId <= 247;
 
   return (
-    <Dialog
-      open={open}
+    <Modal
+      isOpen={open}
       onClose={onClose}
-      fullScreen={fullScreen}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        component: 'form',
-        onSubmit: handleSubmit,
-      }}
+      variant="medium"
+      aria-labelledby="device-form-title"
     >
-      <DialogTitle>
-        {isEditMode ? 'Edit Device' : 'Add New Device'}
-      </DialogTitle>
+      <ModalHeader title={isEditMode ? 'Edit Device' : 'Add New Device'} labelId="device-form-title" />
+      <ModalBody>
+        <form id="device-form" onSubmit={handleSubmit}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingTop: '0.5rem' }}>
 
-      <DialogContent dividers>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
-          {/* Device Name */}
-          <TextField
-            name="name"
-            label="Device Name"
-            value={formValues.name}
-            onChange={handleChange}
-            error={!!errors.name}
-            helperText={errors.name || 'A friendly name for this device'}
-            fullWidth
-            required
-            autoFocus
-          />
-
-          <Divider>
-            <Typography variant="caption" color="text.secondary">
-              Connection Settings
-            </Typography>
-          </Divider>
-
-          {/* Host */}
-          <TextField
-            name="host"
-            label="Host / IP Address"
-            value={formValues.host}
-            onChange={handleChange}
-            error={!!errors.host}
-            helperText={errors.host || 'Hostname or IP address of the Modbus device'}
-            fullWidth
-            required
-            placeholder="192.168.1.100 or inverter.local"
-          />
-
-          {/* Port and Unit ID row */}
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField
-              name="port"
-              label="Port"
-              type="number"
-              value={formValues.port}
-              onChange={handleNumberChange}
-              error={!!errors.port}
-              helperText={errors.port || 'Modbus TCP port'}
-              sx={{ flex: 1 }}
-              required
-              inputProps={{ min: 1, max: 65535 }}
-            />
-            <TextField
-              name="unitId"
-              label="Unit ID"
-              type="number"
-              value={formValues.unitId}
-              onChange={handleNumberChange}
-              error={!!errors.unitId}
-              helperText={errors.unitId || 'Modbus slave ID (1-247)'}
-              sx={{ flex: 1 }}
-              required
-              inputProps={{ min: 1, max: 247 }}
-            />
-          </Box>
-
-          {/* Connection Test */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <ConnectionTestButton
-              onTest={handleTestConnection}
-              isTesting={isTesting}
-              disabled={!canTest}
-            />
-            {testResult && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {testResult.success ? (
-                  <>
-                    <CheckCircleIcon color="success" />
-                    <Typography variant="body2" color="success.main">
-                      Connection successful
-                    </Typography>
-                  </>
-                ) : (
-                  <>
-                    <ErrorIcon color="error" />
-                    <Typography variant="body2" color="error.main">
-                      {testResult.error}
-                    </Typography>
-                  </>
-                )}
-              </Box>
-            )}
-          </Box>
-
-          {/* Device Info from test */}
-          {testResult?.success && testResult.data?.manufacturer && (
-            <Alert severity="success" sx={{ mt: 1 }}>
-              <Typography variant="body2">
-                <strong>Detected:</strong> {testResult.data.manufacturer}
-                {testResult.data.modelName && ` - ${testResult.data.modelName}`}
-              </Typography>
-              {testResult.data.detectionMethod && (
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Protocol: {testResult.data.detectionMethod} | Response: {testResult.data.responseTimeMs}ms
-                </Typography>
-              )}
-            </Alert>
-          )}
-
-          {/* Successful connection without manufacturer info */}
-          {testResult?.success && !testResult.data?.manufacturer && testResult.data?.detectionMethod && (
-            <Alert severity="success" sx={{ mt: 1 }}>
-              <Typography variant="body2">
-                <strong>Protocol:</strong> {testResult.data.detectionMethod}
-              </Typography>
-              {testResult.data.responseTimeMs && (
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Response: {testResult.data.responseTimeMs}ms
-                </Typography>
-              )}
-            </Alert>
-          )}
-
-          <Divider />
-
-          {/* Enabled toggle */}
-          <FormControlLabel
-            control={
-              <Switch
-                name="enabled"
-                checked={formValues.enabled}
-                onChange={handleChange}
-                color="primary"
+            {/* Device Name */}
+            <FormGroup label="Device Name" fieldId="device-name" isRequired>
+              <TextInput
+                id="device-name"
+                value={formValues.name}
+                onChange={(_event, value) => setField('name', value)}
+                validated={errors.name ? 'error' : 'default'}
+                required
+                autoFocus
+                aria-label="Device name"
               />
-            }
-            label="Device Enabled"
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
-            Disabled devices will not be monitored or polled
-          </Typography>
-        </Box>
-      </DialogContent>
+              <FormHelperText>
+                <HelperText>
+                  <HelperTextItem variant={errors.name ? 'error' : 'default'}>
+                    {errors.name || 'A friendly name for this device'}
+                  </HelperTextItem>
+                </HelperText>
+              </FormHelperText>
+            </FormGroup>
 
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} disabled={isSubmitting}>
-          Cancel
-        </Button>
+            <Divider>
+              <span style={{ fontSize: '0.75rem', color: C.subtle }}>Connection Settings</span>
+            </Divider>
+
+            {/* Host */}
+            <FormGroup label="Host / IP Address" fieldId="device-host" isRequired>
+              <TextInput
+                id="device-host"
+                value={formValues.host}
+                onChange={(_event, value) => setField('host', value)}
+                validated={errors.host ? 'error' : 'default'}
+                placeholder="192.168.1.100 or inverter.local"
+                required
+                aria-label="Host or IP address"
+              />
+              <FormHelperText>
+                <HelperText>
+                  <HelperTextItem variant={errors.host ? 'error' : 'default'}>
+                    {errors.host || 'Hostname or IP address of the Modbus device'}
+                  </HelperTextItem>
+                </HelperText>
+              </FormHelperText>
+            </FormGroup>
+
+            {/* Port and Unit ID row */}
+            <Flex gap={{ default: 'gapMd' }}>
+              <FlexItem grow={{ default: 'grow' }}>
+                <FormGroup label="Port" fieldId="device-port" isRequired>
+                  <TextInput
+                    id="device-port"
+                    type="number"
+                    value={String(formValues.port)}
+                    onChange={(_event, value) => setField('port', value === '' ? '' : parseInt(value, 10))}
+                    validated={errors.port ? 'error' : 'default'}
+                    min={1}
+                    max={65535}
+                    required
+                    aria-label="Modbus TCP port"
+                  />
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem variant={errors.port ? 'error' : 'default'}>
+                        {errors.port || 'Modbus TCP port'}
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                </FormGroup>
+              </FlexItem>
+              <FlexItem grow={{ default: 'grow' }}>
+                <FormGroup label="Unit ID" fieldId="device-unit-id" isRequired>
+                  <TextInput
+                    id="device-unit-id"
+                    type="number"
+                    value={String(formValues.unitId)}
+                    onChange={(_event, value) => setField('unitId', value === '' ? '' : parseInt(value, 10))}
+                    validated={errors.unitId ? 'error' : 'default'}
+                    min={1}
+                    max={247}
+                    required
+                    aria-label="Modbus slave unit ID"
+                  />
+                  <FormHelperText>
+                    <HelperText>
+                      <HelperTextItem variant={errors.unitId ? 'error' : 'default'}>
+                        {errors.unitId || 'Modbus slave ID (1-247)'}
+                      </HelperTextItem>
+                    </HelperText>
+                  </FormHelperText>
+                </FormGroup>
+              </FlexItem>
+            </Flex>
+
+            {/* Connection Test */}
+            <Flex gap={{ default: 'gapMd' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <ConnectionTestButton
+                  onTest={handleTestConnection}
+                  isTesting={isTesting}
+                  disabled={!canTest}
+                />
+              </FlexItem>
+              {testResult && (
+                <FlexItem>
+                  <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+                    <FlexItem>
+                      {testResult.success
+                        ? <CheckCircleIcon style={{ color: C.success }} />
+                        : <ExclamationCircleIcon style={{ color: C.danger }} />
+                      }
+                    </FlexItem>
+                    <FlexItem>
+                      <span style={{ fontSize: '0.875rem', color: testResult.success ? C.success : C.danger }}>
+                        {testResult.success ? 'Connection successful' : testResult.error}
+                      </span>
+                    </FlexItem>
+                  </Flex>
+                </FlexItem>
+              )}
+            </Flex>
+
+            {/* Device info from test */}
+            {testResult?.success && testResult.data?.manufacturer && (
+              <Alert variant="success" isInline title="Device detected">
+                <p style={{ fontSize: '0.875rem' }}>
+                  <strong>Detected:</strong> {testResult.data.manufacturer}
+                  {testResult.data.modelName && ` - ${testResult.data.modelName}`}
+                </p>
+                {testResult.data.detectionMethod && (
+                  <p style={{ fontSize: '0.75rem', color: C.subtle }}>
+                    Protocol: {testResult.data.detectionMethod} | Response: {testResult.data.responseTimeMs}ms
+                  </p>
+                )}
+              </Alert>
+            )}
+
+            {testResult?.success && !testResult.data?.manufacturer && testResult.data?.detectionMethod && (
+              <Alert variant="success" isInline title="Connection succeeded">
+                <p style={{ fontSize: '0.875rem' }}>
+                  <strong>Protocol:</strong> {testResult.data.detectionMethod}
+                </p>
+                {testResult.data.responseTimeMs && (
+                  <p style={{ fontSize: '0.75rem', color: C.subtle }}>
+                    Response: {testResult.data.responseTimeMs}ms
+                  </p>
+                )}
+              </Alert>
+            )}
+
+            <Divider />
+
+            {/* Enabled toggle */}
+            <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <div>
+                  <div style={{ fontSize: '0.875rem' }}>Device Enabled</div>
+                  <div style={{ fontSize: '0.75rem', color: C.subtle }}>
+                    Disabled devices will not be monitored or polled
+                  </div>
+                </div>
+              </FlexItem>
+              <FlexItem>
+                <Switch
+                  id="device-enabled"
+                  isChecked={formValues.enabled}
+                  onChange={(_event, checked) => setField('enabled', checked)}
+                  hasCheckIcon
+                />
+              </FlexItem>
+            </Flex>
+
+          </div>
+        </form>
+      </ModalBody>
+      <ModalFooter>
         <Button
+          variant="primary"
+          form="device-form"
           type="submit"
-          variant="contained"
-          disabled={isSubmitting}
-          startIcon={isSubmitting && <CircularProgress size={20} />}
+          isDisabled={isSubmitting}
+          icon={isSubmitting ? <Spinner size="sm" /> : undefined}
         >
           {isSubmitting ? 'Saving...' : isEditMode ? 'Save Changes' : 'Add Device'}
         </Button>
-      </DialogActions>
-    </Dialog>
+        <Button variant="link" onClick={onClose} isDisabled={isSubmitting}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 

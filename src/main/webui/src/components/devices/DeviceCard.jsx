@@ -17,27 +17,39 @@
 import React from 'react';
 import {
   Card,
-  CardContent,
-  CardActions,
-  Typography,
-  Box,
-  Chip,
-  IconButton,
+  CardBody,
+  CardFooter,
+  Label,
+  Button,
   Tooltip,
   Divider,
-} from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import InfoIcon from '@mui/icons-material/Info';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import TimelineIcon from '@mui/icons-material/Timeline';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import RouterIcon from '@mui/icons-material/Router';
+  Flex,
+  FlexItem,
+} from '@patternfly/react-core';
+import {
+  PencilAltIcon,
+  TrashIcon,
+  InfoCircleIcon,
+  SyncAltIcon,
+  ChartLineIcon,
+  TachometerAltIcon,
+  NetworkWiredIcon,
+} from '@patternfly/react-icons';
 import { StatusChip } from '../common';
+
+// PF v6 design token CSS variable references
+const C = {
+  primary:  'var(--pf-t--global--color--brand--default, #0066cc)',
+  subtle:   'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  disabled: 'var(--pf-t--global--text-color--disabled, #b8bbbe)',
+  danger:   'var(--pf-t--global--color--status--danger--default, #c9190b)',
+  success:  'var(--pf-t--global--color--status--success--default, #3e8635)',
+  warning:  'var(--pf-t--global--color--status--warning--default, #f0ab00)',
+};
 
 /**
  * Device card component for mobile view
- * 
+ *
  * @param {Object} props
  * @param {Object} props.device - Device data
  * @param {Function} props.onEdit - Callback when edit is clicked
@@ -59,115 +71,95 @@ function DeviceCard({
   isRefreshing = false,
 }) {
   return (
-    <Card
-      sx={{
-        bgcolor: 'background.paper',
-        opacity: device.enabled ? 1 : 0.7,
-      }}
-    >
-      <CardContent sx={{ pb: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-          <RouterIcon
-            sx={{
-              fontSize: 40,
-              color: device.enabled ? 'primary.main' : 'text.disabled',
-              mr: 2,
-            }}
-          />
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h6" component="div">
-              {device.name}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {device.host}:{device.port} (Unit {device.unitId})
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-end' }}>
-            <StatusChip status={device.connectionStatus} />
-            <Chip
-              label={device.enabled ? 'Enabled' : 'Disabled'}
-              color={device.enabled ? 'primary' : 'default'}
-              size="small"
-              variant={device.enabled ? 'filled' : 'outlined'}
+    <Card style={{ opacity: device.enabled ? 1 : 0.7 }}>
+      <CardBody>
+        <Flex alignItems={{ default: 'alignItemsFlexStart' }} style={{ marginBottom: '1rem' }}>
+          <FlexItem>
+            <NetworkWiredIcon
+              style={{
+                fontSize: 40,
+                color: device.enabled ? C.primary : C.disabled,
+                marginRight: '0.75rem',
+              }}
             />
-          </Box>
-        </Box>
+          </FlexItem>
+          <FlexItem grow={{ default: 'grow' }}>
+            <div style={{ fontWeight: 600, fontSize: '1rem' }}>{device.name}</div>
+            <div style={{ fontSize: '0.875rem', color: C.subtle }}>
+              {device.host}:{device.port} (Unit {device.unitId})
+            </div>
+          </FlexItem>
+          <FlexItem>
+            <Flex flexDirection={{ default: 'column' }} gap={{ default: 'gapXs' }} alignItems={{ default: 'alignItemsFlexEnd' }}>
+              <FlexItem><StatusChip status={device.connectionStatus} /></FlexItem>
+              <FlexItem>
+                <Label
+                  color={device.enabled ? 'blue' : 'grey'}
+                  variant={device.enabled ? 'filled' : 'outline'}
+                >
+                  {device.enabled ? 'Enabled' : 'Disabled'}
+                </Label>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+        </Flex>
 
         {device.manufacturer && (
-          <Box sx={{ mt: 1 }}>
-            <Typography variant="caption" color="text.secondary">
-              {device.manufacturer}
-              {device.modelName && ` - ${device.modelName}`}
-            </Typography>
-          </Box>
+          <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: C.subtle }}>
+            {device.manufacturer}
+            {device.modelName && ` - ${device.modelName}`}
+          </div>
         )}
-      </CardContent>
+      </CardBody>
 
       <Divider />
 
-      <CardActions sx={{ justifyContent: 'flex-end' }}>
-        <Tooltip title="Device Dashboard">
-          <IconButton
-            size="small"
-            onClick={() => onDashboard?.(device)}
-            color="success"
-            aria-label={`Open dashboard for ${device.name}`}
-          >
-            <DashboardIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Metrics Configuration">
-          <IconButton
-            size="small"
-            onClick={() => onMetrics?.(device)}
-            color="warning"
-            aria-label={`Configure metrics for ${device.name}`}
-          >
-            <TimelineIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="View Device Info">
-          <IconButton
-            size="small"
-            onClick={() => onViewInfo?.(device)}
-            color="info"
-            aria-label={`View info for ${device.name}`}
-          >
-            <InfoIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Refresh Device Info">
-          <IconButton
-            size="small"
-            onClick={() => onRefreshInfo?.(device)}
-            disabled={isRefreshing}
-            color="secondary"
-            aria-label={`Refresh info for ${device.name}`}
-          >
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Edit Device">
-          <IconButton
-            size="small"
-            onClick={() => onEdit?.(device)}
-            color="primary"
-            aria-label={`Edit ${device.name}`}
-          >
-            <EditIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Delete Device">
-          <IconButton
-            size="small"
-            onClick={() => onDelete?.(device)}
-            color="error"
-            aria-label={`Delete ${device.name}`}
-          >
-            <DeleteIcon />
-          </IconButton>
-        </Tooltip>
-      </CardActions>
+      <CardFooter>
+        <Flex gap={{ default: 'gapXs' }} justifyContent={{ default: 'justifyContentFlexEnd' }}>
+          <FlexItem>
+            <Tooltip content="Device Dashboard">
+              <Button variant="plain" size="sm" onClick={() => onDashboard?.(device)} aria-label={`Open dashboard for ${device.name}`}>
+                <TachometerAltIcon style={{ color: C.success }} />
+              </Button>
+            </Tooltip>
+          </FlexItem>
+          <FlexItem>
+            <Tooltip content="Metrics Configuration">
+              <Button variant="plain" size="sm" onClick={() => onMetrics?.(device)} aria-label={`Configure metrics for ${device.name}`}>
+                <ChartLineIcon style={{ color: C.warning }} />
+              </Button>
+            </Tooltip>
+          </FlexItem>
+          <FlexItem>
+            <Tooltip content="View Device Info">
+              <Button variant="plain" size="sm" onClick={() => onViewInfo?.(device)} aria-label={`View info for ${device.name}`}>
+                <InfoCircleIcon style={{ color: 'var(--pf-t--global--color--status--info--default, #0066cc)' }} />
+              </Button>
+            </Tooltip>
+          </FlexItem>
+          <FlexItem>
+            <Tooltip content="Refresh Device Info">
+              <Button variant="plain" size="sm" onClick={() => onRefreshInfo?.(device)} isDisabled={isRefreshing} aria-label={`Refresh info for ${device.name}`}>
+                <SyncAltIcon style={{ color: C.subtle }} />
+              </Button>
+            </Tooltip>
+          </FlexItem>
+          <FlexItem>
+            <Tooltip content="Edit Device">
+              <Button variant="plain" size="sm" onClick={() => onEdit?.(device)} aria-label={`Edit ${device.name}`}>
+                <PencilAltIcon style={{ color: C.primary }} />
+              </Button>
+            </Tooltip>
+          </FlexItem>
+          <FlexItem>
+            <Tooltip content="Delete Device">
+              <Button variant="plain" size="sm" onClick={() => onDelete?.(device)} aria-label={`Delete ${device.name}`}>
+                <TrashIcon style={{ color: C.danger }} />
+              </Button>
+            </Tooltip>
+          </FlexItem>
+        </Flex>
+      </CardFooter>
     </Card>
   );
 }

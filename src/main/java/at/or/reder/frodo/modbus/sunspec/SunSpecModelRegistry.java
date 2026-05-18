@@ -148,7 +148,7 @@ public final class SunSpecModelRegistry {
     fields.add(readOnly("Hz", 22, 2, FLOAT32, "Hz", "Line Frequency"));
     fields.add(readOnly("VA", 24, 2, FLOAT32, "VA", "AC Apparent Power"));
     fields.add(readOnly("VAr", 26, 2, FLOAT32, "var", "AC Reactive Power"));
-    fields.add(readOnly("PF", 28, 2, FLOAT32, "Pct", "AC Power Factor"));
+    fields.add(readOnlyWithFactor("PF", 28, 2, FLOAT32, "cos()", "AC Power Factor", 0.01));
     fields.add(readOnly("WH", 30, 2, FLOAT32, "Wh", "AC Energy"));
     fields.add(readOnly("DCA", 32, 2, FLOAT32, "A", "DC Current"));
     fields.add(readOnly("DCV", 34, 2, FLOAT32, "V", "DC Voltage"));
@@ -199,7 +199,7 @@ public final class SunSpecModelRegistry {
     fields.add(readOnly("VA_SF", 17, 1, SUNSSF, null, "Apparent power scale factor"));
     fields.add(readOnlyScaled("VAr", 18, 1, INT16, "var", "VAr_SF", "AC Reactive Power"));
     fields.add(readOnly("VAr_SF", 19, 1, SUNSSF, null, "Reactive power scale factor"));
-    fields.add(readOnlyScaled("PF", 20, 1, INT16, "Pct", "PF_SF", "AC Power Factor"));
+    fields.add(readOnlyScaledWithFactor("PF", 20, 1, INT16, "cos()", "PF_SF", "AC Power Factor", 0.01));
     fields.add(readOnly("PF_SF", 21, 1, SUNSSF, null, "Power factor scale factor"));
     fields.add(readOnlyScaled("WH", 22, 2, ACC32, "Wh", "WH_SF", "AC Energy"));
     fields.add(readOnly("WH_SF", 24, 1, SUNSSF, null, "Energy scale factor"));

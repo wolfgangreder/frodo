@@ -17,67 +17,58 @@
 import React, { useMemo } from 'react';
 import {
   Card,
-  CardContent,
-  Box,
-  Typography,
-  Skeleton,
+  CardBody,
   Alert,
-  Stack,
-  LinearProgress,
-} from '@mui/material';
-import BatteryChargingFullIcon from '@mui/icons-material/BatteryChargingFull';
-import Battery60Icon from '@mui/icons-material/Battery60';
-import Battery20Icon from '@mui/icons-material/Battery20';
-import BatteryFullIcon from '@mui/icons-material/BatteryFull';
-import BatteryAlertIcon from '@mui/icons-material/BatteryAlert';
+  Skeleton,
+  Flex,
+  FlexItem,
+  Progress,
+  ProgressSize,
+  ProgressVariant,
+  Divider,
+} from '@patternfly/react-core';
+import { BoltIcon, ExclamationTriangleIcon } from '@patternfly/react-icons';
+
+// PF v6 design token CSS variable references
+const C = {
+  primary:   'var(--pf-t--global--color--brand--default, #0066cc)',
+  success:   'var(--pf-t--global--color--status--success--default, #3e8635)',
+  warning:   'var(--pf-t--global--color--status--warning--default, #f0ab00)',
+  danger:    'var(--pf-t--global--color--status--danger--default, #c9190b)',
+  info:      'var(--pf-t--global--color--status--info--default, #0066cc)',
+  subtle:    'var(--pf-t--global--text-color--subtle, #6a6e73)',
+  disabled:  'var(--pf-t--global--text-color--disabled, #b8bbbe)',
+};
 
 /**
- * Returns a battery icon based on charge state percentage
- */
-function getBatteryIcon(soc, isCharging) {
-  if (soc == null) return <BatteryAlertIcon sx={{ color: 'text.disabled' }} />;
-  if (isCharging) return <BatteryChargingFullIcon sx={{ color: 'success.main' }} />;
-  if (soc >= 80) return <BatteryFullIcon sx={{ color: 'success.main' }} />;
-  if (soc >= 30) return <Battery60Icon sx={{ color: 'warning.main' }} />;
-  if (soc >= 10) return <Battery20Icon sx={{ color: 'warning.main' }} />;
-  return <BatteryAlertIcon sx={{ color: 'error.main' }} />;
-}
-
-/**
- * Maps charge status enum to display label
+ * Maps charge status enum to display label and color
  */
 function getChargeStatus(chaSt) {
-  if (chaSt == null) return { label: 'Unknown', color: 'text.disabled' };
+  if (chaSt == null) return { label: 'Unknown', color: C.disabled };
   const map = {
-    1: { label: 'Off', color: 'text.disabled' },
-    2: { label: 'Empty', color: 'error.main' },
-    3: { label: 'Discharging', color: 'warning.main' },
-    4: { label: 'Charging', color: 'success.main' },
-    5: { label: 'Full', color: 'success.main' },
-    6: { label: 'Holding', color: 'info.main' },
-    7: { label: 'Testing', color: 'info.main' },
+    1: { label: 'Off',          color: C.disabled },
+    2: { label: 'Empty',        color: C.danger },
+    3: { label: 'Discharging',  color: C.warning },
+    4: { label: 'Charging',     color: C.success },
+    5: { label: 'Full',         color: C.success },
+    6: { label: 'Holding',      color: C.info },
+    7: { label: 'Testing',      color: C.info },
   };
-  return map[chaSt] || { label: `Status ${chaSt}`, color: 'text.secondary' };
+  return map[chaSt] || { label: `Status ${chaSt}`, color: C.subtle };
 }
 
 /**
- * Returns the progress bar color based on SoC level
+ * Returns the progress bar variant based on SoC level
  */
-function getSocColor(soc) {
-  if (soc == null) return 'inherit';
-  if (soc >= 60) return 'success';
-  if (soc >= 20) return 'warning';
-  return 'error';
+function getSocVariant(soc) {
+  if (soc == null) return ProgressVariant.danger;
+  if (soc >= 60) return ProgressVariant.success;
+  if (soc >= 20) return ProgressVariant.warning;
+  return ProgressVariant.danger;
 }
 
 /**
  * BatteryStatusCard - shows battery state of charge, voltage, current, status
- *
- * @param {Object} props
- * @param {Object} props.storageData - SunSpec Storage model (124) response
- * @param {boolean} props.isLoading - Whether data is still loading
- * @param {boolean} props.isError - Whether a fetch error occurred
- * @param {boolean} props.hasStorage - Whether the device has a storage model
  */
 function BatteryStatusCard({ storageData, isLoading, isError, hasStorage = true }) {
   const fields = storageData?.fields || {};
@@ -91,68 +82,65 @@ function BatteryStatusCard({ storageData, isLoading, isError, hasStorage = true 
 
   if (!hasStorage) {
     return (
-      <Card sx={{ height: '100%' }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ color: 'primary.main', mb: 1 }}>
-            Battery
-          </Typography>
-          <Alert severity="info" variant="outlined">
-            No battery/storage system detected on this device.
-          </Alert>
-        </CardContent>
+      <Card style={{ height: '100%' }}>
+        <CardBody>
+          <span style={{ fontWeight: 600, color: C.primary, display: 'block', marginBottom: '0.5rem' }}>Battery</span>
+          <Alert variant="info" isInline title="No battery/storage system detected on this device." />
+        </CardBody>
       </Card>
     );
   }
 
   return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            {getBatteryIcon(soc, isCharging)}
-            <Typography variant="h6" sx={{ color: 'primary.main' }}>
-              Battery
-            </Typography>
-          </Stack>
-          <Typography variant="caption" sx={{ color: chargeStatus.color, fontWeight: 600 }}>
-            {chargeStatus.label}
-          </Typography>
-        </Stack>
+    <Card style={{ height: '100%' }}>
+      <CardBody>
+        <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} alignItems={{ default: 'alignItemsCenter' }} style={{ marginBottom: '1rem' }}>
+          <FlexItem>
+            <Flex gap={{ default: 'gapSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+              <FlexItem>
+                <BoltIcon style={{ color: isCharging ? C.success : C.disabled }} />
+              </FlexItem>
+              <FlexItem>
+                <span style={{ fontWeight: 600, color: C.primary }}>Battery</span>
+              </FlexItem>
+            </Flex>
+          </FlexItem>
+          <FlexItem>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: chargeStatus.color }}>
+              {chargeStatus.label}
+            </span>
+          </FlexItem>
+        </Flex>
 
         {isLoading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Skeleton variant="rectangular" height={20} />
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} variant="text" width="100%" height={24} />
-            ))}
-          </Box>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <Skeleton height="1.25rem" />
+            {[...Array(3)].map((_, i) => <Skeleton key={i} height="1.5rem" />)}
+          </div>
         ) : isError ? (
-          <Alert severity="warning" variant="outlined">
-            Unable to read battery data
-          </Alert>
+          <Alert variant="warning" isInline title="Unable to read battery data" />
         ) : (
-          <Box>
-            {/* SoC progress bar */}
+          <div>
             {soc != null && (
-              <Box sx={{ mb: 2 }}>
-                <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    State of Charge
-                  </Typography>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
-                    {soc.toFixed(1)}%
-                  </Typography>
-                </Stack>
-                <LinearProgress
-                  variant="determinate"
+              <div style={{ marginBottom: '1rem' }}>
+                <Flex justifyContent={{ default: 'justifyContentSpaceBetween' }} style={{ marginBottom: '0.25rem' }}>
+                  <FlexItem>
+                    <span style={{ fontSize: '0.875rem', color: C.subtle }}>State of Charge</span>
+                  </FlexItem>
+                  <FlexItem>
+                    <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{soc.toFixed(1)}%</span>
+                  </FlexItem>
+                </Flex>
+                <Progress
                   value={Math.min(soc, 100)}
-                  color={getSocColor(soc)}
-                  sx={{ height: 10, borderRadius: 5 }}
+                  variant={getSocVariant(soc)}
+                  size={ProgressSize.sm}
+                  aria-label="Battery state of charge"
                 />
-              </Box>
+              </div>
             )}
 
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
               {batteryV != null && (
                 <MetricRow label="Battery Voltage" value={`${batteryV.toFixed(1)} V`} />
               )}
@@ -162,24 +150,20 @@ function BatteryStatusCard({ storageData, isLoading, isError, hasStorage = true 
               {minReserve != null && (
                 <MetricRow label="Min. Reserve" value={`${minReserve.toFixed(1)}%`} />
               )}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
-      </CardContent>
+      </CardBody>
     </Card>
   );
 }
 
 function MetricRow({ label, value }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 500, fontFamily: 'monospace' }}>
-        {value}
-      </Typography>
-    </Box>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <span style={{ fontSize: '0.875rem', color: 'var(--pf-t--global--text-color--subtle, #6a6e73)' }}>{label}</span>
+      <span style={{ fontSize: '0.875rem', fontWeight: 500, fontFamily: 'monospace' }}>{value}</span>
+    </div>
   );
 }
 

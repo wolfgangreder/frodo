@@ -15,40 +15,36 @@
  */
 
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Flex, FlexItem, Content } from '@patternfly/react-core';
 
 /**
  * Page header component with title and optional actions
  */
-function PageHeader({ title, subtitle, actions, sx = {} }) {
+function PageHeader({ title, subtitle, actions, style = {} }) {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: { xs: 'column', sm: 'row' },
-        alignItems: { xs: 'flex-start', sm: 'center' },
-        justifyContent: 'space-between',
-        gap: 2,
-        mb: 3,
-        ...sx,
-      }}
+    <Flex
+      justifyContent={{ default: 'justifyContentSpaceBetween' }}
+      alignItems={{ default: 'alignItemsCenter' }}
+      style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem', ...style }}
     >
-      <Box>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
+      <FlexItem>
+        <Content component="h1" style={{ fontWeight: 600, margin: 0 }}>
           {title}
-        </Typography>
+        </Content>
         {subtitle && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          <Content component="p" style={{ color: 'var(--pf-v6-global--Color--200)', marginTop: '0.25rem', marginBottom: 0 }}>
             {subtitle}
-          </Typography>
+          </Content>
         )}
-      </Box>
+      </FlexItem>
       {actions && (
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          {actions}
-        </Box>
+        <FlexItem>
+          <Flex gap={{ default: 'gapSm' }} style={{ flexWrap: 'wrap' }}>
+            {actions}
+          </Flex>
+        </FlexItem>
       )}
-    </Box>
+    </Flex>
   );
 }
 

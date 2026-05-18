@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
+import React from 'react';
 import { fn } from '@storybook/test';
 import PageHeader from './PageHeader';
-import { Button, IconButton } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import SettingsIcon from '@mui/icons-material/Settings';
+import { Button } from '@patternfly/react-core';
+import { PlusIcon, SyncAltIcon, CogIcon } from '@patternfly/react-icons';
 
 export default {
   title: 'Common/PageHeader',
@@ -58,7 +57,7 @@ export const WithSingleAction = {
     title: 'Devices',
     subtitle: 'Manage your Modbus devices',
     actions: (
-      <Button variant="contained" startIcon={<AddIcon />} onClick={fn()}>
+      <Button variant="primary" icon={<PlusIcon />} onClick={fn()}>
         Add Device
       </Button>
     ),
@@ -71,16 +70,16 @@ export const WithMultipleActions = {
     subtitle: 'View and analyze device metrics',
     actions: (
       <>
-        <IconButton onClick={fn()} aria-label="refresh">
-          <RefreshIcon />
-        </IconButton>
-        <IconButton onClick={fn()} aria-label="settings">
-          <SettingsIcon />
-        </IconButton>
-        <Button variant="outlined" onClick={fn()}>
+        <Button variant="plain" onClick={fn()} aria-label="refresh">
+          <SyncAltIcon />
+        </Button>
+        <Button variant="plain" onClick={fn()} aria-label="settings">
+          <CogIcon />
+        </Button>
+        <Button variant="secondary" onClick={fn()}>
           Export
         </Button>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={fn()}>
+        <Button variant="primary" icon={<PlusIcon />} onClick={fn()}>
           Configure
         </Button>
       </>
@@ -93,7 +92,7 @@ export const LongTitle = {
     title: 'Cost Control Configuration',
     subtitle: 'Configure energy pricing, tariff windows, grid fees, and fixed costs',
     actions: (
-      <Button variant="contained" onClick={fn()}>
+      <Button variant="primary" onClick={fn()}>
         Save Changes
       </Button>
     ),
@@ -104,7 +103,7 @@ export const NoSubtitle = {
   args: {
     title: 'Dashboard',
     actions: (
-      <Button variant="outlined" startIcon={<RefreshIcon />} onClick={fn()}>
+      <Button variant="secondary" icon={<SyncAltIcon />} onClick={fn()}>
         Refresh
       </Button>
     ),

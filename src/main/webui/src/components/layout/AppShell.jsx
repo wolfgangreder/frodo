@@ -17,86 +17,36 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import {
-  Box,
-  Link,
-  Toolbar,
-  useTheme,
-} from '@mui/material';
+  Page,
+  PageSection,
+  SkipToContent,
+} from '@patternfly/react-core';
 import Header from './Header';
-import Sidebar, { DRAWER_WIDTH } from './Sidebar';
+import Sidebar from './Sidebar';
 import NotificationSnackbar from '../common/NotificationSnackbar';
-import { useUiStore } from '../../stores';
 
 /**
- * AppShell - Main layout wrapper with responsive sidebar
- * Renders Header, Sidebar, and main content area (via Outlet)
+ * AppShell — PatternFly Page layout with Masthead, Sidebar, and main content
  */
 function AppShell() {
-  const theme = useTheme();
-  const { sidebarOpen } = useUiStore();
+  const skipToContent = (
+    <SkipToContent href="#main-content">Skip to main content</SkipToContent>
+  );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Skip to main content link for keyboard/screen reader users */}
-      <Link
-        href="#main-content"
-        sx={{
-          position: 'absolute',
-          left: '-9999px',
-          zIndex: 9999,
-          padding: 2,
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          textDecoration: 'none',
-          fontWeight: 600,
-          '&:focus': {
-            left: theme.spacing(2),
-            top: theme.spacing(2),
-          },
-        }}
-      >
-        Skip to main content
-      </Link>
+    <Page
+      masthead={<Header />}
+      sidebar={<Sidebar />}
+      skipToContent={skipToContent}
+      mainContainerId="main-content"
+    >
+      <PageSection>
+        <Outlet />
+      </PageSection>
 
-      <Header />
-      <Sidebar />
-
-      {/* Main content area */}
-      <Box
-        component="main"
-        id="main-content"
-        tabIndex={-1}
-        sx={{
-          flexGrow: 1,
-          width: {
-            md: sidebarOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%',
-          },
-          transition: theme.transitions.create(['margin', 'width'], {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.leavingScreen,
-          }),
-          backgroundColor: 'background.default',
-          minHeight: '100vh',
-          outline: 'none',
-        }}
-      >
-        {/* Toolbar spacer to push content below AppBar */}
-        <Toolbar />
-
-        {/* Page content */}
-        <Box
-          sx={{
-            p: { xs: 2, sm: 3 },
-            maxWidth: '1600px',
-          }}
-        >
-          <Outlet />
-        </Box>
-      </Box>
-
-      {/* Global notification snackbar */}
+      {/* Global notification toasts */}
       <NotificationSnackbar />
-    </Box>
+    </Page>
   );
 }
 
