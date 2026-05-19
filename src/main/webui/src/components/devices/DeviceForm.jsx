@@ -203,9 +203,12 @@ function DeviceForm({
               </FormHelperText>
             </FormGroup>
 
-            <Divider>
-              <span style={{ fontSize: '0.75rem', color: C.subtle }}>Connection Settings</span>
-            </Divider>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: C.subtle, marginBottom: '0.25rem' }}>
+                Connection Settings
+              </div>
+              <Divider />
+            </div>
 
             {/* Host */}
             <FormGroup label="Host / IP Address" fieldId="device-host" isRequired>

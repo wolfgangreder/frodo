@@ -302,10 +302,9 @@ function ParameterSelector({
             const contentId      = `accordion-content-${group.modelId}`;
 
             return (
-              <AccordionItem key={group.modelId}>
+              <AccordionItem key={group.modelId} isExpanded={isExpanded}>
                 <AccordionToggle
                   id={toggleId}
-                  isExpanded={isExpanded}
                   onClick={() => !disabled && toggleModel(group.modelId)}
                   aria-controls={contentId}
                 >
@@ -331,7 +330,7 @@ function ParameterSelector({
                   </Flex>
                 </AccordionToggle>
 
-                <AccordionContent id={contentId} isHidden={!isExpanded}>
+                <AccordionContent id={contentId}>
                   {/* Model-level select all */}
                   <div style={{ marginBottom: '0.5rem', borderBottom: `1px solid ${C.border}`, paddingBottom: '0.5rem' }}>
                     <Button
