@@ -43,9 +43,11 @@ import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.repository.FixedCostRepository;
 import at.or.reder.frodo.cost.repository.GridFeeRepository;
 import at.or.reder.frodo.cost.repository.DailyCostRepository;
+import at.or.reder.frodo.cost.repository.HourlyEnergyRepository;
 import at.or.reder.frodo.cost.repository.HourlyCostRepository;
 import at.or.reder.frodo.cost.repository.MonthlyCostRepository;
 import at.or.reder.frodo.cost.repository.TariffWindowRepository;
+import at.or.reder.frodo.cost.service.CostCalculationService;
 import at.or.reder.frodo.cost.service.CostControlConfigService;
 import at.or.reder.frodo.cost.service.EnergyPriceSchedulerService;
 import at.or.reder.frodo.cost.spi.FeeAppliesTo;
@@ -54,7 +56,7 @@ import at.or.reder.frodo.cost.spi.PriceDirection;
 import io.quarkus.panache.common.Sort;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import jakarta.ws.rs.BadRequestException;
+
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -114,6 +116,12 @@ public class CostControlResource {
 
   @Inject
   FixedCostRepository fixedCostRepository;
+
+  @Inject
+  HourlyEnergyRepository hourlyEnergyRepository;
+
+  @Inject
+  CostCalculationService costCalculationService;
 
   // ---- Config ------------------------------------------------------------
 
@@ -245,6 +253,52 @@ public class CostControlResource {
     LocalDateTime end = start.plusHours(1);
     return toPriceResponse(
       energyPriceRepository.upsertExport(start, end, request.priceCt(), "MANUAL"));
+  }
+
+  /**
+   * Fetches and persists hourly energy prices for a specific calendar day from
+   * the configured cloud provider. Overwrites existing rows for any returned
+   * hour and recalculates hourly costs where energy data is available.
+   *
+   * @param direction IMPORT or EXPORT (case-insensitive)
+   * @param date      calendar day in {@code yyyy-MM-dd} format (required)
+   * @return list of upserted price rows for the day (0–24 items)
+   */
+  @POST
+  @Path("/prices/fetch/{direction}")
+  @Produces(MediaType.APPLICATION_JSON)
+  @Operation(summary = "Fetch and persist prices for a specific day from the configured provider")
+  public List<EnergyPriceResponse> fetchPricesForDay(
+      @PathParam("direction") String direction,
+      @QueryParam("date") String date) {
+
+    if (date == null || date.isBlank()) {
+      throw new IllegalArgumentException("Query parameter 'date' is required (format: yyyy-MM-dd)");
+    }
+    LocalDate localDate = parseDate(date);
+    PriceDirection dir = parsePriceDirection(direction);
+
+    List<EnergyPriceEntity> upserted;
+    try {
+      upserted = priceSchedulerService.fetchAndPersistForDate(dir, localDate);
+    } catch (UnsupportedOperationException ex) {
+      throw new IllegalStateException(ex.getMessage(), ex);
+    }
+
+    for (EnergyPriceEntity price : upserted) {
+      LocalDateTime hourStart = price.startTime;
+      if (hourlyEnergyRepository.findByHourStart(hourStart).isPresent()) {
+        try {
+          costCalculationService.calculateHourlyCost(hourStart);
+          costCalculationService.updateDailyCost(hourStart);
+          costCalculationService.updateMonthlyCost(hourStart);
+        } catch (Exception ex) {
+          LOG.warnf(ex, "Failed to recalculate costs for hour %s", hourStart);
+        }
+      }
+    }
+
+    return upserted.stream().map(this::toPriceResponse).toList();
   }
 
   // ---- Hourly cost -------------------------------------------------------
@@ -741,7 +795,7 @@ public class CostControlResource {
     try {
       return PriceDirection.valueOf(value.toUpperCase());
     } catch (IllegalArgumentException e) {
-      throw new BadRequestException("Invalid direction: " + value + "; expected IMPORT or EXPORT");
+      throw new IllegalArgumentException("Invalid direction: " + value + "; expected IMPORT or EXPORT");
     }
   }
 
@@ -749,7 +803,7 @@ public class CostControlResource {
     try {
       return FeeType.valueOf(value.toUpperCase());
     } catch (IllegalArgumentException e) {
-      throw new BadRequestException("Invalid feeType: " + value +
+      throw new IllegalArgumentException("Invalid feeType: " + value +
         "; expected PERCENT, ABSOLUTE_ENERGY, or ABSOLUTE_TIME");
     }
   }
@@ -758,7 +812,7 @@ public class CostControlResource {
     try {
       return FeeAppliesTo.valueOf(value.toUpperCase());
     } catch (IllegalArgumentException e) {
-      throw new BadRequestException("Invalid appliesTo: " + value +
+      throw new IllegalArgumentException("Invalid appliesTo: " + value +
         "; expected IMPORT, EXPORT, or BOTH");
     }
   }
@@ -767,7 +821,7 @@ public class CostControlResource {
     try {
       return LocalDateTime.parse(value);
     } catch (DateTimeParseException e) {
-      throw new BadRequestException("Invalid date-time: " + value + "; expected ISO 8601 local");
+      throw new IllegalArgumentException("Invalid date-time: " + value + "; expected ISO 8601 local");
     }
   }
 
@@ -775,7 +829,7 @@ public class CostControlResource {
     try {
       return LocalDate.parse(value);
     } catch (DateTimeParseException e) {
-      throw new BadRequestException("Invalid date: " + value + "; expected yyyy-MM-dd");
+      throw new IllegalArgumentException("Invalid date: " + value + "; expected yyyy-MM-dd");
     }
   }
 }
