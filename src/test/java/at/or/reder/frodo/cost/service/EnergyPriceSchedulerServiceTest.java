@@ -21,15 +21,13 @@ import at.or.reder.frodo.cost.entity.EnergyPriceEntity;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.spi.EnergyPriceProviderSpi;
 import at.or.reder.frodo.cost.spi.PriceDirection;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.ArgumentMatchers;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -60,9 +58,6 @@ class EnergyPriceSchedulerServiceTest {
   EnergyPriceRepository energyPriceRepository;
 
   @Mock
-  MeterRegistry meterRegistry;
-
-  @Mock
   EnergyPriceProviderSpi mockProvider;
 
   @BeforeEach
@@ -71,13 +66,11 @@ class EnergyPriceSchedulerServiceTest {
     service.providers = providers;
     service.configService = configService;
     service.energyPriceRepository = energyPriceRepository;
-    service.meterRegistry = meterRegistry;
+    service.meterRegistry = new SimpleMeterRegistry(); // real in-memory registry; no stub needed
     service.costControlEnabled = false;   // disable to skip startup fetch
     service.datasourceActive = true;
 
-    Counter mockCounter = mock(Counter.class);
-    lenient().when(meterRegistry.counter(anyString(), ArgumentMatchers.<String[]>any())).thenReturn(mockCounter);
-    service.onStart(new StartupEvent());  // initialises counters only (fetch skipped)
+    service.onStart(new StartupEvent());  // initialises counters; fetch skipped (disabled)
 
     service.costControlEnabled = true;    // re-enable for test execution
   }

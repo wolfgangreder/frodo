@@ -18,6 +18,7 @@ package at.or.reder.frodo.cost.service;
 
 import at.or.reder.frodo.TimeUtil;
 import at.or.reder.frodo.cost.entity.CostControlConfigEntity;
+import at.or.reder.frodo.cost.entity.EnergyPriceEntity;
 import at.or.reder.frodo.cost.repository.EnergyPriceRepository;
 import at.or.reder.frodo.cost.spi.EnergyPriceProviderSpi;
 import at.or.reder.frodo.cost.spi.PriceDirection;
@@ -34,7 +35,9 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.StreamSupport;
 
@@ -139,6 +142,78 @@ public class EnergyPriceSchedulerService {
    */
   public void refreshNow(PriceDirection direction) {
     fetchForDirection(direction, TimeUtil.nowUtc());
+  }
+
+  /**
+   * Fetches and persists hourly prices for a specific calendar day from the configured provider.
+   *
+   * <p>The fetch window is exactly {@code [date T00:00, date+1 T00:00)} UTC (24 hours).
+   * Existing prices for any overlapping hour are overwritten via upsert.</p>
+   *
+   * @param direction IMPORT or EXPORT
+   * @param date      the calendar day to fetch
+   * @return list of upserted {@link EnergyPriceEntity} rows
+   * @throws IllegalStateException         if cost control is disabled or datasource inactive
+   * @throws UnsupportedOperationException if provider does not support auto-fetch or direction
+   * @throws RuntimeException              if the provider fetch fails
+   */
+  public List<EnergyPriceEntity> fetchAndPersistForDate(PriceDirection direction, LocalDate date) {
+    if (!costControlEnabled || !datasourceActive) {
+      throw new IllegalStateException("Cost control is disabled or datasource inactive");
+    }
+
+    CostControlConfigEntity cfg = configService.load();
+    String providerId = direction == PriceDirection.IMPORT
+      ? cfg.importProviderId
+      : cfg.exportProviderId;
+
+    EnergyPriceProviderSpi provider = resolveProvider(providerId);
+
+    if (!provider.isAutoFetchSupported()) {
+      throw new UnsupportedOperationException(
+        "Provider '" + providerId + "' does not support auto-fetch");
+    }
+
+    if (!provider.getSupportedDirections().contains(direction)) {
+      throw new UnsupportedOperationException(
+        "Provider '" + providerId + "' does not support direction " + direction);
+    }
+
+    LocalDateTime from = date.atStartOfDay();
+    LocalDateTime to = date.plusDays(1).atStartOfDay();
+
+    LOG.debugf("Fetching %s prices for date %s from provider '%s' (%s \u2013 %s)",
+      direction, date, providerId, from, to);
+
+    try {
+      List<EnergyPriceProviderSpi.HourlyPrice> prices = provider.fetchPrices(direction, from, to);
+      List<EnergyPriceEntity> result = new ArrayList<>(prices.size());
+      for (EnergyPriceProviderSpi.HourlyPrice p : prices) {
+        EnergyPriceEntity entity = (direction == PriceDirection.IMPORT)
+          ? energyPriceRepository.upsertImport(p.startTime(), p.endTime(), p.priceCt(), providerId)
+          : energyPriceRepository.upsertExport(p.startTime(), p.endTime(), p.priceCt(), providerId);
+        result.add(entity);
+      }
+      if (direction == PriceDirection.IMPORT) {
+        importFetchSuccess.increment();
+      } else {
+        exportFetchSuccess.increment();
+      }
+      LOG.debugf("Persisted %d %s prices for date %s from '%s'",
+        result.size(), direction, date, providerId);
+      return result;
+    } catch (UnsupportedOperationException | IllegalStateException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      LOG.errorf(ex, "Failed to fetch %s prices for date %s from provider '%s'",
+        direction, date, providerId);
+      if (direction == PriceDirection.IMPORT) {
+        importFetchFailure.increment();
+      } else {
+        exportFetchFailure.increment();
+      }
+      throw ex;
+    }
   }
 
   // ---- internals ---------------------------------------------------------
