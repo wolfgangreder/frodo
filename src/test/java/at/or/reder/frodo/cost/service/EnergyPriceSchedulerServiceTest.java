@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentMatchers;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -75,7 +76,7 @@ class EnergyPriceSchedulerServiceTest {
     service.datasourceActive = true;
 
     Counter mockCounter = mock(Counter.class);
-    lenient().when(meterRegistry.counter(anyString(), (String[]) any())).thenReturn(mockCounter);
+    lenient().when(meterRegistry.counter(anyString(), ArgumentMatchers.<String[]>any())).thenReturn(mockCounter);
     service.onStart(new StartupEvent());  // initialises counters only (fetch skipped)
 
     service.costControlEnabled = true;    // re-enable for test execution
@@ -105,13 +106,14 @@ class EnergyPriceSchedulerServiceTest {
     e1.startTime = from;
     EnergyPriceEntity e2 = new EnergyPriceEntity();
     e2.startTime = from.plusHours(1);
-    when(energyPriceRepository.upsertImport(eq(from), eq(from.plusHours(1)), any(), eq("AWATTAR"))).thenReturn(e1);
-    when(energyPriceRepository.upsertImport(eq(from.plusHours(1)), eq(from.plusHours(2)), any(), eq("AWATTAR"))).thenReturn(e2);
+    when(energyPriceRepository.upsertImport(eq(from), eq(from.plusHours(1)), eq(new BigDecimal("28.5")), eq("AWATTAR"))).thenReturn(e1);
+    when(energyPriceRepository.upsertImport(eq(from.plusHours(1)), eq(from.plusHours(2)), eq(new BigDecimal("29.0")), eq("AWATTAR"))).thenReturn(e2);
 
     List<EnergyPriceEntity> result = service.fetchAndPersistForDate(PriceDirection.IMPORT, date);
 
     assertEquals(2, result.size());
-    verify(energyPriceRepository, times(2)).upsertImport(any(), any(), any(), eq("AWATTAR"));
+    verify(energyPriceRepository).upsertImport(eq(from), eq(from.plusHours(1)), eq(new BigDecimal("28.5")), eq("AWATTAR"));
+    verify(energyPriceRepository).upsertImport(eq(from.plusHours(1)), eq(from.plusHours(2)), eq(new BigDecimal("29.0")), eq("AWATTAR"));
     verify(mockProvider).fetchPrices(PriceDirection.IMPORT, from, to);
   }
 
@@ -149,7 +151,7 @@ class EnergyPriceSchedulerServiceTest {
     when(mockProvider.getProviderId()).thenReturn("AWATTAR");
     when(mockProvider.isAutoFetchSupported()).thenReturn(true);
     when(mockProvider.getSupportedDirections()).thenReturn(Set.of(PriceDirection.EXPORT));
-    when(mockProvider.fetchPrices(any(), any(), any())).thenReturn(List.of());
+    when(mockProvider.fetchPrices(any(PriceDirection.class), any(LocalDateTime.class), any(LocalDateTime.class))).thenReturn(List.of());
 
     service.fetchAndPersistForDate(PriceDirection.EXPORT, date);
 
@@ -168,7 +170,7 @@ class EnergyPriceSchedulerServiceTest {
     when(mockProvider.getProviderId()).thenReturn("AWATTAR");
     when(mockProvider.isAutoFetchSupported()).thenReturn(true);
     when(mockProvider.getSupportedDirections()).thenReturn(Set.of(PriceDirection.EXPORT));
-    when(mockProvider.fetchPrices(any(), any(), any())).thenReturn(List.of(
+    when(mockProvider.fetchPrices(any(PriceDirection.class), any(LocalDateTime.class), any(LocalDateTime.class))).thenReturn(List.of(
       new EnergyPriceProviderSpi.HourlyPrice(from, from.plusHours(1), new BigDecimal("5.0"))
     ));
     EnergyPriceEntity e = new EnergyPriceEntity();
