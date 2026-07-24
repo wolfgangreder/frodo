@@ -159,13 +159,19 @@ function DailySummaryTab() {
   const today = new Date();
   const thirtyDaysAgo = new Date(today);
   thirtyDaysAgo.setDate(today.getDate() - 30);
-  const todayStr = today.toISOString().slice(0, 10);
-  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
+  // Use local date to avoid UTC offset shifting the date.
+  const toLocalDateStr = (d) => [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
+  const todayStr = toLocalDateStr(today);
+  const thirtyDaysAgoStr = toLocalDateStr(thirtyDaysAgo);
   // Backend 'to' is exclusive; add 1 day so displayed "to" date is included.
   const toExclusive = (dateStr) => {
     const d = new Date(dateStr + 'T00:00:00');
     d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    return toLocalDateStr(d);
   };
   const [from, setFrom] = useState(() => thirtyDaysAgoStr);
   const [to, setTo] = useState(() => todayStr);
