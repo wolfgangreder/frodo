@@ -43,7 +43,7 @@ quarkus.micrometer.binder.http-server.enabled=true
 # See docs/DATABASE_SETUP.md for database creation instructions
 quarkus.datasource.db-kind=other
 quarkus.datasource.jdbc.driver=org.firebirdsql.jdbc.FBDriver
-quarkus.datasource.jdbc.url=jdbc:firebirdsql://localhost:30520//var/lib/firebird/data/k8n.firebird?defaultResultSetHoldable=true
+quarkus.datasource.jdbc.url=jdbc:firebirdsql://localhost:3050//var/lib/firebird/data/frodo.firebird?defaultResultSetHoldable=true
 quarkus.datasource.username=sysdba
 quarkus.datasource.password=masterkey
 quarkus.datasource.jdbc.min-size=2
