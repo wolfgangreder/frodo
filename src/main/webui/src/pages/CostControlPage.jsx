@@ -159,11 +159,19 @@ function DailySummaryTab() {
   const today = new Date();
   const thirtyDaysAgo = new Date(today);
   thirtyDaysAgo.setDate(today.getDate() - 30);
-  const [from, setFrom] = useState(() => thirtyDaysAgo.toISOString().slice(0, 10));
-  const [to, setTo] = useState(() => today.toISOString().slice(0, 10));
+  const todayStr = today.toISOString().slice(0, 10);
+  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
+  // Backend 'to' is exclusive; add 1 day so displayed "to" date is included.
+  const toExclusive = (dateStr) => {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+  const [from, setFrom] = useState(() => thirtyDaysAgoStr);
+  const [to, setTo] = useState(() => todayStr);
   const [query, setQuery] = useState({
-    from: thirtyDaysAgo.toISOString().slice(0, 10),
-    to: today.toISOString().slice(0, 10),
+    from: thirtyDaysAgoStr,
+    to: toExclusive(todayStr),
   });
 
   const { data: rows, isLoading, error } = useDailyCosts(query.from, query.to);
@@ -174,10 +182,10 @@ function DailySummaryTab() {
         <FormGroup label="From" fieldId="daily-from">
           <TextInput id="daily-from" type="date" value={from} onChange={(_e, v) => setFrom(v)} />
         </FormGroup>
-        <FormGroup label="To (exclusive)" fieldId="daily-to">
+        <FormGroup label="To (inclusive)" fieldId="daily-to">
           <TextInput id="daily-to" type="date" value={to} onChange={(_e, v) => setTo(v)} />
         </FormGroup>
-        <Button variant="secondary" onClick={() => setQuery({ from, to })}>Load</Button>
+        <Button variant="secondary" onClick={() => setQuery({ from, to: toExclusive(to) })}>Load</Button>
       </div>
       {isLoading && <Spinner />}
       {error && <Alert variant="danger" isInline title="Failed to load daily costs" />}
