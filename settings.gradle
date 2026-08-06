@@ -1,5 +1,5 @@
 pluginManagement {
-    def quarkusPluginVersion = settings.ext.find('quarkusPluginVersion') ?: '3.34.1'
+    def quarkusPluginVersion = settings.ext.find('quarkusPluginVersion') ?: '3.38.0'
     def quarkusPluginId = settings.ext.find('quarkusPluginId') ?: 'io.quarkus'
     repositories {
         mavenCentral()
