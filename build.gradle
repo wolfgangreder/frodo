@@ -30,7 +30,7 @@ dependencies {
 
     // Database: Agroal connection pool + Jaybird FirebirdSQL JDBC driver
     implementation 'io.quarkus:quarkus-agroal'
-    runtimeOnly 'org.firebirdsql.jdbc:jaybird:6.0.5'
+    runtimeOnly 'org.firebirdsql.jdbc:jaybird:6.0.6'
 
     // Hibernate ORM with Panache + Liquibase migrations
     implementation 'io.quarkus:quarkus-hibernate-orm-panache'
