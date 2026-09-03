@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "frodo.fullname" . }}
+  labels:
+    {{- include "frodo.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "frodo.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "frodo.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- if .Values.prometheus.scrape }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: {{ .Values.prometheus.path | quote }}
+        prometheus.io/port: {{ .Values.prometheus.port | quote }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "frodo.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+          env:
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "frodo.fullname" . }}
+                  key: QUARKUS_DATASOURCE_JDBC_URL
+            - name: QUARKUS_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "frodo.fullname" . }}
+                  key: QUARKUS_DATASOURCE_USERNAME
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "frodo.fullname" . }}
+                  key: QUARKUS_DATASOURCE_PASSWORD
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

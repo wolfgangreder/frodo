@@ -20,14 +20,13 @@ let notificationId = 0;
 
 /**
  * UI Store - manages global UI state
- * - Sidebar open/closed state (responsive)
  * - Notification queue (stacked toasts)
  * - Loading states
  */
 const useUiStore = create((set, get) => ({
-  // Sidebar state
-  sidebarOpen: true,
-  sidebarMobileOpen: false,
+  // Note: sidebar open/closed state is managed by PatternFly's <Page
+  // isManagedSidebar> (see AppShell.jsx / Header.jsx PageToggleButton),
+  // not by this store.
 
   // Notification queue
   notifications: [],
@@ -35,13 +34,6 @@ const useUiStore = create((set, get) => ({
   // Global loading state
   isLoading: false,
   loadingMessage: '',
-
-  // Actions
-  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
-
-  toggleMobileSidebar: () => set((state) => ({ sidebarMobileOpen: !state.sidebarMobileOpen })),
-  setMobileSidebarOpen: (open) => set({ sidebarMobileOpen: open }),
 
   // Notification actions (queue-based)
   showNotification: (message, severity = 'info', duration = 5000) =>

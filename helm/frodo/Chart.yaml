@@ -1,0 +1,6 @@
+apiVersion: v2
+name: frodo
+description: Frodo Modbus/SunSpec PV monitoring & control server (Quarkus application)
+type: application
+version: 0.1.0
+appVersion: "2.1.3"

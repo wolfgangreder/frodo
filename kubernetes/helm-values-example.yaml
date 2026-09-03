@@ -1,0 +1,21 @@
+# Example Helm values override
+# Copy this file, fill in your values, then:
+#   helm upgrade --install frodo helm/frodo \
+#     -f my-values.yaml --namespace <your-namespace> --create-namespace
+
+image:
+  tag: "<replace-with-tag>"   # see https://hub.docker.com/r/wolfgangreder/at.or.reder.frodo/tags
+
+firebird:
+  jdbcUrl: "jdbc:firebirdsql://<replace-with-host>:<replace-with-port>//<replace-with-db-path>?encoding=UTF8&charSet=utf-8"
+  user: "<replace-with-db-user>"
+  password: "<replace-with-password>"    # use --set firebird.password=... to avoid committing secrets
+
+ingress:
+  enabled: true
+  className: "<replace-with-ingressclass>"   # e.g. nginx, traefik
+  hosts:
+    - host: "<replace-with-hostname>"
+      paths:
+        - path: /
+          pathType: Prefix

@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frodo
+  namespace: <replace-with-namespace>
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frodo
+  template:
+    metadata:
+      labels:
+        app: frodo
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /frodo/q/metrics
+        prometheus.io/port: "8082"
+    spec:
+      containers:
+        - name: frodo
+          image: wolfgangreder/at.or.reder.frodo:<replace-with-tag>
+          ports:
+            - name: http
+              containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: frodo
+            - secretRef:
+                name: frodo
+          livenessProbe:
+            httpGet:
+              path: /frodo/q/health/live
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /frodo/q/health/ready
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frodo
+  namespace: <replace-with-namespace>
+spec:
+  selector:
+    app: frodo
+  type: ClusterIP
+  ports:
+    - port: 8082
+      targetPort: http
+      name: http

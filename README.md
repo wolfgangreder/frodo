@@ -48,34 +48,27 @@ docker compose up -d firebird
 ./gradlew quarkusDev
 ```
 
-The application starts at **<http://localhost:8082/frodo/>**.
+The application starts at **<http://localhost:8082/>**.
 
-Quarkus dev UI is at <http://localhost:8082/frodo/q/dev/>.
+Quarkus dev UI is at <http://localhost:8082/q/dev/>.
 
 ## URL Structure
 
-All resources share the `/frodo` base path:
+All resources use the default Quarkus root path (`/`):
 
 | Resource | Base URL |
 |----------|----------|
-| Frontend SPA | `http://host:8082/frodo/` |
-| REST API | `http://host:8082/frodo/api/` |
-| Health checks | `http://host:8082/frodo/q/health` |
-| Prometheus metrics | `http://host:8082/frodo/q/metrics` |
-| Swagger UI | `http://host:8082/frodo/swagger-ui` |
-
-**Redirects** (built in, no proxy config needed):
-
-| Request | Result |
-|---------|--------|
-| `http://host:8082/frodo` | 301 → `/frodo/` |
-| `http://host:8082/` | 301 → `/frodo/` (production) |
+| Frontend SPA | `http://host:8082/` |
+| REST API | `http://host:8082/api/` |
+| Health checks | `http://host:8082/q/health` |
+| Prometheus metrics | `http://host:8082/q/metrics` |
+| Swagger UI | `http://host:8082/swagger-ui` |
 
 ### Reverse Proxy (nginx)
 
 ```nginx
-location /frodo/ {
-    proxy_pass http://localhost:8082/frodo/;
+location / {
+    proxy_pass http://localhost:8082/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
 }
@@ -139,117 +132,117 @@ See [docs/DOCKER_GPIO.md](docs/DOCKER_GPIO.md) for detailed instructions and tro
 
 ## REST API Endpoints
 
-All endpoints are under the `/frodo/api` prefix.
+All endpoints are under the `/api` prefix.
 
 ### Infrastructure
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/info` | Application info |
-| GET | `/frodo/q/health` | Health checks |
-| GET | `/frodo/q/metrics` | Prometheus metrics |
-| GET | `/frodo/swagger-ui` | Interactive API documentation |
-| GET | `/frodo/q/openapi` | OpenAPI 3.0 specification |
+| GET | `/api/info` | Application info |
+| GET | `/q/health` | Health checks |
+| GET | `/q/metrics` | Prometheus metrics |
+| GET | `/swagger-ui` | Interactive API documentation |
+| GET | `/q/openapi` | OpenAPI 3.0 specification |
 
 ### Device Management
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/devices` | List devices (`?deviceType=`, `?parentId=`) |
-| POST | `/frodo/api/devices` | Create a device |
-| GET | `/frodo/api/devices/{id}` | Get device details |
-| PUT | `/frodo/api/devices/{id}` | Update a device |
-| DELETE | `/frodo/api/devices/{id}` | Delete a device (409 if sub-devices exist) |
-| GET | `/frodo/api/devices/{id}/info` | Cached device identification (FC 0x2B) |
-| POST | `/frodo/api/devices/{id}/info/refresh` | Force refresh device identification |
+| GET | `/api/devices` | List devices (`?deviceType=`, `?parentId=`) |
+| POST | `/api/devices` | Create a device |
+| GET | `/api/devices/{id}` | Get device details |
+| PUT | `/api/devices/{id}` | Update a device |
+| DELETE | `/api/devices/{id}` | Delete a device (409 if sub-devices exist) |
+| GET | `/api/devices/{id}/info` | Cached device identification (FC 0x2B) |
+| POST | `/api/devices/{id}/info/refresh` | Force refresh device identification |
 
 ### Device Discovery
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/frodo/api/devices/discover` | Discover devices on host:port |
-| POST | `/frodo/api/devices/{id}/discover-sub-devices` | Discover sub-devices |
-| GET | `/frodo/api/devices/{id}/sub-devices` | List sub-devices |
+| POST | `/api/devices/discover` | Discover devices on host:port |
+| POST | `/api/devices/{id}/discover-sub-devices` | Discover sub-devices |
+| GET | `/api/devices/{id}/sub-devices` | List sub-devices |
 
 ### SunSpec Protocol
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/devices/{id}/sunspec/discovery` | Discover SunSpec model chain |
-| GET | `/frodo/api/devices/{id}/sunspec/inverter` | Auto-detect inverter model (101-103 / 111-113) |
-| GET | `/frodo/api/devices/{id}/sunspec/meter` | Auto-detect meter model (201-204 / 211-214) |
-| GET | `/frodo/api/devices/{id}/sunspec/model/{modelId}` | Read any model by ID |
-| GET | `/frodo/api/devices/{id}/sunspec/models` | List available models |
+| GET | `/api/devices/{id}/sunspec/discovery` | Discover SunSpec model chain |
+| GET | `/api/devices/{id}/sunspec/inverter` | Auto-detect inverter model (101-103 / 111-113) |
+| GET | `/api/devices/{id}/sunspec/meter` | Auto-detect meter model (201-204 / 211-214) |
+| GET | `/api/devices/{id}/sunspec/model/{modelId}` | Read any model by ID |
+| GET | `/api/devices/{id}/sunspec/models` | List available models |
 
 ### Metrics Scraping
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/devices/{id}/metrics/config` | Scraping configuration |
-| PUT | `/frodo/api/devices/{id}/metrics/config` | Update scraping configuration |
-| GET | `/frodo/api/devices/{id}/metrics/data` | Time-series data (`?parameter=`, `?from=`, `?to=`) |
-| GET | `/frodo/api/devices/{id}/metrics/latest` | Latest scraped values |
-| GET | `/frodo/api/devices/{id}/metrics/status` | Scraping status |
-| GET | `/frodo/api/metrics-docs` | Available metric field definitions |
+| GET | `/api/devices/{id}/metrics/config` | Scraping configuration |
+| PUT | `/api/devices/{id}/metrics/config` | Update scraping configuration |
+| GET | `/api/devices/{id}/metrics/data` | Time-series data (`?parameter=`, `?from=`, `?to=`) |
+| GET | `/api/devices/{id}/metrics/latest` | Latest scraped values |
+| GET | `/api/devices/{id}/metrics/status` | Scraping status |
+| GET | `/api/metrics-docs` | Available metric field definitions |
 
 ### Market Prices
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/market-prices` | aWATTar AT hourly market prices |
-| POST | `/frodo/api/market-prices/refresh` | Force price refresh |
-| GET | `/frodo/api/price-control` | Price-controlled export settings |
-| PUT | `/frodo/api/price-control` | Update price control settings |
+| GET | `/api/market-prices` | aWATTar AT hourly market prices |
+| POST | `/api/market-prices/refresh` | Force price refresh |
+| GET | `/api/price-control` | Price-controlled export settings |
+| PUT | `/api/price-control` | Update price control settings |
 
 ### Cost Control
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/cost-control/config` | Cost control configuration |
-| PUT | `/frodo/api/cost-control/config` | Update configuration |
-| GET | `/frodo/api/cost-control/hourly-costs` | Hourly cost breakdown |
-| GET | `/frodo/api/cost-control/monthly-costs` | Monthly cost summary |
-| GET | `/frodo/api/cost-control/tariff-windows` | Tariff windows |
-| POST | `/frodo/api/cost-control/tariff-windows` | Create tariff window |
-| PUT | `/frodo/api/cost-control/tariff-windows/{id}` | Update tariff window |
-| DELETE | `/frodo/api/cost-control/tariff-windows/{id}` | Delete tariff window |
-| GET | `/frodo/api/cost-control/grid-fees` | Grid fees |
-| POST | `/frodo/api/cost-control/grid-fees` | Create grid fee |
-| PUT | `/frodo/api/cost-control/grid-fees/{id}` | Update grid fee |
-| DELETE | `/frodo/api/cost-control/grid-fees/{id}` | Delete grid fee |
-| GET | `/frodo/api/cost-control/fixed-costs` | Fixed monthly costs |
-| POST | `/frodo/api/cost-control/fixed-costs` | Create fixed cost |
-| PUT | `/frodo/api/cost-control/fixed-costs/{id}` | Update fixed cost |
-| DELETE | `/frodo/api/cost-control/fixed-costs/{id}` | Delete fixed cost |
+| GET | `/api/cost-control/config` | Cost control configuration |
+| PUT | `/api/cost-control/config` | Update configuration |
+| GET | `/api/cost-control/hourly-costs` | Hourly cost breakdown |
+| GET | `/api/cost-control/monthly-costs` | Monthly cost summary |
+| GET | `/api/cost-control/tariff-windows` | Tariff windows |
+| POST | `/api/cost-control/tariff-windows` | Create tariff window |
+| PUT | `/api/cost-control/tariff-windows/{id}` | Update tariff window |
+| DELETE | `/api/cost-control/tariff-windows/{id}` | Delete tariff window |
+| GET | `/api/cost-control/grid-fees` | Grid fees |
+| POST | `/api/cost-control/grid-fees` | Create grid fee |
+| PUT | `/api/cost-control/grid-fees/{id}` | Update grid fee |
+| DELETE | `/api/cost-control/grid-fees/{id}` | Delete grid fee |
+| GET | `/api/cost-control/fixed-costs` | Fixed monthly costs |
+| POST | `/api/cost-control/fixed-costs` | Create fixed cost |
+| PUT | `/api/cost-control/fixed-costs/{id}` | Update fixed cost |
+| DELETE | `/api/cost-control/fixed-costs/{id}` | Delete fixed cost |
 
 ### GPIO Export Control
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/gpio/status` | GPIO system + per-pair status |
-| GET | `/frodo/api/gpio/pairs` | List configured GPIO pair names |
-| PUT | `/frodo/api/gpio/pairs/{name}/output` | Manual output override |
-| DELETE | `/frodo/api/gpio/pairs/{name}/output` | Clear manual output override |
-| GET | `/frodo/api/gpio/assignments` | GPIO pair ↔ device assignments |
-| PUT | `/frodo/api/gpio/assignments/{deviceId}` | Create/update GPIO assignment |
-| DELETE | `/frodo/api/gpio/assignments/{deviceId}` | Remove GPIO assignment |
+| GET | `/api/gpio/status` | GPIO system + per-pair status |
+| GET | `/api/gpio/pairs` | List configured GPIO pair names |
+| PUT | `/api/gpio/pairs/{name}/output` | Manual output override |
+| DELETE | `/api/gpio/pairs/{name}/output` | Clear manual output override |
+| GET | `/api/gpio/assignments` | GPIO pair ↔ device assignments |
+| PUT | `/api/gpio/assignments/{deviceId}` | Create/update GPIO assignment |
+| DELETE | `/api/gpio/assignments/{deviceId}` | Remove GPIO assignment |
 
 ### Solar API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/solar-api/status` | Live Solar API power flow data |
+| GET | `/api/solar-api/status` | Live Solar API power flow data |
 
 ### Modbus Raw Access
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/frodo/api/modbus/{unitId}/holding-registers` | Read holding registers (FC 0x03) |
+| GET | `/api/modbus/{unitId}/holding-registers` | Read holding registers (FC 0x03) |
 
 ### API Usage Examples
 
 ```bash
-BASE=http://localhost:8082/frodo
+BASE=http://localhost:8082
 
 # List all devices
 curl -s $BASE/api/devices | jq .
@@ -313,8 +306,7 @@ All application-specific properties in `src/main/resources/application.propertie
 | Property | Value | Description |
 |----------|-------|-------------|
 | `quarkus.http.port` | `8082` | HTTP listen port |
-| `quarkus.http.root-path` | `/frodo` | Base path for all resources |
-| `quarkus.rest.path` | `/api` | JAX-RS base path (relative to root-path) |
+| `quarkus.rest.path` | `/api` | JAX-RS base path |
 
 ### Modbus Connection
 
@@ -409,7 +401,7 @@ Strips `-SNAPSHOT`, tags the release, builds and pushes the Docker image. Versio
 
 ```
 src/main/java/at/or/reder/frodo/
-├── api/                         -- REST endpoints (/frodo/api/*)
+├── api/                         -- REST endpoints (/api/*)
 │   ├── FrodoResource            GET /api/info
 │   ├── DeviceResource           /api/devices CRUD
 │   ├── DeviceDiscoveryResource  /api/devices/discover, sub-devices
@@ -420,7 +412,6 @@ src/main/java/at/or/reder/frodo/
 │   ├── GpioResource             /api/gpio/*
 │   ├── PriceControlResource     /api/price-control
 │   ├── SolarApiResource         /api/solar-api/status
-│   ├── RootRedirectHandler      301 redirects: / and /frodo → /frodo/
 │   ├── dto/                     Request/response DTOs (records)
 │   └── exception/               Exception mappers
 ├── solarapi/                    -- Fronius Solar API integration

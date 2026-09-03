@@ -2,7 +2,6 @@ import { defineConfig, transformWithOxc } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  base: '/frodo/',
   plugins: [
     // CRA used .js for JSX; Vite/Rollup only parse JSX in .jsx by default.
     // This pre-plugin runs oxc with the jsx loader on every .js file under

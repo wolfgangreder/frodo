@@ -44,10 +44,15 @@ const queryClient = new QueryClient({
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
+// Derive router basename from Vite's configured base path, keeping it in
+// sync with quarkus.http.root-path (see apiClient.js). Trailing slash must
+// be stripped; BrowserRouter treats basename="/" the same as "".
+const basename = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+
 root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter basename="/frodo">
+      <BrowserRouter basename={basename}>
         <App />
       </BrowserRouter>
     </QueryClientProvider>

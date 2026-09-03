@@ -25,7 +25,6 @@ import {
   DescriptionListDescription,
   DescriptionListGroup,
   DescriptionListTerm,
-  Divider,
   Label,
   Spinner,
   TextInput,
@@ -148,47 +147,6 @@ async function importConfig(file) {
 // ---------------------------------------------------------------------------
 // Sub-sections
 // ---------------------------------------------------------------------------
-
-function AppInfoSection() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['system', 'info'],
-    queryFn: systemApi.getInfo,
-    staleTime: 60_000,
-    retry: false,
-  });
-
-  return (
-    <div>
-      <Title headingLevel="h3" size="md" style={{ color: C.primary, marginBottom: 12 }}>
-        Application Info
-      </Title>
-      {isLoading && <Spinner size="sm" />}
-      {error && (
-        <span style={{ fontSize: '0.875rem', color: C.danger }}>
-          Failed to load application info
-        </span>
-      )}
-      {data && (
-        <DescriptionList isCompact>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Name</DescriptionListTerm>
-            <DescriptionListDescription>{data.name}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Version</DescriptionListTerm>
-            <DescriptionListDescription>{data.version}</DescriptionListDescription>
-          </DescriptionListGroup>
-          {data.description && (
-            <DescriptionListGroup>
-              <DescriptionListTerm>Description</DescriptionListTerm>
-              <DescriptionListDescription>{data.description}</DescriptionListDescription>
-            </DescriptionListGroup>
-          )}
-        </DescriptionList>
-      )}
-    </div>
-  );
-}
 
 function HealthSection() {
   const { data, isLoading, error, refetch, isFetching } = useQuery({
@@ -569,21 +527,9 @@ function SettingsPage() {
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {/* App info + Health side by side on larger screens */}
         <Card>
           <CardBody>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <AppInfoSection />
-              </div>
-              <Divider
-                orientation={{ default: 'vertical' }}
-                style={{ alignSelf: 'stretch' }}
-              />
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <HealthSection />
-              </div>
-            </div>
+            <HealthSection />
           </CardBody>
         </Card>
 

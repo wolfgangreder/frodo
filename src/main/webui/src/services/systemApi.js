@@ -41,6 +41,10 @@ const systemApi = {
   getHealth: async () => {
     const response = await apiClient.get(`${_base}/q/health/ready`, {
       baseURL: '', // override: path is already absolute
+      // smallrye-health returns HTTP 503 when status is DOWN; treat that as
+      // a valid response (not a network error) so the UI can still render
+      // the status and per-check details instead of a generic failure.
+      validateStatus: (status) => status === 200 || status === 503,
     });
     return response.data;
   },

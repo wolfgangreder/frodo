@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frodo
+  namespace: <replace-with-namespace>
+data:
+  QUARKUS_DATASOURCE_JDBC_URL: "jdbc:firebirdsql://<replace-with-host>:<replace-with-port>//<replace-with-db-path>?encoding=UTF8&charSet=utf-8"
+  QUARKUS_DATASOURCE_USERNAME: "<replace-with-db-user>"

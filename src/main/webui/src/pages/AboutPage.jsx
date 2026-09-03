@@ -110,18 +110,7 @@ function AboutPage() {
                 <a href="/swagger-ui" target="_blank" rel="noreferrer" style={{ color: C.link }}>
                   Swagger UI - Interactive API Documentation
                 </a>
-                <a href="/q/openapi" target="_blank" rel="noreferrer" style={{ color: C.link }}>
-                  OpenAPI Specification (JSON)
-                </a>
                 <Divider style={{ margin: '0.5rem 0' }} />
-                <a
-                  href="https://sunspec.org/sunspec-modbus-specifications/"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: C.link }}
-                >
-                  SunSpec Modbus Specifications
-                </a>
                 <a
                   href="https://quarkus.io/guides/"
                   target="_blank"

@@ -35,6 +35,7 @@ function AppShell() {
 
   return (
     <Page
+      isManagedSidebar
       masthead={<Header />}
       sidebar={<Sidebar />}
       skipToContent={skipToContent}

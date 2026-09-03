@@ -21,27 +21,25 @@ import {
   MastheadToggle,
   MastheadBrand,
   MastheadContent,
-  Button,
+  PageToggleButton,
 } from '@patternfly/react-core';
 import { BarsIcon } from '@patternfly/react-icons';
-import { useUiStore } from '../../stores';
 
 /**
  * Header component — PatternFly Masthead with sidebar toggle
+ *
+ * Uses PageToggleButton so the toggle is wired into Page's managed sidebar
+ * context (see AppShell's isManagedSidebar). That context is what drives
+ * mobile-breakpoint detection — without it the sidebar can never be shown
+ * as an overlay on small screens, regardless of toggle state.
  */
 function Header() {
-  const { toggleSidebar } = useUiStore();
-
   return (
     <Masthead>
       <MastheadToggle>
-        <Button
-          variant="plain"
-          onClick={toggleSidebar}
-          aria-label="Toggle navigation"
-        >
+        <PageToggleButton variant="plain" aria-label="Toggle navigation">
           <BarsIcon />
-        </Button>
+        </PageToggleButton>
       </MastheadToggle>
       <MastheadMain>
         <MastheadBrand>Frodo</MastheadBrand>
