@@ -130,9 +130,16 @@ public class SunSpecHealthCheck implements HealthCheck {
 
     // All discoveries expired
     if (validCount == 0 && expiredCount > 0) {
-      LOG.debugf("SunSpec health check: DOWN - all %d cached discoveries expired", expiredCount);
-      return builder.down()
-        .withData("reason", String.format("All %d SunSpec discoveries expired (max age: %d hours)",
+      if (discoveryRequired) {
+        LOG.debugf("SunSpec health check: DOWN - all %d cached discoveries expired", expiredCount);
+        return builder.down()
+          .withData("reason", String.format("All %d SunSpec discoveries expired (max age: %d hours)",
+            expiredCount, maxCacheAgeHours))
+          .build();
+      }
+      LOG.debugf("SunSpec health check: UP - all %d cached discoveries expired but not required", expiredCount);
+      return builder.up()
+        .withData("reason", String.format("All %d SunSpec discoveries expired (max age: %d hours) — not required",
           expiredCount, maxCacheAgeHours))
         .build();
     }

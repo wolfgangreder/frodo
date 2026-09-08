@@ -118,7 +118,7 @@ class SunSpecHealthCheckTest {
   }
 
   @Test
-  void testDown_WhenAllDiscoveriesExpired() {
+  void testDown_WhenAllDiscoveriesExpiredAndRequired() {
     healthCheck.modbusEnabled = true;
     healthCheck.discoveryRequired = true;
 
@@ -138,6 +138,32 @@ class SunSpecHealthCheckTest {
     assertEquals(HealthCheckResponse.Status.DOWN, response.getStatus());
     assertEquals(0L, response.getData().get().get("discovery.valid.count"));
     assertEquals(1L, response.getData().get().get("discovery.expired.count"));
+  }
+
+  @Test
+  void testUp_WhenAllDiscoveriesExpiredButNotRequired() {
+    healthCheck.modbusEnabled = true;
+    healthCheck.discoveryRequired = false;
+
+    String deviceKey = "localhost:502/1";
+    List<SunSpecModelBlock> models = List.of(
+      new SunSpecModelBlock(1, 40002, 66)
+    );
+    SunSpecDiscoveryResult expired = new SunSpecDiscoveryResult(
+      40000, models, Instant.now().minus(48, ChronoUnit.HOURS));
+
+    when(sunSpecService.getDiscoveryCacheSize()).thenReturn(1);
+    when(sunSpecService.getCachedDeviceKeys()).thenReturn(Set.of(deviceKey));
+    when(sunSpecService.getCachedDiscovery(deviceKey)).thenReturn(Optional.of(expired));
+
+    HealthCheckResponse response = healthCheck.call();
+
+    assertEquals(HealthCheckResponse.Status.UP, response.getStatus());
+    assertEquals(0L, response.getData().get().get("discovery.valid.count"));
+    assertEquals(1L, response.getData().get().get("discovery.expired.count"));
+    String reason = (String) response.getData().get().get("reason");
+    assertNotNull(reason, "Reason should be present");
+    assertTrue(reason.contains("not required"), "Reason should mention not required: " + reason);
   }
 
   @Test
