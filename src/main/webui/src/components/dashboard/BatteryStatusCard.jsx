@@ -62,8 +62,8 @@ function getChargeStatus(chaSt) {
  */
 function getSocVariant(soc) {
   if (soc == null) return ProgressVariant.danger;
-  if (soc >= 60) return ProgressVariant.success;
-  if (soc >= 20) return ProgressVariant.warning;
+  if (soc >= 20) return ProgressVariant.success;
+  if (soc >= 10) return ProgressVariant.warning;
   return ProgressVariant.danger;
 }
 
