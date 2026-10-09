@@ -33,18 +33,24 @@ spec:
             - name: QUARKUS_DATASOURCE_JDBC_URL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "frodo.fullname" . }}
-                  key: QUARKUS_DATASOURCE_JDBC_URL
+                  name: {{ if .Values.externalConfig.name }}{{ .Values.externalConfig.name }}{{ else }}{{ include "frodo.fullname" . }}{{ end }}
+                  key: {{ if .Values.externalConfig.name }}database_url{{ else }}QUARKUS_DATASOURCE_JDBC_URL{{ end }}
             - name: QUARKUS_DATASOURCE_USERNAME
               valueFrom:
+                {{- if .Values.externalSecret.name }}
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: username
+                {{- else }}
                 configMapKeyRef:
                   name: {{ include "frodo.fullname" . }}
                   key: QUARKUS_DATASOURCE_USERNAME
+                {{- end }}
             - name: QUARKUS_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "frodo.fullname" . }}
-                  key: QUARKUS_DATASOURCE_PASSWORD
+                  name: {{ if .Values.externalSecret.name }}{{ .Values.externalSecret.name }}{{ else }}{{ include "frodo.fullname" . }}{{ end }}
+                  key: {{ if .Values.externalSecret.name }}password{{ else }}QUARKUS_DATASOURCE_PASSWORD{{ end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:

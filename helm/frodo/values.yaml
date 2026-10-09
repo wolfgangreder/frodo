@@ -49,7 +49,8 @@ livenessProbe:
     port: 8082
   initialDelaySeconds: 30
   periodSeconds: 10
-  failureThreshold: 3
+  timeoutSeconds: 5
+  failureThreshold: 5
 
 readinessProbe:
   httpGet:
@@ -58,3 +59,11 @@ readinessProbe:
   initialDelaySeconds: 10
   periodSeconds: 5
   failureThreshold: 3
+
+# When set, the chart skips rendering its own Secret/ConfigMap and references
+# the named external resources instead.  Set both in your values override file.
+externalSecret:
+  name: ""
+
+externalConfig:
+  name: ""
