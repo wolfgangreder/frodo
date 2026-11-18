@@ -26,7 +26,7 @@
     "@storybook/test": "^8.6.19",
     "@vitejs/plugin-react": "^6.2.1",
     "storybook": "^10.4.1",
-    "vite": "^8.3.5"
+    "vite": "^8.3.8"
   },
   "scripts": {
     "start": "vite",
